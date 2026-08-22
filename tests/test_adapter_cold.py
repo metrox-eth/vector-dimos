@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from vector_dimos.adapter import VectorBaseAdapter, FRONT_ID, BACK_ID
 from vector_dimos.kinematics import MecanumGeometry, inverse, rads_to_rpm
 from vector_dimos.mock import MockModbusClient
-from vector_dimos.zlac8015d import (CONTROL_REG, ENABLE, L_ACL_TIME, L_CMD_RPM,
-                                    L_DCL_TIME, _to_i16)
+from vector_dimos.zlac8015d import (COMM_OFFLINE_TIME, CONTROL_REG, ENABLE,
+                                    L_ACL_TIME, L_CMD_RPM, L_DCL_TIME, _to_i16)
 
 ok = True
 
@@ -39,6 +39,11 @@ ramps = {(u, addr, tuple(vals)) for (u, addr, vals) in bus.writes
 check(ramps == {(FRONT_ID, L_ACL_TIME, (400, 400)), (FRONT_ID, L_DCL_TIME, (400, 400)),
                 (BACK_ID, L_ACL_TIME, (400, 400)), (BACK_ID, L_DCL_TIME, (400, 400))},
       f"accel/decel ramp 400 ms written to both drives: {sorted(ramps)}")
+# ...the drive-side watchdog (0x2000) is armed at 1000 ms on both drives
+# (measured on blocks: wheels at rest < 1.9 s after a SIGKILLed runtime)...
+wd = {(u, tuple(vals)) for (u, addr, vals) in bus.writes if addr == COMM_OFFLINE_TIME}
+check(wd == {(FRONT_ID, (1000,)), (BACK_ID, (1000,))},
+      f"comm-offline watchdog 1000 ms written to both drives: {sorted(wd)}")
 # ...and a zero RPM target reaches each drive BEFORE its enable bit, so a
 # target left behind by a dirty death is never re-armed.
 for unit in (FRONT_ID, BACK_ID):

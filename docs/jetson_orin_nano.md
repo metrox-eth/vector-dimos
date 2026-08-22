@@ -295,3 +295,24 @@ watchdog is off.** If the runtime dies uncleanly with a non-zero target, the
 wheels keep turning until the power is cut or `tests/estop_rs485.py` runs; the
 clean path (`dimos stop`) zeroes and disables. Max RPM 0x2008 = 1000,
 ramps 400/400 persisted, mode 3 (velocity).
+
+### Drive-side watchdog, measured (2026-08-22, on blocks)
+
+The ZLAC8015D has its own watchdog: register 0x2000, communication-offline
+time, 0 = off - and 0 is what both drives shipped with. Experiment: write 1000
+to both (`tests/set_zlac_comm_timeout.py 1000`), run the base for real, hold
+the wheels at 22 RPM, then `kill -9` every dimOS process at once (main,
+forkserver workers, watchdog sidecar, publisher) - no `disconnect()`, no zero
+written by anyone. Then stay silent on the bus and read the drives once per
+silent window (every read resets their timer, so no polling):
+
+| silent window | wheels (encoder RPM) | faults | control word |
+|---|---|---|---|
+| 1.5 s (t+1.9 s) | 0.0 / 0.0 both drives | 0/0 | 8 (still enabled) |
+| 3 s, 6 s, 12 s | 0.0 | 0/0 | 8 |
+
+So with 1000 in 0x2000 the wheels are at rest under 1.9 s after the runtime
+dies (the 400 ms ramp is inside that), no fault is raised, the drives stay
+enabled, and the next `dimos run` enables normally. The adapter now writes
+COMM_OFFLINE_MS = 1000 at enable time (`comm_offline_ms=0` disables it). With
+the tick loop on the bus at 100 Hz it never trips in normal operation.

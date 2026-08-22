@@ -92,6 +92,13 @@ READ_WARN_PERIOD_S = 5.0     # rate limit for "read failed" warnings
 CMD_LOG_PERIOD_S = 0.5
 FEEDBACK_LOG_PERIOD_S = 0.5
 FEEDBACK_MOVING_RPM = 0.5    # |feedback| below this reads as "not turning"
+# Drive-side watchdog (ZLAC8015D 0x2000, written at enable time). Measured on
+# blocks 2026-08-22: with 1000 the wheels were at rest < 1.9 s after every
+# dimOS process was SIGKILLed mid-motion (22 RPM), no fault raised, drives
+# still enabled, next enable normal. The drives ship with 0 (= off): a dead
+# runtime then leaves the wheels turning until the power is cut. The 100 Hz
+# tick loop talks to the bus far more often than this, so it never trips.
+COMM_OFFLINE_MS = 1000
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _LOGGER = None
@@ -141,12 +148,17 @@ class VectorBaseAdapter:
             at enable time. 400 ms is the value the first robot code
             converged on in the field (500 -> 1000 -> 400 over its commit
             history; no reason recorded).
+        comm_offline_ms: the drives' own watchdog (0x2000), written at
+            enable time; 0 turns it off. See COMM_OFFLINE_MS for what was
+            measured. It is the only thing that stops the wheels when the
+            runtime dies without running disconnect().
     """
 
     def __init__(self, dof: int = 3, address: str | None = None,
                  hardware_id: str = "base", client=None,
                  geometry: MecanumGeometry | None = None,
                  accel_ms: int = 400, timeout_s: float = SERIAL_TIMEOUT_S,
+                 comm_offline_ms: int = COMM_OFFLINE_MS,
                  **_: object) -> None:
         if dof != 3:
             raise ValueError(f"VECTOR is holonomic: dof must be 3, got {dof}")
@@ -156,6 +168,7 @@ class VectorBaseAdapter:
         self._owns_client = client is None
         self._geometry = geometry or MecanumGeometry()
         self._accel_ms = accel_ms
+        self._comm_offline_ms = comm_offline_ms
         self._connected = False
         self._enabled = False
         self._mock = False
@@ -469,6 +482,8 @@ class VectorBaseAdapter:
                             failed.append("velocity mode (0x200D)")
                         if not c.set_accel_ms(self._accel_ms, self._accel_ms):
                             failed.append("accel/decel ramp (0x2080-0x2083)")
+                        if not c.set_comm_offline_ms(self._comm_offline_ms):
+                            failed.append("comm-offline watchdog (0x2000)")
                         # A drive keeps its last RPM target across a dirty
                         # death of whoever commanded it; enabling would run
                         # it. Zero the target before the enable bit.
