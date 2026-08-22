@@ -85,6 +85,13 @@ SERIAL_TIMEOUT_S = 0.5       # pymodbus response timeout; a silent drive costs i
 # cache is dropped, so a tick that drives does poll.
 FEEDBACK_MAX_AGE_S = 0.015
 READ_WARN_PERIOD_S = 5.0     # rate limit for "read failed" warnings
+# Real bus: the two sides of the proof in `dimos log`. A changed RPM command is
+# logged at most once per CMD_LOG_PERIOD_S (a zero command always); the
+# encoder feedback is logged once per FEEDBACK_LOG_PERIOD_S while any wheel
+# turns, plus the line where they all read zero again.
+CMD_LOG_PERIOD_S = 0.5
+FEEDBACK_LOG_PERIOD_S = 0.5
+FEEDBACK_MOVING_RPM = 0.5    # |feedback| below this reads as "not turning"
 
 _TRUTHY = {"1", "true", "yes", "on"}
 _LOGGER = None
@@ -132,8 +139,8 @@ class VectorBaseAdapter:
             docstring before lowering it.
         accel_ms: acceleration = deceleration ramp written to both drives
             at enable time. 400 ms is the value the first robot code
-            converged on in the field (500 -> 1000 -> 400); 1000 ms made
-            the chassis feel sluggish.
+            converged on in the field (500 -> 1000 -> 400 over its commit
+            history; no reason recorded).
     """
 
     def __init__(self, dof: int = 3, address: str | None = None,
@@ -161,6 +168,9 @@ class VectorBaseAdapter:
         self._read_failures = 0
         self._last_read_warn_t = 0.0
         self._last_logged_cmd: tuple[int, int, int, int] | None = None
+        self._last_cmd_log_t = 0.0
+        self._last_fb_log_t = 0.0
+        self._fb_was_moving = False
         # odometry integration state
         self._pose = [0.0, 0.0, 0.0]
         self._last_t: float | None = None
@@ -305,7 +315,26 @@ class VectorBaseAdapter:
         bl_raw, br_raw = back
         self._feedback = (rpm_to_rads(-fl_raw), rpm_to_rads(fr_raw),
                           rpm_to_rads(-bl_raw), rpm_to_rads(br_raw))
+        self._log_feedback(-fl_raw, fr_raw, -bl_raw, br_raw)
         return self._feedback
+
+    def _log_feedback(self, fl: float, fr: float, bl: float, br: float) -> None:
+        """Encoder side of the proof, real bus only: wheel RPM as measured
+        by the drives (FL, FR, BL, BR, left-port inversion undone), one line
+        per FEEDBACK_LOG_PERIOD_S while any wheel turns and one more when
+        they all read zero again. Read it next to the command line."""
+        if self._mock:
+            return
+        moving = any(abs(v) >= FEEDBACK_MOVING_RPM for v in (fl, fr, bl, br))
+        now = time.monotonic()
+        if moving and now - self._last_fb_log_t < FEEDBACK_LOG_PERIOD_S:
+            return
+        if not moving and not self._fb_was_moving:
+            return
+        self._fb_was_moving = moving
+        self._last_fb_log_t = now
+        _log().info(f"VECTOR base feedback: wheel RPM FL={fl:+.1f} FR={fr:+.1f} "
+                    f"BL={bl:+.1f} BR={br:+.1f}")
 
     def _note_read_failure(self, silent: str) -> None:
         """`silent` is the first controller that did not answer this poll."""
@@ -372,7 +401,7 @@ class VectorBaseAdapter:
                 ok_back = self._back.set_rpm(raw[2], raw[3])
                 if ok_front and ok_back:
                     self._feedback_t = None   # cached feedback predates it
-                    self._log_mock_cmd((vx, vy, wz), raw)
+                    self._log_cmd((vx, vy, wz), raw)
                 return ok_front and ok_back
         except Exception:
             return False
@@ -386,24 +415,33 @@ class VectorBaseAdapter:
                 ok_back = self._back.set_rpm(0, 0)
                 if ok_front and ok_back:
                     self._feedback_t = None   # cached feedback predates it
-                    self._log_mock_cmd((0.0, 0.0, 0.0), (0, 0, 0, 0))
+                    self._log_cmd((0.0, 0.0, 0.0), (0, 0, 0, 0))
                 return ok_front and ok_back
         except Exception:
             return False
 
-    def _log_mock_cmd(self, twist, raw) -> None:
-        """Mock bus only: one info line per change of the RPM command.
-
-        This is how the twist -> per-wheel RPM chain is proven through the
-        real dimOS pipeline with no motors: read it back in `dimos log`.
-        Silent on the real bus.
+    def _log_cmd(self, twist, raw) -> None:
+        """Command side of the proof: one info line per change of the RPM
+        command. Mock bus: every change (this is how the twist -> per-wheel
+        RPM chain is proven through the real dimOS pipeline with no motors,
+        pinned by the benches). Real bus: at most one line per
+        CMD_LOG_PERIOD_S, except a zero command, which is always logged -
+        the stop transitions are the lines worth having when something
+        went wrong. Read it back in `dimos log`, next to the feedback line.
         """
-        if not self._mock or raw == self._last_logged_cmd:
+        if raw == self._last_logged_cmd:
+            return
+        now = time.monotonic()
+        zero = raw == (0, 0, 0, 0)
+        if (not self._mock and not zero
+                and now - self._last_cmd_log_t < CMD_LOG_PERIOD_S):
             return
         self._last_logged_cmd = raw
+        self._last_cmd_log_t = now
+        head = "VECTOR base MOCK:" if self._mock else "VECTOR base:"
         vx, vy, wz = twist
         _log().info(
-            f"VECTOR base MOCK: twist vx={vx:+.3f} vy={vy:+.3f} wz={wz:+.3f} "
+            f"{head} twist vx={vx:+.3f} vy={vy:+.3f} wz={wz:+.3f} "
             f"-> wheel RPM FL={-raw[0]:+d} FR={raw[1]:+d} "
             f"BL={-raw[2]:+d} BR={raw[3]:+d} "
             f"(bus raw front L/R={raw[0]:+d}/{raw[1]:+d} "
@@ -431,6 +469,11 @@ class VectorBaseAdapter:
                             failed.append("velocity mode (0x200D)")
                         if not c.set_accel_ms(self._accel_ms, self._accel_ms):
                             failed.append("accel/decel ramp (0x2080-0x2083)")
+                        # A drive keeps its last RPM target across a dirty
+                        # death of whoever commanded it; enabling would run
+                        # it. Zero the target before the enable bit.
+                        if not c.set_rpm(0, 0):
+                            failed.append("zero target (0x2088) before enable")
                         if not c.enable():
                             failed.append("enable (0x200E)")
                         if failed:

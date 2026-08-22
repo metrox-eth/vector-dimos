@@ -289,7 +289,7 @@ check(m.write_enable(True) and m.read_enabled(), "enable sequence on mock bus")
 VX, VY, WZ = 0.37, -0.21, 0.83
 w_fl, w_fr, w_bl, w_br = inverse(VX, VY, WZ, MecanumGeometry())
 exp = [rads_to_rpm(w) for w in (w_fl, w_fr, w_bl, w_br)]
-print(f"      expected wheel RPM from kinematics (r=0.085, k=0.35): "
+print(f"      expected wheel RPM from kinematics (r={G.wheel_radius_m}, k={G.k}): "
       f"FL={exp[0]:.2f} FR={exp[1]:.2f} BL={exp[2]:.2f} BR={exp[3]:.2f}")
 m.client.writes.clear()
 mark = len(LOG.lines)

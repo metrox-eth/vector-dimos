@@ -176,7 +176,7 @@ echoes back whatever was commanded.
 The publisher printed `expected wheel RPM  FL=+26 FR=+41 BL=-12 BR=+79` from the
 geometry before publishing anything (transcript taken with the 0.105 m radius
 the package shipped at the time; with the measured 0.085 m the same twist
-reads `FL=+33 FR=+51 BL=-15 BR=+98`), so that is a known twist in and the known
+reads `FL=+33 FR=+51 BL=-15 BR=+98`, bus raw front L/R=-33/+51 back L/R=+15/+98), so that is a known twist in and the known
 per-wheel RPM out, through the whole runtime. The timeout warning is the
 `JointVelocityTask` watchdog doing its job once the publisher stopped.
 
@@ -245,3 +245,53 @@ re-applies them at every run, which is fine as long as the sudo rule stays.
 - **Gamepad.** `vector-dimos.gamepad` runs headless on this board (it waits for
   a pad and logs that once), but nothing has been plugged in yet, so the teleop
   path itself — axes to twist to wheels — is a cold-bench fact only.
+
+
+## First motion on blocks (2026-08-22)
+
+Rover on blocks, wheels in the air, one hand on the motor power. Both drives
+answered the read-only probe (`tests/probe_rs485.py`: back 5 ms, front 7 ms),
+the software e-stop was acknowledged by both before anything was armed
+(`tests/estop_rs485.py`: 0 RPM then DISABLE), then:
+
+```
+dimos run vector-dimos.base --no-local-relay --daemon > /dev/null 2>&1 < /dev/null   # no VECTOR_MOCK_BUS
+dimos log                      # both: "ZLAC8015D id N (...) enabled, faults L/R=0/0"
+python tests/publish_twist.py --vx 0.2 --vy 0   --wz 0   --duration 3.0   # forward
+python tests/publish_twist.py --vx 0   --vy 0.2 --wz 0   --duration 3.0   # strafe left
+python tests/publish_twist.py --vx 0   --vy 0   --wz 0.5 --duration 3.0   # yaw left
+dimos stop                     # SIGTERM -> coordinator.stop() -> adapter.disconnect(): 0 RPM + DISABLE
+python tests/estop_rs485.py    # belt and braces, both drives ack
+```
+
+Known twist in, RPM the drives measured out (FL/FR/BL/BR, r = 0.085 m, k = 0.35 m):
+
+| twist | expected RPM | encoder feedback (one 0.5 s sample) |
+|---|---|---|
+| vx = +0.2 m/s | +22 / +22 / +22 / +22 | +22.9 / +23.3 / +22.9 / +23.0 |
+| vy = +0.2 m/s | −22 / +22 / +22 / −22 | −21.0 / +22.3 / +21.8 / −21.0 |
+| wz = +0.5 rad/s | −20 / +20 / −20 / +20 | −20.2 / +21.4 / −20.4 / +20.6 |
+
+Both sides of that table are in the run's log: the adapter now logs the RPM it
+commanded (`VECTOR base: twist ... -> wheel RPM ...`, one line per change, a
+zero always) and what the drives report turning (`VECTOR base feedback: wheel
+RPM ...`, one line per 0.5 s while any wheel moves). Read them in the run's
+`main.jsonl` under `~/.local/state/dimos/logs/` — `dimos log -n` did not show
+the command lines in this session. The 400 ms ramp and the
+`JointVelocityTask` watchdog (zero ~0.2 s after the last Twist, wheels at rest
+within ~0.5 s) are visible in the feedback lines. 12 RPM (`--wz 0.3`) did turn
+the wheels: the ~15 RPM floor noted in the first robot code is not a floor here.
+
+What this does and does not prove. It proves the whole chain (LCM -> coordinator
+-> JointVelocityTask -> adapter -> MODBUS -> drives -> encoders) with the
+FL/FR/BL/BR topology and the inverted left ports self-consistent. It does NOT
+prove which end of the chassis is +x: encoders cannot see that. A look at the
+wheels (or the D455F gyro on the ground: wz > 0 must read counter-clockwise)
+settles it.
+
+Drive parameters read afterwards (`tests/read_zlac_params.py`, read-only):
+**0x2000 communication-offline time = 0 on both drives, i.e. the drive-side
+watchdog is off.** If the runtime dies uncleanly with a non-zero target, the
+wheels keep turning until the power is cut or `tests/estop_rs485.py` runs; the
+clean path (`dimos stop`) zeroes and disables. Max RPM 0x2008 = 1000,
+ramps 400/400 persisted, mode 3 (velocity).
