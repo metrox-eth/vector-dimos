@@ -24,6 +24,7 @@ the left wheels forward.
 | Lidar | Slamtec RPLIDAR C1 (360° 2D), published as a flat `PointCloud2` |
 | Lidar interface | CP2102 USB-UART adapter, 460800 baud — 4 wires: GND, 5 V, TX, RX. The C1's RX is 3.3 V logic |
 | IMU | The one inside the D455F — no separate IMU on the platform |
+| Wheels | 4 mecanum wheels, **17 cm diameter measured** (0.085 m radius, the number `kinematics.py` runs on) |
 
 ## Power
 
