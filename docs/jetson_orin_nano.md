@@ -174,7 +174,9 @@ echoes back whatever was commanded.
 ```
 
 The publisher printed `expected wheel RPM  FL=+26 FR=+41 BL=-12 BR=+79` from the
-geometry before publishing anything, so that is a known twist in and the known
+geometry before publishing anything (transcript taken with the 0.105 m radius
+the package shipped at the time; with the measured 0.085 m the same twist
+reads `FL=+33 FR=+51 BL=-15 BR=+98`), so that is a known twist in and the known
 per-wheel RPM out, through the whole runtime. The timeout warning is the
 `JointVelocityTask` watchdog doing its job once the publisher stopped.
 

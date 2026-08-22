@@ -96,8 +96,8 @@ The adapter logs what it actually commanded, so the claim and the result read
 side by side:
 
 ```
-expected wheel RPM  FL=+26 FR=+41 BL=-12 BR=+79
-VECTOR base MOCK: twist vx=+0.370 vy=-0.210 wz=+0.830 -> wheel RPM FL=+26 FR=+41 BL=-12 BR=+79
+expected wheel RPM  FL=+33 FR=+51 BL=-15 BR=+98
+VECTOR base MOCK: twist vx=+0.370 vy=-0.210 wz=+0.830 -> wheel RPM FL=+33 FR=+51 BL=-15 BR=+98
 ```
 
 Mind the watchdog: dimOS's `JointVelocityTask` drops the command to zero after

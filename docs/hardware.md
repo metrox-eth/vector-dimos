@@ -39,14 +39,14 @@ the left wheels forward.
 
 Values used by `kinematics.py`:
 
-- Wheel radius: 0.105 m. Careful with that number — the wheel is *nominally* 8"
-  and the two are not the same thing: 8 in is 0.2032 m, i.e. a 0.1016 m radius,
-  while 0.105 m is 8.27 in. 0.105 m is the value the first robot code (Sam's
-  driver, `R_Wheel`) ran on this chassis, and it is what `kinematics.py` ships;
-  the nominal 8" is where it comes from, not a confirmation of it. Radius
-  scales odometry linearly, so it stays unvalidated until an odometry roundtrip
-  on the real chassis (drive a known distance, compare `/odom`) says which of
-  the two — or neither — the wheel actually turns at.
+- Wheel radius: 0.085 m — the built mecanum wheel measured on the chassis
+  (2026-08-22): 17 cm diameter, roller tips included. The first robot code
+  carried two other numbers and both are wrong for this wheel: 0.0635 m (the
+  bare 5" tire before the mecanum was built around it) and 0.105 m (a dead
+  `R_Wheel` constant that never fed the mecanum path). This package shipped
+  0.105 until 2026-08-22 and overestimated odometry by ~24 %. Radius scales
+  odometry linearly, so 0.085 still has to be confirmed by an odometry
+  roundtrip on the real chassis (drive a known distance, compare `/odom`).
 - Half wheelbase: 0.15 m
 - Half track: 0.20 m
 - Kinematic constant K (half wheelbase + half track): 0.35 m
