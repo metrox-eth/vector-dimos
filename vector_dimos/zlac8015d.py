@@ -17,6 +17,7 @@ from __future__ import annotations
 # Register map (ZLAC8015D manual, proven in the field)
 CONTROL_REG = 0x200E
 OPR_MODE = 0x200D
+COMM_OFFLINE_TIME = 0x2000  # drive-side watchdog: stop after this long without a MODBUS frame; 0 = off
 L_ACL_TIME, R_ACL_TIME = 0x2080, 0x2081
 L_DCL_TIME, R_DCL_TIME = 0x2082, 0x2083
 L_CMD_RPM = 0x2088          # int16 pair written together (L, R)
@@ -98,6 +99,9 @@ class Controller:
     # ── commands ───────────────────────────────────────────────────────
     def set_mode_velocity(self) -> bool:
         return self._write_register(OPR_MODE, VEL_CONTROL)
+
+    def set_comm_offline_ms(self, ms: int) -> bool:
+        return self._write_register(COMM_OFFLINE_TIME, int(ms))
 
     def set_accel_ms(self, accel_ms: int, decel_ms: int) -> bool:
         acl = self._write_registers(L_ACL_TIME, [accel_ms, accel_ms])
