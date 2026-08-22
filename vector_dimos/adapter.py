@@ -346,8 +346,10 @@ class VectorBaseAdapter:
             return
         self._fb_was_moving = moving
         self._last_fb_log_t = now
+        x, y, th = self._pose
         _log().info(f"VECTOR base feedback: wheel RPM FL={fl:+.1f} FR={fr:+.1f} "
-                    f"BL={bl:+.1f} BR={br:+.1f}")
+                    f"BL={bl:+.1f} BR={br:+.1f} | odom x={x:+.3f} y={y:+.3f} "
+                    f"th={math.degrees(th):+.1f}deg")
 
     def _note_read_failure(self, silent: str) -> None:
         """`silent` is the first controller that did not answer this poll."""
