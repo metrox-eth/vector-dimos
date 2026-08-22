@@ -6,7 +6,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vector_dimos.adapter import VectorBaseAdapter, FRONT_ID, BACK_ID
-from vector_dimos.kinematics import MecanumGeometry, rads_to_rpm
+from vector_dimos.kinematics import MecanumGeometry, inverse, rads_to_rpm
 from vector_dimos.mock import MockModbusClient
 from vector_dimos.zlac8015d import L_CMD_RPM, _to_i16
 
@@ -19,37 +19,60 @@ def check(cond, label):
     ok = ok and cond
 
 
-G = MecanumGeometry(wheel_radius_m=0.0635, half_wheelbase_m=0.15, half_track_m=0.20)
+# The geometry the package ships: r = 0.105 m, k = 0.15 + 0.20 = 0.35 m.
+G = MecanumGeometry()
+check((G.wheel_radius_m, G.half_wheelbase_m, G.half_track_m)
+      == (0.105, 0.15, 0.20),
+      f"bench runs on the real default geometry: r={G.wheel_radius_m} m, "
+      f"half wheelbase={G.half_wheelbase_m} m, half track={G.half_track_m} m")
 bus = MockModbusClient()
 a = VectorBaseAdapter(dof=3, client=bus, geometry=G)
 check(a.connect() is True, "connect() on mock bus")
 check(a.get_dof() == 3, "get_dof() == 3")
 check(a.write_enable(True) and a.read_enabled(), "enable sequence")
 
-# pure forward 0.5 m/s: all wheels same magnitude; LEFT ports written NEGATIVE
-check(a.write_velocities([0.5, 0.0, 0.0]), "write_velocities accepts twist")
-expected_rpm = rads_to_rpm(0.5 / G.wheel_radius_m)
+# Pure forward 0.5 m/s: every wheel turns at 0.5 / 0.105 = 4.762 rad/s, i.e.
+# +45.47 RPM on all four. The LEFT ports are wired inverted, so the bus must
+# see front L/R = (-45, +45) and back L/R = (-45, +45).
+FWD = 0.5
+exp_fwd = [rads_to_rpm(w) for w in inverse(FWD, 0.0, 0.0, G)]
+print(f"      forward {FWD} m/s -> wheel RPM FL/FR/BL/BR = "
+      + "/".join(f"{v:+.2f}" for v in exp_fwd))
+check(a.write_velocities([FWD, 0.0, 0.0]), "write_velocities accepts twist")
 cmds = {(u, tuple(_to_i16(v) for v in vals))
         for (u, addr, vals) in bus.writes if addr == L_CMD_RPM}
 front = next(v for (u, v) in cmds if u == FRONT_ID)
 back = next(v for (u, v) in cmds if u == BACK_ID)
-check(front[0] < 0 < front[1] and abs(abs(front[0]) - expected_rpm) < 1,
-      f"front controller: L(FL) inverted {front}, |rpm|~{expected_rpm:.0f}")
-check(back[0] < 0 < back[1], f"back controller: L(BL) inverted {back}")
+check(abs(front[0] - (-exp_fwd[0])) <= 1 and abs(front[1] - exp_fwd[1]) <= 1,
+      f"front controller L(FL) inverted, R(FR) direct: {front} vs "
+      f"({-exp_fwd[0]:+.2f}, {exp_fwd[1]:+.2f}) RPM")
+check(abs(back[0] - (-exp_fwd[2])) <= 1 and abs(back[1] - exp_fwd[3]) <= 1,
+      f"back controller L(BL) inverted, R(BR) direct: {back} vs "
+      f"({-exp_fwd[2]:+.2f}, {exp_fwd[3]:+.2f}) RPM")
 
 # feedback roundtrip: mock echoes commands -> read_velocities returns the twist
 v = a.read_velocities()
-check(all(abs(x - y) < 0.02 for x, y in zip(v, [0.5, 0.0, 0.0])),
+check(all(abs(x - y) < 0.02 for x, y in zip(v, [FWD, 0.0, 0.0])),
       f"read_velocities roundtrip -> {[round(x, 3) for x in v]}")
 
-# strafe left: FL negative rolling (inverted port -> written POSITIVE raw)
+# Strafe left 0.4 m/s: the mecanum diagonal. FL/BR roll backward at -36.38 RPM,
+# FR/BL forward at +36.38; after the left-port inversion the bus sees
+# front L/R = (+36, +36) and back L/R = (-36, -36).
+STRAFE = 0.4
+exp_str = [rads_to_rpm(w) for w in inverse(0.0, STRAFE, 0.0, G)]
+print(f"      strafe {STRAFE} m/s -> wheel RPM FL/FR/BL/BR = "
+      + "/".join(f"{v:+.2f}" for v in exp_str))
 bus.writes.clear()
-a.write_velocities([0.0, 0.4, 0.0])
+a.write_velocities([0.0, STRAFE, 0.0])
 raw = {u: tuple(_to_i16(x) for x in vals)
        for (u, addr, vals) in bus.writes if addr == L_CMD_RPM}
-check(raw[FRONT_ID][0] > 0 and raw[FRONT_ID][1] > 0
-      and raw[BACK_ID][0] < 0 and raw[BACK_ID][1] < 0,
-      f"strafe pattern raw: front {raw[FRONT_ID]}, back {raw[BACK_ID]}")
+check(abs(raw[FRONT_ID][0] - (-exp_str[0])) <= 1
+      and abs(raw[FRONT_ID][1] - exp_str[1]) <= 1
+      and abs(raw[BACK_ID][0] - (-exp_str[2])) <= 1
+      and abs(raw[BACK_ID][1] - exp_str[3]) <= 1,
+      f"strafe pattern raw: front {raw[FRONT_ID]} vs "
+      f"({-exp_str[0]:+.2f}, {exp_str[1]:+.2f}), back {raw[BACK_ID]} vs "
+      f"({-exp_str[2]:+.2f}, {exp_str[3]:+.2f}) RPM")
 
 check(a.write_stop(), "write_stop")
 check(a.read_velocities() == [0.0, 0.0, 0.0], "stopped -> zero feedback")

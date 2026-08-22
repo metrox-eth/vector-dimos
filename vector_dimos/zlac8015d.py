@@ -3,6 +3,14 @@
 Clean rewrite for VECTOR (register map inherited from the first robot code
 by Sam, proven on this chassis). One Controller instance per ZLAC8015D
 (dual-channel: L and R wheel). pymodbus<3.0 sync API.
+
+Failure convention (the adapter depends on it):
+  * reads  -> None  when the drive did not answer or answered an error;
+  * writes -> False when the drive did not answer or answered an error.
+Nothing in this module raises on bus trouble. pymodbus 2.5 is inconsistent
+about it - a timeout usually comes back as a ModbusIOException *object*
+(which is both an Exception and a response exposing isError()), but a
+closed port raises - so both paths are handled.
 """
 from __future__ import annotations
 
@@ -30,6 +38,22 @@ def _to_i16(raw: int) -> int:
     return raw - 0x10000 if raw >= 0x8000 else raw
 
 
+def _resp_ok(rr) -> bool:
+    """False when the client did not hand back a usable response.
+
+    None is a failure, not a pass. Every client this driver runs against
+    answers with a response object - pymodbus and vector_dimos.mock alike -
+    so a None means the call went nowhere and must not be reported as a
+    successful bus transaction (fail-open would hide a dead bus).
+    """
+    if rr is None:
+        return False
+    is_error = getattr(rr, "isError", None)
+    if callable(is_error):
+        return not is_error()
+    return True
+
+
 class Controller:
     """One ZLAC8015D (two wheels) on a shared MODBUS RTU bus."""
 
@@ -44,29 +68,61 @@ class Controller:
                                              baudrate=baudrate, timeout=0.5)
             self.client.connect()
 
-    def set_mode_velocity(self) -> None:
-        self.client.write_register(OPR_MODE, VEL_CONTROL, unit=self.unit)
+    # ── raw bus access (never raises) ──────────────────────────────────
+    def _read(self, addr: int, count: int) -> list[int] | None:
+        try:
+            rr = self.client.read_holding_registers(addr, count, unit=self.unit)
+        except Exception:
+            return None
+        if not _resp_ok(rr):
+            return None
+        regs = getattr(rr, "registers", None)
+        if regs is None or len(regs) < count:
+            return None
+        return regs
 
-    def set_accel_ms(self, accel_ms: int, decel_ms: int) -> None:
-        self.client.write_registers(L_ACL_TIME, [accel_ms, accel_ms], unit=self.unit)
-        self.client.write_registers(L_DCL_TIME, [decel_ms, decel_ms], unit=self.unit)
+    def _write_register(self, addr: int, value: int) -> bool:
+        try:
+            return _resp_ok(self.client.write_register(addr, value,
+                                                       unit=self.unit))
+        except Exception:
+            return False
 
-    def enable(self) -> None:
-        self.client.write_register(CONTROL_REG, ENABLE, unit=self.unit)
+    def _write_registers(self, addr: int, values: list[int]) -> bool:
+        try:
+            return _resp_ok(self.client.write_registers(addr, values,
+                                                        unit=self.unit))
+        except Exception:
+            return False
 
-    def disable(self) -> None:
-        self.client.write_register(CONTROL_REG, DISABLE, unit=self.unit)
+    # ── commands ───────────────────────────────────────────────────────
+    def set_mode_velocity(self) -> bool:
+        return self._write_register(OPR_MODE, VEL_CONTROL)
 
-    def set_rpm(self, l_rpm: float, r_rpm: float) -> None:
-        self.client.write_registers(
-            L_CMD_RPM, [_to_u16(round(l_rpm)), _to_u16(round(r_rpm))],
-            unit=self.unit)
+    def set_accel_ms(self, accel_ms: int, decel_ms: int) -> bool:
+        acl = self._write_registers(L_ACL_TIME, [accel_ms, accel_ms])
+        dcl = self._write_registers(L_DCL_TIME, [decel_ms, decel_ms])
+        return acl and dcl
 
-    def get_rpm(self) -> tuple[float, float]:
-        rr = self.client.read_holding_registers(L_FB_RPM, 2, unit=self.unit)
-        regs = rr.registers
+    def enable(self) -> bool:
+        return self._write_register(CONTROL_REG, ENABLE)
+
+    def disable(self) -> bool:
+        return self._write_register(CONTROL_REG, DISABLE)
+
+    def set_rpm(self, l_rpm: float, r_rpm: float) -> bool:
+        return self._write_registers(
+            L_CMD_RPM, [_to_u16(round(l_rpm)), _to_u16(round(r_rpm))])
+
+    # ── feedback (None = no valid answer) ──────────────────────────────
+    def get_rpm(self) -> tuple[float, float] | None:
+        regs = self._read(L_FB_RPM, 2)
+        if regs is None:
+            return None
         return _to_i16(regs[0]) / 10.0, _to_i16(regs[1]) / 10.0
 
-    def get_faults(self) -> tuple[int, int]:
-        rr = self.client.read_holding_registers(L_FAULT, 2, unit=self.unit)
-        return rr.registers[0], rr.registers[1]
+    def get_faults(self) -> tuple[int, int] | None:
+        regs = self._read(L_FAULT, 2)
+        if regs is None:
+            return None
+        return regs[0], regs[1]

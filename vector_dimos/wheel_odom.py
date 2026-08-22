@@ -4,6 +4,12 @@ Mecanum rollers slip by construction (every strafe is a controlled skid),
 so wheel odometry is never the localization reference on this platform:
 the D455F point cloud is primary and the RPLIDAR anchors it. This module
 exists as a sanity/backup signal only.
+
+No blueprint deploys it: the base blueprint already feeds odometry to the
+coordinator through VectorBaseAdapter.read_odometry(), which is what
+ConnectedTwistBase reads every tick. This module is for the case where the
+same pose is wanted as a standalone Odometry stream, and it has never run
+on hardware.
 """
 from __future__ import annotations
 
@@ -12,6 +18,7 @@ import threading
 import time
 from typing import Any
 
+from dimos.core.core import rpc
 from dimos.core.module import Module
 from dimos.core.stream import Out
 from dimos.msgs.geometry_msgs.Pose import Pose
@@ -33,28 +40,38 @@ class VectorWheelOdometry(Module):
     def __init__(self, adapter=None, rate_hz: float = 20.0,
                  frame_id: str = "odom", child_frame_id: str = "base_link",
                  **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+        # frame_id is a dimOS ModuleConfig field and Module exposes it as a
+        # read-only property, so it goes through the config, never onto self.
+        super().__init__(frame_id=frame_id, **kwargs)
         self.adapter = adapter
         self.rate_hz = rate_hz
-        self.frame_id = frame_id
         self.child_frame_id = child_frame_id
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
+    # @rpc is not decoration for its own sake: Module.start/stop carry it,
+    # and an override that drops it falls out of the class's rpcs table.
+    # dimOS then proxies the call by pickling the module across the worker
+    # pipe, which dies on our threading.Event ('cannot pickle _thread.lock').
+    @rpc
     def start(self) -> None:
         super().start()
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._loop,
+        self._thread = threading.Thread(target=self._worker,
                                         name="vector-wheel-odom", daemon=True)
         self._thread.start()
 
+    @rpc
     def stop(self) -> None:
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
         super().stop()
 
-    def _loop(self) -> None:
+    # Named _worker, NOT _loop: dimOS's Module keeps its asyncio event
+    # loop in self._loop, which would shadow the method and make the
+    # thread target the event loop object.
+    def _worker(self) -> None:
         period = 1.0 / self.rate_hz
         while not self._stop_event.is_set():
             if self.adapter is not None and self.adapter.is_connected():

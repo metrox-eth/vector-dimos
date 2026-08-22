@@ -5,6 +5,10 @@ inventing a message type, this module publishes each 360-degree scan as a
 FLAT PointCloud2 (z=0). That feeds directly into dimOS's CostMapper
 (pointcloud -> OccupancyGrid) and the 2D A* planner: the short path to
 "the walls anchor the point clouds".
+
+The C1 is hot-pluggable here: a missing port, a permission error or a mid-scan
+unplug is logged once and retried every RETRY_PERIOD_S, so the module can be
+started before the sensor is plugged in and survives it being pulled out.
 """
 from __future__ import annotations
 
@@ -14,6 +18,7 @@ from typing import Any
 
 import numpy as np
 
+from dimos.core.core import rpc
 from dimos.core.module import Module
 from dimos.core.stream import Out
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
@@ -21,8 +26,45 @@ from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
 
+# The C1 comes with a CP2102 USB-UART dongle -> /dev/ttyUSB0 on the Jetson.
 DEFAULT_PORT = "/dev/ttyUSB0"
+# 460800 is the C1's line rate. The rplidar lib defaults to 115200 (A1/A2), so
+# it MUST be passed explicitly or the descriptor read never syncs.
+DEFAULT_BAUDRATE = 460800
 DEFAULT_FRAME = "lidar_link"
+RETRY_PERIOD_S = 5.0
+
+
+def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
+    """One lidar measure -> (x, y) in metres in the sensor frame.
+
+    The lib (rplidar-roboticia 0.9.5, ``iter_measures``) yields the heading
+    angle in degrees over [0, 360) and the distance in millimetres. We use the
+    plain math convention here, x = d*cos(theta), y = d*sin(theta), so
+    0 deg -> +X and 90 deg -> +Y.
+
+    Caveat to settle on the real robot: SLAMTEC's protocol describes that
+    heading as increasing CLOCKWISE seen from above, while the robot frame is
+    counter-clockwise (x forward, y left). Nothing in the lib compensates. If
+    the scan of a known scene comes out mirrored once the C1 is mounted, the
+    fix belongs here - negate the angle - and nowhere else.
+    """
+    theta = math.radians(angle_deg)
+    distance_m = distance_mm / 1000.0
+    return distance_m * math.cos(theta), distance_m * math.sin(theta)
+
+
+def scan_to_points(scan: list[tuple[float, float, float]],
+                   min_quality: int) -> list[tuple[float, float, float]]:
+    """A 360-degree scan -> flat (x, y, 0.0) points in metres.
+
+    ``scan`` is what ``iter_scans`` yields: (quality, angle_deg, distance_mm)
+    measures. Weak returns (quality below min_quality) and invalid ones (the
+    lib reports distance 0 for those) are dropped.
+    """
+    return [(*polar_to_xy(angle, distance), 0.0)
+            for (quality, angle, distance) in scan
+            if quality >= min_quality and distance > 0]
 
 
 class RPLidarC1(Module):
@@ -32,48 +74,105 @@ class RPLidarC1(Module):
 
     pointcloud: Out[PointCloud2]
 
-    def __init__(self, port: str = DEFAULT_PORT, frame_id: str = DEFAULT_FRAME,
-                 min_quality: int = 10, **kwargs: Any) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, port: str = DEFAULT_PORT,
+                 baudrate: int = DEFAULT_BAUDRATE,
+                 frame_id: str = DEFAULT_FRAME,
+                 min_quality: int = 10,
+                 retry_period_s: float = RETRY_PERIOD_S,
+                 **kwargs: Any) -> None:
+        # frame_id is a dimOS ModuleConfig field and Module exposes it as a
+        # read-only property, so it goes through the config, never onto self.
+        super().__init__(frame_id=frame_id, **kwargs)
         self.port = port
-        self.frame_id = frame_id
+        self.baudrate = baudrate
         self.min_quality = min_quality
+        self.retry_period_s = retry_period_s
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
+    # @rpc is not decoration for its own sake: Module.start/stop carry it,
+    # and an override that drops it falls out of the class's rpcs table.
+    # dimOS then proxies the call by pickling the module across the worker
+    # pipe, which dies on our threading.Event ('cannot pickle _thread.lock').
+    @rpc
     def start(self) -> None:
         super().start()
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._loop,
+        self._thread = threading.Thread(target=self._worker,
                                         name="vector-rplidar", daemon=True)
         self._thread.start()
 
+    @rpc
     def stop(self) -> None:
         self._stop_event.set()
         if self._thread is not None:
             self._thread.join(timeout=3.0)
         super().stop()
 
-    def _loop(self) -> None:
-        from rplidar import RPLidar
-
-        lidar = RPLidar(self.port)
-        logger.info("RPLIDAR C1 up on %s: %s", self.port, lidar.get_info())
+    # Named _worker, NOT _loop: dimOS's Module keeps its asyncio event
+    # loop in self._loop, which would shadow the method and make the
+    # thread target the event loop object.
+    def _worker(self) -> None:
         try:
-            for scan in lidar.iter_scans():
-                if self._stop_event.is_set():
-                    break
-                pts = [(d / 1000.0 * math.cos(math.radians(a)),
-                        d / 1000.0 * math.sin(math.radians(a)), 0.0)
-                       for (q, a, d) in scan
-                       if q >= self.min_quality and d > 0]
-                if pts:
-                    self.pointcloud.publish(PointCloud2.from_numpy(
-                        np.asarray(pts, dtype=np.float32),
-                        frame_id=self.frame_id))
-        finally:
+            from rplidar import RPLidar
+        except ImportError:
+            logger.error("rplidar-roboticia is not installed - lidar is off "
+                         "(pip install 'vector-dimos[rplidar]')")
+            return
+
+        last_error: str | None = None
+        while not self._stop_event.is_set():
+            lidar = None
             try:
-                lidar.stop()
-                lidar.disconnect()
-            except Exception:
-                pass
+                # RPLidar opens the serial port inside __init__: a missing
+                # device or a permission error raises right here.
+                lidar = RPLidar(self.port, baudrate=self.baudrate)
+                logger.info("RPLIDAR C1 up on %s @ %d baud: %s",
+                            self.port, self.baudrate, _describe(lidar))
+                last_error = None
+                self._scan(lidar)
+            except Exception as exc:  # noqa: BLE001 - absent/unplugged sensor
+                error = f"{type(exc).__name__}: {exc}"
+                if error != last_error:  # log once per distinct cause
+                    logger.warning(
+                        "RPLIDAR C1 unavailable on %s (%s) - retrying every "
+                        "%.0f s", self.port, error, self.retry_period_s)
+                    last_error = error
+            finally:
+                _shutdown(lidar)
+            self._stop_event.wait(self.retry_period_s)
+
+    def _scan(self, lidar: Any) -> None:
+        """Publish one flat cloud per revolution until stop or a lib error."""
+        for scan in lidar.iter_scans():
+            if self._stop_event.is_set():
+                return
+            points = scan_to_points(scan, self.min_quality)
+            if points:
+                self.pointcloud.publish(PointCloud2.from_numpy(
+                    np.asarray(points, dtype=np.float32),
+                    frame_id=self.frame_id))
+
+
+def _describe(lidar: Any) -> str:
+    """Device info for the log line - never worth failing a session over."""
+    try:
+        return str(lidar.get_info())
+    except Exception as exc:  # noqa: BLE001
+        return f"info unavailable ({type(exc).__name__})"
+
+
+def _shutdown(lidar: Any) -> None:
+    """Stop the scan, stop the motor, close the port. Each step best-effort.
+
+    On an unplug every step raises (the port is gone); that is expected and
+    must not mask the original error or block the retry.
+    """
+    if lidar is None:
+        return
+    for step in (lidar.stop, lidar.stop_motor, lidar.disconnect):
+        try:
+            step()
+        except Exception:  # noqa: BLE001
+            logger.debug("rplidar shutdown step %s failed",
+                         getattr(step, "__name__", step), exc_info=True)

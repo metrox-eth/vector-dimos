@@ -14,9 +14,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# The dimOS runtime itself; the core (kinematics, driver, adapter) is pure
-# python and cold-testable without it.
-dimos = ["dimos"]
+# No `dimos` extra on purpose. The runtime has to come from git main - the
+# external-blueprints mechanism this package plugs into is newer than the PyPI
+# release - and an extra cannot express that. The README documents the line:
+#     pip install git+https://github.com/dimensionalOS/dimos.git
+# The core (kinematics, driver, adapter) is cold-testable without any of it.
 gamepad = ["pygame>=2.6"]
 rplidar = ["rplidar-roboticia"]
 
