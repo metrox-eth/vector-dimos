@@ -289,7 +289,7 @@ check(m.write_enable(True) and m.read_enabled(), "enable sequence on mock bus")
 VX, VY, WZ = 0.37, -0.21, 0.83
 w_fl, w_fr, w_bl, w_br = inverse(VX, VY, WZ, MecanumGeometry())
 exp = [rads_to_rpm(w) for w in (w_fl, w_fr, w_bl, w_br)]
-print(f"      expected wheel RPM from kinematics (r=0.105, k=0.35): "
+print(f"      expected wheel RPM from kinematics (r=0.085, k=0.35): "
       f"FL={exp[0]:.2f} FR={exp[1]:.2f} BL={exp[2]:.2f} BR={exp[3]:.2f}")
 m.client.writes.clear()
 mark = len(LOG.lines)
@@ -314,7 +314,7 @@ m.write_velocities([0.0, 0.0, 0.0])
 cmd_lines = [line for line in LOG.since(mark) if "MOCK: twist" in line]
 check(len(cmd_lines) == 2,
       f"3 writes, 2 distinct commands -> 2 log lines ({len(cmd_lines)})")
-check("FL=+26 FR=+41 BL=-12 BR=+79" in cmd_lines[0],
+check("FL=+33 FR=+51 BL=-15 BR=+98" in cmd_lines[0],
       f"the logged RPM is the commanded RPM: {cmd_lines[0]}")
 
 m.write_velocities([VX, VY, WZ])

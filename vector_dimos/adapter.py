@@ -130,12 +130,16 @@ class VectorBaseAdapter:
         timeout_s: pymodbus response timeout on the bus we own. It is the
             per-transaction cost of a silent drive - see the module
             docstring before lowering it.
+        accel_ms: acceleration = deceleration ramp written to both drives
+            at enable time. 400 ms is the value the first robot code
+            converged on in the field (500 -> 1000 -> 400); 1000 ms made
+            the chassis feel sluggish.
     """
 
     def __init__(self, dof: int = 3, address: str | None = None,
                  hardware_id: str = "base", client=None,
                  geometry: MecanumGeometry | None = None,
-                 accel_ms: int = 1000, timeout_s: float = SERIAL_TIMEOUT_S,
+                 accel_ms: int = 400, timeout_s: float = SERIAL_TIMEOUT_S,
                  **_: object) -> None:
         if dof != 3:
             raise ValueError(f"VECTOR is holonomic: dof must be 3, got {dof}")
