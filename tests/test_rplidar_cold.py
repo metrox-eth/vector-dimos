@@ -98,16 +98,16 @@ check(scan_to_points([], 10) == [], "an empty scan yields no points")
 
 # --- A2. the mast mask (measured 2026-08-23: 0.21 m over 350-10 deg) --------
 from vector_dimos.rplidar_c1 import scan_to_points, MAST_MASK_DEG, MASK_RANGE_M
-scan = [(40, 0.0, 210.0), (40, 355.0, 220.0),                        # the mast: dropped
-        (40, 37.0, 420.0), (40, 217.0, 360.0),                       # the rover's own corners (front 0.42 m at 37 deg, rear 0.36 m at 217 deg): dropped by the body rectangle
-        (40, 0.0, 1200.0), (40, 5.0, 800.0),                         # same wedge, far: kept
-        (40, 90.0, 210.0),                                           # under MIN_RANGE_M: dropped
-        (40, 90.0, 320.0), (40, 180.0, 350.0),                       # 0.32 m beside / 0.35 m behind the body: REAL (the old 0.40 m disc hid them): kept
-        (40, 90.0, 450.0), (40, 180.0, 600.0),                       # real: kept
+scan = [(40, 0.0, 210.0), (40, 355.0, 220.0),                        # the mast bar (0.225 m, +-6 deg): dropped
+        (40, 20.0, 380.0), (40, 37.0, 420.0), (40, 217.0, 360.0),    # near the rover but outside the bar: the world, kept (no body mask, metrox 23/08)
+        (40, 0.0, 1200.0), (40, 5.0, 800.0),                         # inside the bar's bearing, far: kept
+        (40, 90.0, 210.0), (40, 90.0, 320.0), (40, 180.0, 350.0),    # 0.21-0.35 m beside / behind: kept
+        (40, 90.0, 450.0), (40, 180.0, 600.0),                       # kept
+        (40, 90.0, 80.0),                                            # under the sensor floor (0.10 m): dropped
         (3, 60.0, 500.0), (40, 60.0, 0.0)]                           # weak / invalid: dropped
 pts = scan_to_points(scan, min_quality=10)
-check(len(pts) == 6, f"mast wedge, own corners and anything under 0.30 m dropped; 6 real points kept ({len(pts)})")
-check(close(pts[0][0], 1.2) and close(pts[0][1], 0.0), "a far point inside the wedge survives at 1.2 m on +x")
+check(len(pts) == 10, f"only the mast bar, the sensor floor and weak/invalid returns dropped; 10 real points kept ({len(pts)})")
+check(any(close(x, 1.2) and close(y, 0.0) for x, y, _ in pts), "a far point inside the bar's bearing survives at 1.2 m on +x")
 
 # --- B. retry loop on a fake rplidar lib ----------------------------------
 print("\nB. retry loop (fake lib, no sensor)")
