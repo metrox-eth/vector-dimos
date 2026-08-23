@@ -60,31 +60,15 @@ def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
     return distance_m * math.cos(theta), -distance_m * math.sin(theta)
 
 
-# The camera mast stands in the scan plane. Measured on the rover 2026-08-23
-# (tests/probe_rplidar.py): a constant 0.21-0.22 m return over the lidar's
-# 350-10 degree sectors. Everything inside that wedge closer than MASK_RANGE_M
-# is the mast, not the world; the costmap must never see it.
-MAST_MASK_DEG: tuple[tuple[float, float], ...] = ((315.0, 45.0),)   # the mast (0.21 m ahead); wraps past 360. Body corners: see _in_body
-MASK_RANGE_M = 0.50
-# Anything closer than this in ANY direction is the rover itself (e-stop box,
-# cables on the lid: 0.25 m returns mapped as obstacles that followed the
-# rover around on 2026-08-23).
-MIN_RANGE_M = 0.30
-# The rover's own body, as seen from the lidar (centred in width, 3 cm behind
-# the length centre of a 0.54 x 0.46 m chassis; metrox, 23/08), plus a margin
-# for the bumper uprights. With min_quality 0 the weak grazing reflections off
-# the corners (0.40-0.43 m, just past the old 0.40 m disc) entered the map and,
-# since the voxel map never forgets, fenced the rover in after ~10 minutes
-# (23/08 17:15: a 0.38 m ring in all 12 sectors, raw scan empty under 0.9 m).
-# A rectangle keeps side obstacles visible from 0.29 m, the disc hid them to 0.40.
-BODY_FRONT_M, BODY_REAR_M, BODY_HALF_WIDTH_M = 0.30, 0.24, 0.23
-BODY_MARGIN_M = 0.06
-
-
-def _in_body(x: float, y: float) -> bool:
-    """True if the return lands on the rover's own footprint (+ margin)."""
-    return (-(BODY_REAR_M + BODY_MARGIN_M) <= x <= BODY_FRONT_M + BODY_MARGIN_M
-            and abs(y) <= BODY_HALF_WIDTH_M + BODY_MARGIN_M)
+# The camera mast stands in the scan plane: only its horizontal bar, 50 mm
+# wide at 225 mm from the lidar centre (metrox, 23/08) = +-6.3 deg. Masked
+# with margin: +-12 deg, under 0.30 m. The earlier +-45 deg / 0.50 m wedge
+# blinded a 90 deg sector right where the rover hits things.
+MAST_MASK_DEG: tuple[tuple[float, float], ...] = ((348.0, 12.0),)   # wraps past 360
+MASK_RANGE_M = 0.30
+# Sensor floor only. Nothing of the rover but the mast bar stands in the scan
+# plane (metrox, 23/08) - no body mask, no blind disc: a return is the world.
+MIN_RANGE_M = 0.10
 
 
 def _in_mask(angle_deg: float, distance_m: float,
@@ -116,8 +100,6 @@ def scan_to_points(scan: list[tuple[float, float, float]],
         if _in_mask(angle, distance / 1000.0, mask, mask_range_m):
             continue
         x, y = polar_to_xy(angle, distance)
-        if _in_body(x, y):
-            continue
         out.append((x, y, 0.0))
     return out
 
