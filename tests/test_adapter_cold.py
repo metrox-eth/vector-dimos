@@ -20,10 +20,10 @@ def check(cond, label):
     ok = ok and cond
 
 
-# The geometry the package ships: r = 0.085 m, k = 0.15 + 0.20 = 0.35 m.
+# The geometry the package ships: r = 0.085 m, k = 0.15 + 0.185 = 0.335 m (measured 23/08).
 G = MecanumGeometry()
 check((G.wheel_radius_m, G.half_wheelbase_m, G.half_track_m)
-      == (0.085, 0.15, 0.20),
+      == (0.085, 0.15, 0.185),
       f"bench runs on the real default geometry: r={G.wheel_radius_m} m, "
       f"half wheelbase={G.half_wheelbase_m} m, half track={G.half_track_m} m")
 bus = MockModbusClient()

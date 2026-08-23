@@ -50,6 +50,6 @@ Values used by `kinematics.py`:
   0.105 until 2026-08-22 and overestimated odometry by ~24 %. Radius scales
   odometry linearly, so 0.085 still has to be confirmed by an odometry
   roundtrip on the real chassis (drive a known distance, compare `/odom`).
-- Half wheelbase: 0.15 m
-- Half track: 0.20 m
-- Kinematic constant K (half wheelbase + half track): 0.35 m
+- Half wheelbase: 0.15 m — axle to axle 30 cm, tape-measured 2026-08-23
+- Half track: 0.185 m — 37 cm between the left and right ground contact points, tape-measured 2026-08-23 (the v1 code carried 0.20, never measured)
+- Kinematic constant K (half wheelbase + half track): 0.335 m. With the old 0.35 every commanded spin turned ~4.5 % too far (180° -> 188°); to be confirmed by a spin roundtrip (command 360°, read the lidar odometry)

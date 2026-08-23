@@ -26,8 +26,8 @@ RPM_PER_RAD_S = 60.0 / (2.0 * math.pi)
 @dataclass(frozen=True)
 class MecanumGeometry:
     wheel_radius_m: float = 0.085    # measured: 17 cm diameter (2026-08-22). Confirm via odometry roundtrip.
-    half_wheelbase_m: float = 0.15   # v1: wheelbase 0.3
-    half_track_m: float = 0.20       # v1: track 0.4
+    half_wheelbase_m: float = 0.15   # measured 2026-08-23 (metrox, tape): axle to axle 30 cm
+    half_track_m: float = 0.185      # measured 2026-08-23: 37 cm between the ground contact points (v1 said 0.40 - never measured)
 
     @property
     def k(self) -> float:
