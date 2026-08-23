@@ -36,6 +36,13 @@ dimOS's `setup.py` provides the escape hatch:
 $ DIMOS_ALLOW_MISSING_COCKPIT=1 uv pip install "git+https://github.com/dimensionalOS/dimos.git"
 ```
 
+dimOS main moves; for a reproducible rover, record the commit you installed
+(`uv pip show dimos` lists the direct URL) and reinstall from
+`git+https://github.com/dimensionalOS/dimos.git@<commit>` next time. This
+package was validated against main as of 2026-08-22 (local checkout `a7d19f761`).
+
+``````
+
 That builds a UI-less wheel, which is what a headless robot wants anyway.
 Installed here: `dimos 0.0.14b1`, commit `a7d19f76`. The variable is a
 build-time flag only — the CLI runs fine without it afterwards.
@@ -69,6 +76,14 @@ survives a config file that turns the relay on.
 | `pyrealsense2-extended` (what dimOS actually depends on) | cp312 aarch64 wheel imports fine on this glibc; `rs.context().query_devices()` returns 0 devices, which is correct with no camera plugged |
 
 So the dimOS RealSense path needs no local librealsense build on this board.
+
+> Update, 2026-08-22 evening: the session that actually wired the camera had not
+> re-read this table and built librealsense 2.56 from source instead (RSUSB
+> backend, no kernel patch — `tools/build_librealsense_jetson.sh`, ~11 min on
+> the Orin Nano with `-j4`, the two `.so` copied into the venv). That path works
+> and is what the rover runs today: D455F fw 5.17.0.10, colour + depth streaming
+> through the stock `RealSenseCamera` module. Try the wheel first; the build is
+> the fallback.
 Checked in a throwaway venv, import + device enumeration only: streaming from a
 real D455F is untested (no camera mounted yet).
 
@@ -214,7 +229,12 @@ re-applies them at every run, which is fine as long as the sudo rule stays.
 
 ## Open items
 
-- **Control-tick budget on the real bus. Unmeasured.** The coordinator runs at
+- **Control-tick budget on the real bus. Partly measured (2026-08-22).** One
+  `read_holding_registers` costs 5-7 ms per drive on the real bus. With the
+  point cloud + Rerun bridge running, the Orin Nano sat at ~117 % CPU and twist
+  commands were executed ~2x late (a 1 s command ran 1.9 s); with the lighter
+  `cockpit` blueprint a 1 s command ran 0.99 s — see "First motion on blocks".
+  The `log_ticks=True` minute is still to do. Original note: the coordinator runs at
   the dimOS default 100 Hz, i.e. a 10 ms budget per tick. On the mock bus that
   is free; on RS485 a tick is two `read_holding_registers` and — once any twist
   has arrived, because the velocity task stays active — two `write_registers`,
@@ -224,7 +244,9 @@ re-applies them at every run, which is fine as long as the sudo rule stays.
   drivers are wired (`log_ticks=True` for a minute), then set `tick_rate`
   explicitly in `_coordinator_blueprint()` to what the bus sustains. Test
   first, then limit.
-- **One-sided bus outage: decision pending.** `write_velocities()` writes the
+- **One-sided bus outage: decision pending.** (The drive-side communication-loss
+  stop does exist and is armed since 2026-08-22 — 0x2000 = 1000 ms, measured
+  below — but it covers a dead runtime, not a half-dead bus.) `write_velocities()` writes the
   two controllers independently, so if one RS485 link drops mid-drive the
   healthy axle keeps following the stick while the silent one holds its last
   command — the robot would turn on two wheels. Software cannot reach a drive
@@ -233,7 +255,7 @@ re-applies them at every run, which is fine as long as the sudo rule stays.
   communication-loss stop on the ZLAC8015D itself if its parameter set has one.
   `tests/test_adapter_bus_faults.py` case (f) pins today's behaviour so the
   change, if any, is visible. Decide with the drivers wired, not before.
-- **ZLAC8015D wiring.** The two drivers are not on `/dev/ttyTHS1` yet (probe
+- **ZLAC8015D wiring — done 2026-08-22** (both drives answer on `/dev/ttyTHS1` in 5-7 ms; see "First motion on blocks"). Original note: the two drivers were not on `/dev/ttyTHS1` yet (probe
   times out on both ids). Nothing about the drive chain is verified on hardware:
   wheel topology, signs and geometry are cold-bench facts only.
 - **RPLIDAR C1.** Not connected. It attaches through a CP2102 USB-UART adapter,
@@ -291,7 +313,7 @@ settles it.
 
 Drive parameters read afterwards (`tests/read_zlac_params.py`, read-only):
 **0x2000 communication-offline time = 0 on both drives, i.e. the drive-side
-watchdog is off.** If the runtime dies uncleanly with a non-zero target, the
+watchdog is off.** (Since fixed — next section.) If the runtime dies uncleanly with a non-zero target, the
 wheels keep turning until the power is cut or `tests/estop_rs485.py` runs; the
 clean path (`dimos stop`) zeroes and disables. Max RPM 0x2008 = 1000,
 ramps 400/400 persisted, mode 3 (velocity).

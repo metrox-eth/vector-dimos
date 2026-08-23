@@ -119,3 +119,37 @@ def _rplidar_blueprint():
 
 
 rplidar_blueprint = _rplidar_blueprint()
+
+
+def _cockpit_blueprint():
+    """Base + the stock dimOS RealSense module: what the cockpit shows.
+
+    `dimos --rerun-open none --rerun-host 0.0.0.0 run vector-dimos.cockpit
+    --local-relay` on the headless rover, then on a workstation:
+    `dimos-viewer --connect rerun+http://<rover>:9877/proxy --ws-url
+    ws://<rover>:3030/ws` (the 3D viewer: colour, depth, point cloud, odom),
+    and the cockpit page the relay prints. The IMU stays off until something
+    consumes it.
+    """
+    from dimos.core.global_config import global_config
+    from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
+    from dimos.visualization.vis_module import vis_module
+
+    return autoconnect(
+        _coordinator_blueprint(),
+        # 15 fps (the D455F has no 6 fps profile), no point cloud: with it on, the Orin Nano sat at
+        # 117 % CPU and twist commands were executed ~2x late (measured
+        # 2026-08-22: a 1 s rotation ran 1.9 s, 2.08 m driven for 0.9 m asked).
+        RealSenseCamera.blueprint(width=640, height=480, fps=15,
+                                  enable_depth=True, enable_pointcloud=False,
+                                  enable_imu=False),
+        # The stock Rerun bridge: gRPC server for dimos-viewer / the web
+        # viewer, logs every topic that knows how to draw itself (camera,
+        # depth, point cloud, odometry, tf).
+        vis_module(viewer_backend=global_config.viewer),
+    ).remappings([
+        (VectorControlCoordinator, "twist_command", "cmd_vel"),
+    ])
+
+
+cockpit_blueprint = _cockpit_blueprint()
