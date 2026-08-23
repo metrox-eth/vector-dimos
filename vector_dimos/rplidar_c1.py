@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 import threading
+import time
 from typing import Any
 
 import numpy as np
@@ -174,7 +175,7 @@ class RPLidarC1(Module):
             if points:
                 self.pointcloud.publish(PointCloud2.from_numpy(
                     np.asarray(points, dtype=np.float32),
-                    frame_id=self.frame_id))
+                    frame_id=self.frame_id, timestamp=time.time()))
 
 
 def _describe(lidar: Any) -> str:

@@ -24,6 +24,7 @@ RESET = b"\xa5\x40"
 GET_HEALTH = b"\xa5\x52"
 GET_INFO = b"\xa5\x50"
 SCAN_DESCRIPTOR = b"\xa5\x5a\x05\x00\x00\x40\x81"
+SPINUP_GRACE_S = 10.0   # motor spin-up after a STOP before the first sample
 
 
 class C1Scanner:
@@ -95,9 +96,16 @@ class C1Scanner:
         if head != SCAN_DESCRIPTOR:
             raise RuntimeError(f"unexpected scan descriptor: {head.hex()}")
         buf = b""
+        # After a STOP the C1 spins its motor down; on SCAN it answers the
+        # descriptor at once but streams samples only once the motor is back
+        # up - a few seconds. Give the first sample that grace, then the
+        # normal timeout applies.
+        first_deadline = time.monotonic() + SPINUP_GRACE_S
         while True:
             chunk = s.read(max(5, s.in_waiting or 0))
             if not chunk:
+                if not buf and time.monotonic() < first_deadline:
+                    continue
                 raise RuntimeError("scan stream timed out")
             buf += chunk
             i = 0
