@@ -143,7 +143,7 @@ class FakeLidar:
     stop = stop_motor = disconnect = _dead_port
 
 
-sys.modules["rplidar"] = types.SimpleNamespace(RPLidar=FakeLidar)
+rp.RPLidarC1.lidar_class = FakeLidar   # the bench drives a fake device class
 spy = LogSpy()
 real_logger, rp.logger = rp.logger, spy
 
@@ -207,19 +207,16 @@ rp.logger = real_logger
 del sys.modules["rplidar"]
 
 
-# --- C. the real lib, against a port that does not exist ------------------
-print("\nC. real rplidar lib on a missing port")
-try:
-    import rplidar  # noqa: F401
-except ImportError:
-    print("  ..  rplidar-roboticia not installed here - real-lib check skipped")
-else:
+# --- C. the real reader, against a port that does not exist ---------------
+print("\nC. real C1 reader (pyserial) on a missing port")
+rp.RPLidarC1.lidar_class = None
+if True:
     spy = LogSpy()
     real_logger, rp.logger = rp.logger, spy
     absent = RPLidarC1(port="/dev/ttyUSB_vector_cold_test", retry_period_s=0.5)
     absent.start()
     check(wait_for(lambda: spy.count("RPLIDAR C1 unavailable") == 1, 4.0),
-          "missing device -> RPLidarException caught and logged once")
+          "missing device -> the open error is caught and logged once")
     check(any("No such file or directory" in line for line in spy.lines),
           "the log names the real cause")
     check(absent._thread.is_alive(), "module still running with no sensor")

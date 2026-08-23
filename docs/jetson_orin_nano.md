@@ -71,7 +71,7 @@ survives a config file that turns the relay on.
 | `numpy` 2.5.2 | wheel `cp312-manylinux_2_28_aarch64` |
 | `pymodbus` 2.5.3, `pyserial` 3.5 | pure python |
 | `pygame` 2.6.1 | wheel `cp312-manylinux2014_aarch64`, installs clean |
-| `rplidar-roboticia` 0.9.5 | pure python |
+| ~~`rplidar-roboticia` 0.9.5~~ | dropped 2026-08-23: on this C1 (fw 1.2) the lib fails with `Descriptor length mismatch` although the raw SLAMTEC protocol works first try — `vector_dimos/c1_serial.py` now reads the lidar with plain pyserial |
 | `pyrealsense2` (upstream) | installs, **does not import**: the bundled `.so` needs `GLIBC_2.38`, JetPack 6.2 ships glibc 2.35. The wheel is tagged `manylinux2014` but is not manylinux2014 in practice |
 | `pyrealsense2-extended` (what dimOS actually depends on) | cp312 aarch64 wheel imports fine on this glibc; `rs.context().query_devices()` returns 0 devices, which is correct with no camera plugged |
 
@@ -260,8 +260,12 @@ re-applies them at every run, which is fine as long as the sudo rule stays.
   wheel topology, signs and geometry are cold-bench facts only.
 - **RPLIDAR C1.** Not connected. It attaches through a CP2102 USB-UART adapter,
   4 wires (GND, 5 V, TX, RX — the C1's RX is 3.3 V logic), 460800 baud, which is
-  what `rplidar_c1.py` defaults to (the `rplidar-roboticia` library itself
-  defaults to 115200).
+  what `rplidar_c1.py` defaults to. 2026-08-23, bench on the workstation through
+  an ESP32-S3-DevKitC-1 held in reset (its CP2102N as the USB-UART bridge): the
+  C1 answers info/health, and our pyserial reader streams ~3.8 k samples/s;
+  powered from the dev board's 5 V pin it only spun at ~5 Hz (the datasheet's
+  800 mA start-up current is more than that pin gives) — feed it from the
+  Jetson's 5 V header on the rover.
 - **RealSense D455F.** Not mounted. The python binding imports; streaming,
   frame rates and USB behaviour under load are untested.
 - **Gamepad.** `vector-dimos.gamepad` runs headless on this board (it waits for

@@ -53,7 +53,7 @@ anyway. For the dimOS runtime, install dimOS **from git main**: the
 external-blueprints mechanism is newer than the current PyPI release.
 
 ```console
-$ pip install -e ".[gamepad,rplidar]"    # pygame teleop + RPLIDAR C1 driver
+$ pip install -e ".[gamepad]"            # pygame teleop (the RPLIDAR C1 reader needs only pyserial)
 $ pip install git+https://github.com/dimensionalOS/dimos.git
 ```
 
