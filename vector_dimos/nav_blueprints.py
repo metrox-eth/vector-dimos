@@ -29,7 +29,7 @@ def _nav_blueprint():
     frame) -> VoxelGridMapper `lidar`; `global_map` -> CostMapper."""
     from dimos.core.global_config import global_config
     from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
-    from dimos.mapping.costmapper import CostMapper
+    from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
     from dimos.visualization.vis_module import vis_module
     from vector_dimos.lidar_odometry import LidarOdometry
@@ -44,7 +44,7 @@ def _nav_blueprint():
         RPLidarC1.blueprint(),
         LidarOdometry.blueprint(use_gyro_prior=False),
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
-        CostMapper.blueprint(),
+        VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
         vis_module(viewer_backend=global_config.viewer),
     ).remappings([
         (VectorControlCoordinator, "twist_command", "cmd_vel"),
@@ -63,8 +63,7 @@ def _explore_blueprint():
     (the local planner's default is 0.55 m/s)."""
     from dimos.core.global_config import global_config
     from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
-    from dimos.mapping.costmapper import CostMapper
-    from dimos.mapping.pointclouds.occupancy import HeightCostConfig
+    from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
     from dimos.navigation.frontier_exploration.wavefront_frontier_goal_selector import WavefrontFrontierExplorer
     from dimos.navigation.movement_manager.movement_manager import MovementManager
@@ -87,7 +86,7 @@ def _explore_blueprint():
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=10, carve_columns=False),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
         # dimOS's height-cost defaults are for a quadruped (can_climb 0.15 m, pass
         # under 0.6 m): VECTOR climbs nothing (3 cm) and its camera top is ~0.85 m.
-        CostMapper.blueprint(config=HeightCostConfig(can_climb=0.03, can_pass_under=0.88, ignore_noise=0.0, smoothing=0.0)),   # a single-voxel column (a table leg) must stay an obstacle
+        VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
         # the rover is 54x46 cm but its corners sweep 0.71 m when it pivots and the
         # camera mast stands at the front bumper: give the planner a footprint with margin
         RecoveringPlanner.blueprint(robot_width=0.62, robot_rotation_diameter=0.80),
