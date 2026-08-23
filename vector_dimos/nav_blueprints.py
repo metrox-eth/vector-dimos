@@ -66,6 +66,7 @@ def _explore_blueprint():
     from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
     from vector_dimos.fast_explorer import VectorExplorer
+    from vector_dimos.memory import VectorMemory
     from dimos.navigation.movement_manager.movement_manager import MovementManager
     from vector_dimos.recovering_planner import RecoveringPlanner
     from dimos.visualization.vis_module import vis_module
@@ -97,6 +98,7 @@ def _explore_blueprint():
                                             info_gain_threshold=0.001, num_no_gain_attempts=6,
                                             max_explored_distance=12.0, goal_timeout=15.0),
         StuckGuard.blueprint(),
+        VectorMemory.blueprint(),    # every run recorded (dimOS memory): replay, draw, tune planners without the robot
         vis_module(viewer_backend=global_config.viewer),
     ).remappings([
         (VectorControlCoordinator, "twist_command", "cmd_vel"),
