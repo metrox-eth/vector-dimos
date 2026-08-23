@@ -78,6 +78,7 @@ def test_times_out_when_not_moving() -> None:
 def test_replan_backs_up_only_when_stuck() -> None:
     calls = []
     planner, fake = make_planner(moves=True)
+    planner._current_goal = PoseStamped(position=Vector3(4.0, 1.0, 0.0))
     planner._back_up = lambda: calls.append("backup") or 0.25  # type: ignore[method-assign]
     RecoveringGlobalPlanner.__mro__[1]._replan_path = lambda self: calls.append("replan")  # type: ignore[method-assign]
     planner._position_tracker.is_stuck = lambda: False  # type: ignore[method-assign]
@@ -88,7 +89,37 @@ def test_replan_backs_up_only_when_stuck() -> None:
     print(f"  order: {calls}")
 
 
+def test_replan_without_goal_neither_backs_up_nor_dies() -> None:
+    calls = []
+    planner, fake = make_planner(moves=True)
+    planner._current_goal = None
+    planner._back_up = lambda: calls.append("backup") or 0.25  # type: ignore[method-assign]
+    planner._position_tracker.is_stuck = lambda: True  # type: ignore[method-assign]
+    planner._replan_path()
+    assert calls == [], calls
+
+    def cancel_during_backup() -> float:
+        calls.append("backup")
+        planner._current_goal = None
+        return 0.25
+
+    planner._current_goal = PoseStamped(position=Vector3(4.0, 1.0, 0.0))
+    planner._back_up = cancel_during_backup  # type: ignore[method-assign]
+    RecoveringGlobalPlanner.__mro__[1]._replan_path = lambda self: calls.append("replan")  # type: ignore[method-assign]
+    planner._replan_path()
+    assert calls == ["backup"], calls
+
+    def boom(self) -> None:
+        raise AssertionError("upstream assert")
+
+    planner._current_goal = PoseStamped(position=Vector3(4.0, 1.0, 0.0))
+    planner._position_tracker.is_stuck = lambda: False  # type: ignore[method-assign]
+    RecoveringGlobalPlanner.__mro__[1]._replan_path = boom  # type: ignore[method-assign]
+    planner._replan_path()  # must not raise
+    print("  no goal -> no backup; goal lost during backup -> no replan; upstream exception swallowed")
+
+
 if __name__ == "__main__":
-    for t in (test_backs_up_measured_distance, test_times_out_when_not_moving, test_replan_backs_up_only_when_stuck):
+    for t in (test_backs_up_measured_distance, test_times_out_when_not_moving, test_replan_backs_up_only_when_stuck, test_replan_without_goal_neither_backs_up_nor_dies):
         print(t.__name__); t()
     print("TEST PASSED")
