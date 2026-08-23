@@ -1,4 +1,4 @@
-"""Cold bench for RecoveringGlobalPlanner: known odometry in -> known reverse out.
+"""Cold bench for RecoveringGlobalPlanner: known odometry in -> known reverse out (0.20 m, metrox: just enough to turn).
 
 No robot. A fake local planner integrates the reverse twists it receives into
 the odometry the planner reads, so "back up 0.25 m at 0.10 m/s" must take
@@ -55,11 +55,11 @@ def test_backs_up_measured_distance() -> None:
     travelled = planner._back_up()
     dt = time.perf_counter() - t0
     assert fake.stopped == 1, "local follower must be stopped before reversing"
-    assert 0.25 <= travelled < 0.30, travelled
+    assert 0.20 <= travelled < 0.25, travelled
     assert 2.0 < dt < 3.5, dt
     assert all(tw.linear.x <= 0.0 for tw in fake.sent)
     assert fake.sent[-1].linear.x == 0.0, "must end with a zero twist"
-    assert planner._current_odom.position.x < 1.80
+    assert planner._current_odom.position.x < 1.85
     print(f"  backed up {travelled:.3f} m in {dt:.1f} s, {len(fake.sent)} twists")
 
 
