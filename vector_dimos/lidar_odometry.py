@@ -53,13 +53,13 @@ logger = setup_logger()
 PLANE_THICKNESS_M = 0.05
 LIDAR_HEIGHT_M = 0.30          # lidar_link above base_link (lid of the chassis)
 # D455F on the mast: ~0.21 m ahead of the lidar (the mast sits at the lidar's
-# 0.21 m return), 0.60 m up, level, looking forward. Optical frame x right,
+# 0.21 m return), 0.80 m up (measured), level, looking forward. Optical frame x right,
 # y down, z forward -> base: X = z, Y = -x, Z = -y.
-CAMERA_XYZ_BASE = (0.21, 0.0, 0.60)
+CAMERA_XYZ_BASE = (0.21, 0.0, 0.80)   # measured 2026-08-23: floor reads 0.79-0.83 m below the optical axis, constant with range (level)
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 3                # one depth frame in three (15 fps -> 5 Hz)
-DEPTH_MAX_M = 4.0
-OBSTACLE_Z_M = (0.05, 0.70)    # the rover's height band in world z: legs yes, table tops no
+DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
+OBSTACLE_Z_M = (0.12, 0.70)    # the rover's height band in world z: legs yes, table tops no, floor noise no
 
 
 def _yaw_quat(yaw: float) -> Quaternion:
