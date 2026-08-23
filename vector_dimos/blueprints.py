@@ -51,6 +51,11 @@ try:
 except Exception:  # already registered (e.g. re-import): keep the first one
     pass
 
+# Velocity commands must never queue up (stale twists drove the rover 2x too
+# far on 2026-08-22): clamp the LCM queue of command channels to one message.
+from vector_dimos.lcm_latest import install as _install_latest_only  # noqa: E402
+_install_latest_only()
+
 # The shipped dimOS RPC clients address the coordinator by this name; keep it
 # even though the class below is a subclass.
 COORDINATOR_INSTANCE_NAME = "ControlCoordinator"
@@ -66,6 +71,11 @@ class VectorControlCoordinator(ControlCoordinator):
     is what registers the 'vector' twist base adapter in the process that
     actually instantiates it.
     """
+
+    # Run the control loop in its own process. Measured 2026-08-23: sharing a
+    # worker (and its GIL) with the RealSense point cloud left a 1 s twist
+    # executing for 1.49 s even with the command queue clamped to one.
+    dedicated_worker = True
 
 
 def _vector_base(hw_id: str = "base",
@@ -153,3 +163,25 @@ def _cockpit_blueprint():
 
 
 cockpit_blueprint = _cockpit_blueprint()
+
+
+def _cockpit_heavy_blueprint():
+    """Stress variant of `cockpit`: point cloud on, 30 fps. This is the load
+    that executed twists ~2x late on 2026-08-22; kept as the benchmark for
+    the command-queue clamp (lcm_latest) - run the 1 s rotation test under it."""
+    from dimos.core.global_config import global_config
+    from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
+    from dimos.visualization.vis_module import vis_module
+
+    return autoconnect(
+        _coordinator_blueprint(),
+        RealSenseCamera.blueprint(width=640, height=480, fps=30,
+                                  enable_depth=True, enable_pointcloud=True,
+                                  enable_imu=False),
+        vis_module(viewer_backend=global_config.viewer),
+    ).remappings([
+        (VectorControlCoordinator, "twist_command", "cmd_vel"),
+    ])
+
+
+cockpit_heavy_blueprint = _cockpit_heavy_blueprint()
