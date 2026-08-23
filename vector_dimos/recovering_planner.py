@@ -14,6 +14,7 @@ import time
 
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
+from dimos.navigation.base import NavigationState
 from dimos.navigation.replanning_a_star.global_planner import GlobalPlanner
 from dimos.navigation.replanning_a_star.module import ReplanningAStarPlanner
 from dimos.utils.logging_config import setup_logger
@@ -44,7 +45,12 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             if not has_goal:
                 logger.info("Replan requested without a goal; ignoring.")
                 return
-            if self._position_tracker.is_stuck():
+            # Back up only if we were actually driving a path for a while: a
+            # fresh goal with "no path" also reads as "stuck" (the tracker's
+            # window is already still) and that made the rover reverse every
+            # 15 s in a dead end (seen 23/08 17:00, metrox: "il va a reculons").
+            driving_for = time.perf_counter() - self._path_started_at
+            if self._position_tracker.is_stuck() and driving_for >= self._stuck_time_window:
                 self._back_up()
                 with self._lock:
                     has_goal = self._current_goal is not None
@@ -54,6 +60,15 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             super()._replan_path()
         except Exception:  # noqa: BLE001 - never let the monitor thread die
             logger.exception("Replan failed; planner monitor keeps running")
+
+    _path_started_at: float = float("inf")
+
+    def _plan_path(self) -> None:
+        super()._plan_path()
+        if self._local_planner.get_state() != NavigationState.IDLE:
+            self._path_started_at = time.perf_counter()
+        else:
+            self._path_started_at = float("inf")
 
     def _back_up(self) -> float:
         """Reverse until odometry says we moved backup_distance_m, or time out.
@@ -81,6 +96,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             time.sleep(BACKUP_PERIOD_S)
         self._local_planner.cmd_vel.on_next(Twist())
         self._position_tracker.reset_data()
+        self._path_started_at = float("inf")
         logger.info(
             "Stuck: backed up before replanning",
             travelled_m=round(travelled, 3),
