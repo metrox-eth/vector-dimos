@@ -51,9 +51,13 @@ def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
     the scan of a known scene comes out mirrored once the C1 is mounted, the
     fix belongs here - negate the angle - and nowhere else.
     """
+    # SLAMTEC's heading grows CLOCKWISE seen from above (C1 datasheet, fig.
+    # 2-4, "left hand"); the robot frame is right-handed (x forward, y left),
+    # so the sign of y is flipped here. Settled 2026-08-23 on the datasheet;
+    # the first map of a known room is the check.
     theta = math.radians(angle_deg)
     distance_m = distance_mm / 1000.0
-    return distance_m * math.cos(theta), distance_m * math.sin(theta)
+    return distance_m * math.cos(theta), -distance_m * math.sin(theta)
 
 
 # The camera mast stands in the scan plane. Measured on the rover 2026-08-23
