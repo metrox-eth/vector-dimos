@@ -31,6 +31,7 @@ def run_scenario(vx: float, wz: float) -> int:
     guard._last_check = 0.0; guard._last_trip = 0.0; guard._last_debug = 0.0; guard.trips = 0
     guard.world_frame = "world"
     guard.lidar = Probe()
+    guard.bump = Probe()
 
     async def feed() -> None:
         t_end = time.monotonic() + WINDOW_S + 0.6

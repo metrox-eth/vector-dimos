@@ -45,6 +45,7 @@ class StuckGuard(Module):
     coordinator_joint_state: In[JointState]
     cmd_vel: In[Twist]                      # what the planner asks for
     lidar: Out[PointCloud2]
+    bump: Out[Bool]                         # True on every trip: the planner backs off 0.25 m at once
 
     def __init__(self, world_frame: str = "world", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -140,5 +141,6 @@ class StuckGuard(Module):
         # replanned path goes elsewhere.
         for _ in range(3):
             self.lidar.publish(cloud)
+        self.bump.publish(Bool(data=True))
         logger.warning(f"STUCK #{self.trips}: cmd {vcmd:.2f} m/s, wheels {dw:.2f} m, lidar {dl:.2f} m in {WINDOW_S:.0f} s -> "
                        f"virtual obstacle at ({cx:+.2f}, {cy:+.2f}), heading {math.degrees(heading):+.0f} deg")
