@@ -23,7 +23,7 @@ logger = setup_logger()
 BACKUP_DISTANCE_M = 0.25
 BACKUP_SPEED_MPS = 0.10
 BACKUP_TIMEOUT_S = 5.0
-BACKUP_PERIOD_S = 0.1
+BACKUP_PERIOD_S = 0.05  # base watchdog is 0.2 s; 10 Hz left gaps that stopped the wheels
 
 
 class RecoveringGlobalPlanner(GlobalPlanner):
@@ -34,9 +34,26 @@ class RecoveringGlobalPlanner(GlobalPlanner):
     backup_timeout_s: float = BACKUP_TIMEOUT_S
 
     def _replan_path(self) -> None:
-        if self._position_tracker.is_stuck():
-            self._back_up()
-        super()._replan_path()
+        # Runs in the planner's monitoring thread. Upstream asserts a goal
+        # exists; the goal can vanish (explorer cancels on "no path") while we
+        # spend 3 s backing up, and an assert there kills the thread for the
+        # rest of the run (seen 23/08: no "Arrived"/"stuck" handled after it).
+        try:
+            with self._lock:
+                has_goal = self._current_goal is not None and self._current_odom is not None
+            if not has_goal:
+                logger.info("Replan requested without a goal; ignoring.")
+                return
+            if self._position_tracker.is_stuck():
+                self._back_up()
+                with self._lock:
+                    has_goal = self._current_goal is not None
+                if not has_goal:
+                    logger.info("Goal cancelled during back-up; not replanning.")
+                    return
+            super()._replan_path()
+        except Exception:  # noqa: BLE001 - never let the monitor thread die
+            logger.exception("Replan failed; planner monitor keeps running")
 
     def _back_up(self) -> float:
         """Reverse until odometry says we moved backup_distance_m, or time out.

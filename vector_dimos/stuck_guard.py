@@ -74,7 +74,10 @@ class StuckGuard(Module):
 
     async def handle_cmd_vel(self, msg: Twist) -> None:
         v = math.hypot(float(msg.linear.x), float(msg.linear.y))
-        self._cmd.append((time.monotonic(), v if abs(float(msg.angular.z)) < 0.1 else 0.0))   # a spin is not a push
+        # A pure spin is not a push. The path follower always mixes a yaw
+        # correction (|wz| ~ 0.2) into forward motion, so gate on the linear
+        # part, not on the presence of a turn (seen 23/08: cmd read 0 all run).
+        self._cmd.append((time.monotonic(), v if v >= 0.05 else 0.0))
 
     async def handle_coordinator_joint_state(self, msg: JointState) -> None:
         names = list(msg.name); pos = list(msg.position)
@@ -136,4 +139,4 @@ class StuckGuard(Module):
         for _ in range(3):
             self.lidar.publish(cloud)
         logger.warning(f"STUCK #{self.trips}: cmd {vcmd:.2f} m/s, wheels {dw:.2f} m, lidar {dl:.2f} m in {WINDOW_S:.0f} s -> "
-                       f"stop_movement + virtual obstacle at ({cx:+.2f}, {cy:+.2f}), heading {math.degrees(heading):+.0f} deg")
+                       f"virtual obstacle at ({cx:+.2f}, {cy:+.2f}), heading {math.degrees(heading):+.0f} deg")
