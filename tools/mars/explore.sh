@@ -13,7 +13,7 @@ for i in $(seq 1 $N); do
 import sys, re, math, os
 g = dict(re.findall(r"(ahead|sides|F|L|R|C)=([0-9.]+)", sys.argv[1]))
 ahead, sides = float(g["ahead"]), float(g["sides"])
-lidL, lidR = float(sys.argv[1].split("lidar")[1].split("L=")[1].split()[0]), float(sys.argv[1].split("lidar")[1].split("R=")[1].split()[0])
+seg = sys.argv[1].split("lidar")[1].split("map")[0]; lidL, lidR = float(seg.split("L=")[1].split()[0]), float(seg.split("R=")[1].split()[0])
 m = [float(v) for v in sys.argv[2].split()]; x, y, yaw = (m[0], m[1], math.radians(m[2])) if len(m) >= 3 else (0.0, 0.0, 0.0)
 xmin, xmax, ymin, ymax = (float(os.environ.get(k, d)) for k, d in (("XMIN", "-99"), ("XMAX", "99"), ("YMIN", "-99"), ("YMAX", "99")))
 ax, ay = x + 0.5 * math.cos(yaw), y + 0.5 * math.sin(yaw)

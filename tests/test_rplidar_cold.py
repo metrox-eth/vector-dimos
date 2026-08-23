@@ -97,12 +97,13 @@ check(scan_to_points([], 10) == [], "an empty scan yields no points")
 
 # --- A2. the mast mask (measured 2026-08-23: 0.21 m over 350-10 deg) --------
 from vector_dimos.rplidar_c1 import scan_to_points, MAST_MASK_DEG, MASK_RANGE_M
-scan = [(40, 0.0, 210.0), (40, 355.0, 220.0), (40, 12.0, 215.0),   # the mast: dropped
+scan = [(40, 0.0, 210.0), (40, 355.0, 220.0), (40, 37.0, 380.0),   # the mast and a bumper end: dropped
         (40, 0.0, 1200.0), (40, 5.0, 800.0),                         # same wedge, far: kept
-        (40, 90.0, 210.0), (40, 180.0, 150.0),                       # outside the wedge, near: kept
-        (3, 45.0, 500.0), (40, 60.0, 0.0)]                           # weak / invalid: dropped
+        (40, 90.0, 210.0), (40, 180.0, 350.0),                       # outside the wedge but on the rover (< 0.40 m): dropped
+        (40, 90.0, 450.0), (40, 180.0, 600.0),                       # outside the wedge, real: kept
+        (3, 60.0, 500.0), (40, 60.0, 0.0)]                           # weak / invalid: dropped
 pts = scan_to_points(scan, min_quality=10)
-check(len(pts) == 4, f"mast wedge {MAST_MASK_DEG} under {MASK_RANGE_M} m dropped, 4 real points kept ({len(pts)})")
+check(len(pts) == 4, f"mast+bumper wedge under {MASK_RANGE_M} m and anything under 0.40 m dropped, 4 real points kept ({len(pts)})")
 check(close(pts[0][0], 1.2) and close(pts[0][1], 0.0), "a far point inside the wedge survives at 1.2 m on +x")
 
 # --- B. retry loop on a fake rplidar lib ----------------------------------
