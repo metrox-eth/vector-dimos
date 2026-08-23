@@ -1,15 +1,14 @@
-"""Cold bench for StuckGuard's commanded-motion path (no robot).
-
-Known input -> known output: a path-follower twist (vx 0.24 m/s with its
-usual yaw correction wz 0.2) while the lidar pose does not move must trip
-the virtual bumper; a pure spin (vx 0, wz 0.3) must not.
-"""
+"""Cold bench for StuckGuard (no robot): the virtual bumper trips only when the
+wheels turn for real (>= 0.08 m in 1 s) while the lidar pose stays put, and
+only once that has held for 2 s. A slow start (wheels 3 cm, lidar 1 cm) and
+honest motion (wheels = lidar) never trip - those were the false alarms that
+made the rover reverse all afternoon on 23/08."""
 
 import asyncio
 import time
+from collections import deque
 
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
-from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from vector_dimos.stuck_guard import StuckGuard, WINDOW_S
 
@@ -22,23 +21,19 @@ class Probe:
         self.clouds.append(msg)
 
 
-def run_scenario(vx: float, wz: float) -> int:
+def run_scenario(wheel_speed: float, lidar_speed: float, seconds: float = 3.5) -> int:
     guard = StuckGuard.__new__(StuckGuard)
-    StuckGuard.__init__.__wrapped__(guard) if hasattr(StuckGuard.__init__, "__wrapped__") else None
-    # Bypass Module plumbing: only the buffers and the check are exercised.
-    from collections import deque
     guard._wheel = deque(maxlen=400); guard._lidar = deque(maxlen=400); guard._cmd = deque(maxlen=400)
-    guard._last_check = 0.0; guard._last_trip = 0.0; guard._last_debug = 0.0; guard.trips = 0
+    guard._last_check = 0.0; guard._last_trip = 0.0; guard._last_debug = 0.0; guard.trips = 0; guard._blocked_since = 0.0
     guard.world_frame = "world"
     guard.lidar = Probe()
-    guard.bump = Probe()
 
     async def feed() -> None:
-        t_end = time.monotonic() + WINDOW_S + 0.6
-        while time.monotonic() < t_end:
-            await guard.handle_odom(PoseStamped(position=Vector3(1.0, 2.0, 0.0)))
-            guard._wheel.append((time.monotonic(), 5.0, 5.0, 0.0))   # stalled wheels (wheel odom frozen)
-            await guard.handle_cmd_vel(Twist(linear=Vector3(vx, 0.0, 0.0), angular=Vector3(0.0, 0.0, wz)))
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < seconds:
+            t = time.monotonic() - t0
+            await guard.handle_odom(PoseStamped(position=Vector3(1.0 + lidar_speed * t, 2.0, 0.0)))
+            guard._wheel.append((time.monotonic(), 5.0 + wheel_speed * t, 5.0, 0.0))
             guard._check(time.monotonic())
             await asyncio.sleep(0.05)
 
@@ -46,19 +41,29 @@ def run_scenario(vx: float, wz: float) -> int:
     return guard.trips
 
 
-def test_forward_with_yaw_correction_trips() -> None:
-    trips = run_scenario(vx=0.24, wz=0.2)
+def test_wheels_turning_lidar_still_trips_after_2s() -> None:
+    trips = run_scenario(wheel_speed=0.20, lidar_speed=0.0)
     assert trips >= 1, trips
-    print(f"  vx 0.24 + wz 0.2, lidar still -> {trips} trip(s)")
+    print(f"  wheels 0.20 m/s, lidar still for 3.5 s -> {trips} trip(s)")
 
 
-def test_pure_spin_does_not_trip() -> None:
-    trips = run_scenario(vx=0.0, wz=0.3)
-    assert trips == 0, trips
-    print("  pure spin -> no trip")
+def test_honest_motion_does_not_trip() -> None:
+    assert run_scenario(wheel_speed=0.20, lidar_speed=0.19) == 0
+    print("  wheels 0.20 m/s, lidar 0.19 m/s -> no trip")
+
+
+def test_slow_start_does_not_trip() -> None:
+    assert run_scenario(wheel_speed=0.03, lidar_speed=0.01) == 0
+    print("  slow start (wheels 0.03 m/s, lidar 0.01 m/s) -> no trip")
+
+
+def test_short_block_under_2s_does_not_trip() -> None:
+    assert run_scenario(wheel_speed=0.20, lidar_speed=0.0, seconds=1.6) == 0
+    print("  block lasting 1.6 s -> no trip yet")
 
 
 if __name__ == "__main__":
-    for t in (test_forward_with_yaw_correction_trips, test_pure_spin_does_not_trip):
+    for t in (test_wheels_turning_lidar_still_trips_after_2s, test_honest_motion_does_not_trip,
+              test_slow_start_does_not_trip, test_short_block_under_2s_does_not_trip):
         print(t.__name__); t()
     print("TEST PASSED")

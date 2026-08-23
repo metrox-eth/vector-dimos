@@ -34,8 +34,9 @@ logger = setup_logger()
 
 WINDOW_S = 1.0          # compare wheel vs lidar displacement over this window
 MIN_WHEEL_M = 0.08      # below this the wheels did not really try to move
-MAX_RATIO = 0.3         # lidar moved less than 30 % of what the wheels claim -> stuck
+MAX_RATIO = 0.2         # lidar moved less than 30 % of what the wheels claim -> stuck
 COOLDOWN_S = 4.0
+CONFIRM_S = 1.0               # the block must hold this long past the first window (2 s in total)
 OBSTACLE_AHEAD_M = 0.35
 OBSTACLE_HALF_W = 0.25
 
@@ -45,7 +46,6 @@ class StuckGuard(Module):
     coordinator_joint_state: In[JointState]
     cmd_vel: In[Twist]                      # what the planner asks for
     lidar: Out[PointCloud2]
-    bump: Out[Bool]                         # True on every trip: the planner backs off 0.25 m at once
 
     def __init__(self, world_frame: str = "world", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -56,7 +56,8 @@ class StuckGuard(Module):
         self._last_trip = 0.0
         self._last_debug = 0.0
         self.trips = 0
-        self._cmd: deque[tuple[float, float]] = deque(maxlen=400)   # (t, |v| commanded)
+        self._cmd: deque[tuple[float, float]] = deque(maxlen=400)   # (t, |v| commanded) - logged only
+        self._blocked_since = 0.0
 
     @rpc
     def start(self) -> None:
@@ -115,9 +116,21 @@ class StuckGuard(Module):
         if now - self._last_debug >= 2.0:
             self._last_debug = now
             logger.info(f"stuck guard: cmd {vcmd:.3f} m/s, wheels {dw:.3f} m, lidar {dl:.3f} m over {WINDOW_S:.0f} s")
-        # stuck = asked to move (or the wheels did) and the world did not move
-        asked = vcmd * WINDOW_S
-        if not ((dw >= MIN_WHEEL_M and dl < MAX_RATIO * dw) or (asked >= MIN_WHEEL_M and dl < MAX_RATIO * asked)):
+        # stuck = the wheels turned for real and the world did not move - on two
+        # consecutive windows. The "commanded speed" path (23/08 16:20-17:50)
+        # fired on every slow start (cmd 0.10 m/s, wheels 0.03 m, lidar 0.01 m:
+        # a rover accelerating, not a rover blocked) and, wired to a back-off
+        # reflex, made the rover mostly reverse (metrox: "il recule
+        # principalement"). Mecanum wheels on marble slip a little all the time,
+        # so the ratio must be tight and the condition must hold twice.
+        blocked = dw >= MIN_WHEEL_M and dl < MAX_RATIO * dw
+        if not blocked:
+            self._blocked_since = 0.0
+            return
+        if self._blocked_since == 0.0:
+            self._blocked_since = now
+            return
+        if now - self._blocked_since < CONFIRM_S:
             return
         # stuck: wheels claim dw metres, the world says dl
         self._last_trip = now; self.trips += 1
@@ -141,6 +154,5 @@ class StuckGuard(Module):
         # replanned path goes elsewhere.
         for _ in range(3):
             self.lidar.publish(cloud)
-        self.bump.publish(Bool(data=True))
         logger.warning(f"STUCK #{self.trips}: cmd {vcmd:.2f} m/s, wheels {dw:.2f} m, lidar {dl:.2f} m in {WINDOW_S:.0f} s -> "
                        f"virtual obstacle at ({cx:+.2f}, {cy:+.2f}), heading {math.degrees(heading):+.0f} deg")
