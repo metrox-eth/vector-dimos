@@ -38,3 +38,52 @@ def _nav_blueprint():
 
 
 nav_blueprint = _nav_blueprint()
+
+
+def _explore_blueprint():
+    """Autonomous exploration with dimOS's own stack on top of `nav`:
+    CostMapper -> ReplanningAStarPlanner (A* + its P controller -> nav_cmd_vel)
+    -> MovementManager (-> cmd_vel, the coordinator's twist) and the wavefront
+    frontier explorer choosing goals on the costmap. Start it by publishing
+    Bool(True) on `explore_cmd`; cap the speed with `dimos --nerf-speed 0.3`
+    (the local planner's default is 0.55 m/s)."""
+    from dimos.core.global_config import global_config
+    from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
+    from dimos.mapping.costmapper import CostMapper
+    from dimos.mapping.pointclouds.occupancy import HeightCostConfig
+    from dimos.mapping.voxels.module import VoxelGridMapper
+    from dimos.navigation.frontier_exploration.wavefront_frontier_goal_selector import WavefrontFrontierExplorer
+    from dimos.navigation.movement_manager.movement_manager import MovementManager
+    from dimos.navigation.replanning_a_star.module import ReplanningAStarPlanner
+    from dimos.visualization.vis_module import vis_module
+    from vector_dimos.lidar_odometry import LidarOdometry
+    from vector_dimos.rplidar_c1 import RPLidarC1
+    from vector_dimos.stuck_guard import StuckGuard
+
+    return autoconnect(
+        _coordinator_blueprint(),
+        RealSenseCamera.blueprint(width=640, height=480, fps=15,
+                                  enable_depth=True, enable_pointcloud=False,
+                                  enable_imu=False),
+        RPLidarC1.blueprint(),
+        LidarOdometry.blueprint(use_gyro_prior=False),
+        # carve_columns=False: a collision's virtual obstacle (stuck_guard) and low boxes
+        # seen once must persist even when the lidar plane passes above them
+        VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=10, carve_columns=False),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
+        # dimOS's height-cost defaults are for a quadruped (can_climb 0.15 m, pass
+        # under 0.6 m): VECTOR climbs nothing (3 cm) and its camera top is ~0.85 m.
+        CostMapper.blueprint(config=HeightCostConfig(can_climb=0.03, can_pass_under=0.88, ignore_noise=0.0, smoothing=0.0)),   # a single-voxel column (a table leg) must stay an obstacle
+        # the rover is 54x46 cm but its corners sweep 0.71 m when it pivots and the
+        # camera mast stands at the front bumper: give the planner a footprint with margin
+        ReplanningAStarPlanner.blueprint(robot_width=0.62, robot_rotation_diameter=0.80),
+        MovementManager.blueprint(),
+        WavefrontFrontierExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0, min_frontier_perimeter=0.3,
+                                            info_gain_threshold=0.01, max_explored_distance=12.0, goal_timeout=15.0),
+        StuckGuard.blueprint(),
+        vis_module(viewer_backend=global_config.viewer),
+    ).remappings([
+        (VectorControlCoordinator, "twist_command", "cmd_vel"),
+    ])
+
+
+explore_blueprint = _explore_blueprint()

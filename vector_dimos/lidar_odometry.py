@@ -116,6 +116,8 @@ class LidarOdometry(Module):
         self._wheel_at_scan: tuple[float, float, float] | None = None
         self._prior_used = "cv"
         self._K: tuple[float, float, float, float] | None = None
+        self._pose_hist: list[tuple[float, float, float, float]] = []   # (wall ts, x, y, yaw), last ~3 s
+        self._yaw_rate = 0.0
         self._depth_n = 0
         self._depth_pts_last = 0
 
@@ -205,7 +207,13 @@ class LidarOdometry(Module):
         if not band.any():
             return
         bx, by, bz = bx[band], by[band], bz[band]
-        x, y, yaw = self.pose2d
+        # pose at the frame's capture time (the depth handler runs 50-200 ms late;
+        # at 17 deg/s that smeared the camera layer by several degrees per frame)
+        fts = float(getattr(msg, "ts", 0.0) or 0.0)
+        if abs(self._yaw_rate) > math.radians(8.0):
+            return                         # turning: the camera layer would smear, the lidar maps alone
+        pose = self._pose_at(fts) if fts > 0 else self.pose2d
+        x, y, yaw = pose
         c, s_ = math.cos(yaw), math.sin(yaw)
         wx, wy = c * bx - s_ * by + x, s_ * bx + c * by + y
         pts = np.stack([wx, wy, bz], axis=1)
@@ -215,6 +223,20 @@ class LidarOdometry(Module):
         pts = pts[idx].astype(np.float32)
         self._depth_pts_last = len(pts)
         self.lidar.publish(PointCloud2.from_numpy(pts, frame_id=self.world_frame, timestamp=time.time()))
+
+    def _pose_at(self, ts: float) -> tuple[float, float, float]:
+        """Pose interpolated at wall time ts from the recent history (else the latest)."""
+        h = self._pose_hist
+        if len(h) < 2 or ts <= h[0][0]:
+            return self.pose2d if not h else (h[0][1], h[0][2], h[0][3])
+        if ts >= h[-1][0]:
+            return (h[-1][1], h[-1][2], h[-1][3])
+        for a, b in zip(h, h[1:]):
+            if a[0] <= ts <= b[0]:
+                f = (ts - a[0]) / max(b[0] - a[0], 1e-6)
+                dyaw = math.atan2(math.sin(b[3] - a[3]), math.cos(b[3] - a[3]))
+                return (a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2]), a[3] + f * dyaw)
+        return self.pose2d
 
     def _prior_delta(self) -> np.ndarray:
         """Motion since the last scan, in the previous lidar frame (SE(2) as 4x4)."""
@@ -263,6 +285,14 @@ class LidarOdometry(Module):
         pose = np.asarray(new_pose)
         R, t = pose[:3, :3], pose[:3, 3]
         yaw = math.atan2(R[1, 0], R[0, 0]); x, y = float(t[0]), float(t[1])
+        now_wall = time.time()
+        if self._pose_hist:
+            pt, _, _, pyaw = self._pose_hist[-1]
+            dt = now_wall - pt
+            if dt > 1e-3:
+                self._yaw_rate = math.atan2(math.sin(yaw - pyaw), math.cos(yaw - pyaw)) / dt
+        self._pose_hist.append((now_wall, x, y, yaw))
+        self._pose_hist = [h for h in self._pose_hist if now_wall - h[0] < 3.0]
         self.pose2d = (x, y, yaw)
         c, s = math.cos(yaw), math.sin(yaw)
         R2 = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])

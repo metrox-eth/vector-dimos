@@ -28,6 +28,7 @@ rplidar = "vector_dimos.blueprints:rplidar_blueprint"
 cockpit = "vector_dimos.blueprints:cockpit_blueprint"
 cockpit-heavy = "vector_dimos.blueprints:cockpit_heavy_blueprint"
 nav = "vector_dimos.nav_blueprints:nav_blueprint"
+explore = "vector_dimos.nav_blueprints:explore_blueprint"
 
 [tool.setuptools]
 packages = ["vector_dimos"]

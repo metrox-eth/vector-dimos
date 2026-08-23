@@ -111,7 +111,7 @@ class RPLidarC1(Module):
     def __init__(self, port: str = DEFAULT_PORT,
                  baudrate: int = DEFAULT_BAUDRATE,
                  frame_id: str = DEFAULT_FRAME,
-                 min_quality: int = 10,
+                 min_quality: int = 0,   # 2026-08-23: at 10, 13.7 % of valid returns vanished - whole thin/dark objects (table legs) with no strong return at all
                  retry_period_s: float = RETRY_PERIOD_S,
                  **kwargs: Any) -> None:
         # frame_id is a dimOS ModuleConfig field and Module exposes it as a
