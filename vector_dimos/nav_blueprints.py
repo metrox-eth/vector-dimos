@@ -102,8 +102,6 @@ def _explore_blueprint():
         # carve_columns=False: a collision's virtual obstacle (stuck_guard) and low boxes
         # seen once must persist even when the lidar plane passes above them
         mapper_blueprint(),
-        # (costmap band lives in costmapper_blueprint)
-        # under 0.6 m): VECTOR climbs nothing (3 cm) and its camera top is ~0.85 m.
         costmapper_blueprint(),
         RecoveringPlanner.blueprint(robot_width=0.50, robot_rotation_diameter=0.72),   # true 0.46 x 0.54, diagonal 0.71: 0.62 turned every table-leg forest into a wall (inflation 34 cm per leg)
         MovementManager.blueprint(),
