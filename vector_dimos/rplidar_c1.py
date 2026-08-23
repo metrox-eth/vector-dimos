@@ -62,13 +62,15 @@ def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
 
 # The camera mast stands in the scan plane: only its horizontal bar, 50 mm
 # wide at 225 mm from the lidar centre (metrox, 23/08) = +-6.3 deg. Masked
-# with margin: +-12 deg, under 0.30 m. The earlier +-45 deg / 0.50 m wedge
-# blinded a 90 deg sector right where the rover hits things.
+# with margin: +-12 deg, under 0.30 m. The +-45 deg / 0.50 m wedge shipped
+# before blinded a 90 deg sector right where the rover hits things.
 MAST_MASK_DEG: tuple[tuple[float, float], ...] = ((348.0, 12.0),)   # wraps past 360
 MASK_RANGE_M = 0.30
-# Sensor floor only. Nothing of the rover but the mast bar stands in the scan
-# plane (metrox, 23/08) - no body mask, no blind disc: a return is the world.
-MIN_RANGE_M = 0.10
+# Anything closer than this in ANY direction is the rover itself (e-stop box,
+# cables on the lid: 0.25 m returns mapped as obstacles that followed the
+# rover around on 2026-08-23). The chassis is ~0.45 m long, the lidar is at
+# its centre.
+MIN_RANGE_M = 0.40
 
 
 def _in_mask(angle_deg: float, distance_m: float,
@@ -93,15 +95,10 @@ def scan_to_points(scan: list[tuple[float, float, float]],
     0) and the mast's own reflection (inside ``mask`` and closer than
     ``mask_range_m``) are dropped.
     """
-    out = []
-    for quality, angle, distance in scan:
-        if quality < min_quality or distance <= MIN_RANGE_M * 1000.0:
-            continue
-        if _in_mask(angle, distance / 1000.0, mask, mask_range_m):
-            continue
-        x, y = polar_to_xy(angle, distance)
-        out.append((x, y, 0.0))
-    return out
+    return [(*polar_to_xy(angle, distance), 0.0)
+            for (quality, angle, distance) in scan
+            if quality >= min_quality and distance > MIN_RANGE_M * 1000.0
+            and not _in_mask(angle, distance / 1000.0, mask, mask_range_m)]
 
 
 class RPLidarC1(Module):
