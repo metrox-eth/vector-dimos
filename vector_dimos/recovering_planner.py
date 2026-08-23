@@ -10,16 +10,13 @@ Field request (metrox, 23/08/2026): "il faudrait qu'il revienne 20-40 cm en
 arrière s'il ne sait pas ce qu'il y a derrière lui".
 """
 
-import threading
 import time
 
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
-from dimos.core.stream import In
 from dimos.navigation.base import NavigationState
 from dimos.navigation.replanning_a_star.global_planner import GlobalPlanner
 from dimos.navigation.replanning_a_star.module import ReplanningAStarPlanner
-from dimos_lcm.std_msgs import Bool
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
@@ -43,8 +40,6 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         # spend 3 s backing up, and an assert there kills the thread for the
         # rest of the run (seen 23/08: no "Arrived"/"stuck" handled after it).
         try:
-            if self._recovering:
-                return                     # the bump reflex owns the wheels right now
             with self._lock:
                 has_goal = self._current_goal is not None and self._current_odom is not None
             if not has_goal:
@@ -67,34 +62,6 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             logger.exception("Replan failed; planner monitor keeps running")
 
     _path_started_at: float = float("inf")
-    _recovering: bool = False
-
-    def bump(self) -> bool:
-        """Virtual-bumper reflex: back off now, in our own thread, then ask
-        the monitor for a replan. The 8 s stuck detector is far too slow once
-        the rover is already pressed against a table leg, and the virtual
-        obstacle it plants 0.35 m ahead sits on the rover's own front edge:
-        without backing off first the planner can never start a path (seen
-        23/08 17:40: 80 % of the cells around the rover blocked by its own
-        patches). Returns False if a recovery is already running."""
-        if self._recovering:
-            return False
-        self._recovering = True
-        threading.Thread(target=self._bump_recovery, daemon=True).start()
-        return True
-
-    def _bump_recovery(self) -> None:
-        try:
-            self._back_up()
-            with self._lock:
-                has_goal = self._current_goal is not None
-            if has_goal:
-                self._on_stopped_navigating("obstacle_found")
-        except Exception:  # noqa: BLE001
-            logger.exception("Bump recovery failed")
-        finally:
-            self._recovering = False
-
     def _plan_path(self) -> None:
         super()._plan_path()
         if self._local_planner.get_state() != NavigationState.IDLE:
@@ -138,15 +105,8 @@ class RecoveringGlobalPlanner(GlobalPlanner):
 
 
 class RecoveringPlanner(ReplanningAStarPlanner):
-    """Drop-in for ReplanningAStarPlanner with the back-up recovery and the
-    bump reflex (``bump`` In, fed by stuck_guard.py)."""
-
-    bump: In[Bool]
+    """Drop-in for ReplanningAStarPlanner with the back-up recovery."""
 
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         self._planner = RecoveringGlobalPlanner(self._planner._global_config)
-
-    async def handle_bump(self, msg: Bool) -> None:
-        if getattr(msg, "data", False):
-            self._planner.bump()

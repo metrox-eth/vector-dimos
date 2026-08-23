@@ -126,22 +126,7 @@ def test_replan_without_goal_neither_backs_up_nor_dies() -> None:
     print("  no goal -> no backup; goal lost during backup -> no replan; upstream exception swallowed")
 
 
-def test_bump_reflex_backs_up_then_requests_replan() -> None:
-    planner, fake = make_planner(moves=True)
-    planner._current_goal = PoseStamped(position=Vector3(4.0, 1.0, 0.0))
-    assert planner.bump() is True
-    assert planner.bump() is False, "a second bump during the reflex is ignored"
-    t0 = time.perf_counter()
-    while planner._recovering and time.perf_counter() - t0 < 8:
-        time.sleep(0.05)
-    assert not planner._recovering
-    assert planner._current_odom.position.x < 1.80, "must have backed up 0.25 m"
-    assert fake.sent[-1].linear.x == 0.0
-    assert planner._replan_event.is_set() and planner._replan_reason == "obstacle_found", (planner._replan_reason,)
-    print(f"  bump -> backed up to x={planner._current_odom.position.x:.2f}, replan requested ({planner._replan_reason})")
-
-
 if __name__ == "__main__":
-    for t in (test_backs_up_measured_distance, test_times_out_when_not_moving, test_replan_backs_up_only_when_stuck, test_replan_without_goal_neither_backs_up_nor_dies, test_bump_reflex_backs_up_then_requests_replan):
+    for t in (test_backs_up_measured_distance, test_times_out_when_not_moving, test_replan_backs_up_only_when_stuck, test_replan_without_goal_neither_backs_up_nor_dies):
         print(t.__name__); t()
     print("TEST PASSED")
