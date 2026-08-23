@@ -56,7 +56,8 @@ LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (metrox, 2026-08-23:
 # long, lidar 3 cm behind its centre), 0.80 m up (floor reads 0.80 m below the
 # optical axis, flat with range; depth scale checked against the lidar), level. Optical frame x right,
 # y down, z forward -> base: X = z, Y = -x, Z = -y.
-CAMERA_XYZ_BASE = (0.30, 0.0, 0.80)   # measured 2026-08-23: floor reads 0.79-0.83 m below the optical axis, constant with range (level)
+CAMERA_XYZ_BASE = (0.30, 0.0, 0.57)   # D455F optical centre above base_link: 0.57 m measured by floor-plane fit (RANSAC, 23/08) - metrox's "60 cm" was right, my earlier 0.80 was height+pitch confused
+CAMERA_PITCH_RAD = math.radians(1.4)  # camera looks 1.4 deg DOWN (same fit); roll 0.1 deg ignored
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 3                # one depth frame in three (15 fps -> 5 Hz)
 DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
@@ -199,14 +200,28 @@ class LidarOdometry(Module):
         xo = (us - cx) * z / fx          # optical x (right)
         yo = (vs - cy) * z / fy          # optical y (down)
         # optical -> base (camera level, looking forward), then camera offset
-        bx, by, bz = z + CAMERA_XYZ_BASE[0], -xo + CAMERA_XYZ_BASE[1], -yo + CAMERA_XYZ_BASE[2]
+        # optical (x right, y down, z forward) -> base (x forward, y left, z up),
+        # camera pitched down by CAMERA_PITCH_RAD: forward axis = (cos, 0, -sin),
+        # down axis = (-sin, 0, -cos)
+        cp, sp = math.cos(CAMERA_PITCH_RAD), math.sin(CAMERA_PITCH_RAD)
+        bx = z * cp - yo * sp + CAMERA_XYZ_BASE[0]
+        by = -xo + CAMERA_XYZ_BASE[1]
+        bz = -z * sp - yo * cp + CAMERA_XYZ_BASE[2]
         # floor threshold grows with range (depth noise ~1-2 % of range): a 5 cm
         # chair base is an obstacle at 1 m, floor noise is not an obstacle at 3 m
         floor_z = 0.03 + 0.03 * np.clip(bx - 1.0, 0.0, None)
         band = (bz > floor_z) & (bz < OBSTACLE_Z_M[1])
-        if not band.any():
+        # Floor points go in too, flattened to z = 0: the "simple" costmap marks
+        # a cell FREE only where it has a point below min_height. Without them
+        # everything the lidar alone sees sits in UNKNOWN and the explorer has
+        # no free/unknown frontier to chase. (Filtered out before 23/08 because
+        # the floor looked like an orange carpet in Rerun - cosmetic.)
+        floor = (bz <= floor_z) & (bz > -0.10)
+        if not band.any() and not floor.any():
             return
-        bx, by, bz = bx[band], by[band], bz[band]
+        bz = np.where(floor, 0.0, bz)
+        keep = band | floor
+        bx, by, bz = bx[keep], by[keep], bz[keep]
         # pose at the frame's capture time (the depth handler runs 50-200 ms late;
         # at 17 deg/s that smeared the camera layer by several degrees per frame)
         fts = float(getattr(msg, "ts", 0.0) or 0.0)
