@@ -73,6 +73,42 @@ def _se2(dx: float, dy: float, dyaw: float) -> np.ndarray:
     return np.array([[c, -s, 0.0, dx], [s, c, 0.0, dy], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
 
 
+class VoxelVote:
+    """Temporal vote before a lidar return may enter the (never-forgetting) map.
+
+    dimOS's VoxelGridMapper is a set: one noisy return = one voxel forever. A
+    wall at 6 m jitters over ~9 neighbouring 5 cm voxels, a weak grazing
+    reflection flickers - after 10 minutes stationary the rover was fenced in
+    by its own noise (23/08 17:15: 3934 lidar-height cells for a 30 m room).
+    Score per voxel: decays by DECAY each frame, +1 on a hit; published when
+    >= THRESHOLD, i.e. seen on ~3 consecutive revolutions (1 -> 1.7 -> 2.19).
+    A cell hit once every 9 frames never gets there.
+    """
+
+    DECAY = 0.7
+    THRESHOLD = 2.0
+    FORGET = 0.3
+
+    def __init__(self, voxel_m: float = 0.05) -> None:
+        self.voxel_m = voxel_m
+        self._score: dict[tuple[int, int, int], float] = {}
+
+    def vote(self, pts: np.ndarray) -> np.ndarray:
+        """pts (N,3) world -> the subset whose voxel passed the vote."""
+        for k in [k for k, v in self._score.items() if v * self.DECAY < self.FORGET]:
+            del self._score[k]
+        for k in self._score:
+            self._score[k] *= self.DECAY
+        if len(pts) == 0:
+            return pts
+        keys = np.floor(pts / self.voxel_m).astype(np.int64)
+        uniq, inv = np.unique(keys, axis=0, return_inverse=True)
+        for k in map(tuple, uniq):
+            self._score[k] = self._score.get(k, 0.0) + 1.0
+        ok = np.array([self._score[tuple(k)] >= self.THRESHOLD for k in uniq])
+        return pts[ok[inv.ravel()]]
+
+
 class LidarOdometry(Module):
     pointcloud: In[PointCloud2]
     imu: In[Imu]
@@ -118,6 +154,7 @@ class LidarOdometry(Module):
         self._prior_used = "cv"
         self._K: tuple[float, float, float, float] | None = None
         self._pose_hist: list[tuple[float, float, float, float]] = []   # (wall ts, x, y, yaw), last ~3 s
+        self._vote = VoxelVote(0.05)
         self._yaw_rate = 0.0
         self._depth_n = 0
         self._depth_pts_last = 0
@@ -314,7 +351,9 @@ class LidarOdometry(Module):
         world_pts = (pts @ R2.T) + np.array([x, y, LIDAR_HEIGHT_M])
         ts = time.time(); q = _yaw_quat(yaw)
         self.odom.publish(PoseStamped(ts, self.world_frame, position=Vector3(x, y, LIDAR_HEIGHT_M), orientation=q))
-        self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
+        world_pts = self._vote.vote(world_pts)
+        if len(world_pts):
+            self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
         self.tf.publish(TFMessage(
             Transform(translation=Vector3(x, y, 0.0), rotation=q, frame_id=self.world_frame, child_frame_id=self.base_frame, ts=ts),
             Transform(translation=Vector3(0.0, 0.0, LIDAR_HEIGHT_M), rotation=Quaternion(0, 0, 0, 1),
