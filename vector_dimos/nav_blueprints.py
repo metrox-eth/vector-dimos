@@ -90,7 +90,10 @@ def _explore_blueprint():
         VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
         # the rover is 54x46 cm but its corners sweep 0.71 m when it pivots and the
         # camera mast stands at the front bumper: give the planner a footprint with margin
-        RecoveringPlanner.blueprint(robot_width=0.62, robot_rotation_diameter=0.80),
+        # width 0.46 + 4 cm: in discovery mode the rover drives along its length and turns in place,
+        # so its lateral clearance is what matters (metrox, 23/08: 'pas de crabe pendant qu'on mappe');
+        # 0.62 (a disc for the corners) walled off every 60-70 cm gap - 11 'no path' from a 50 cm clearance
+        RecoveringPlanner.blueprint(robot_width=0.50, robot_rotation_diameter=0.72),
         MovementManager.blueprint(),
         VectorExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0, min_frontier_perimeter=0.3,
                                             # 1 % gain per goal made it quit once the first room was known while the
