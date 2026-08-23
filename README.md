@@ -1,6 +1,6 @@
 # vector-dimos
 
-![VECTOR at rest after its first sol, 2026-08-22: mecanum wheels, RealSense D455F on the folding mast, RPLIDAR C1 on the lid, Jetson Orin Nano inside](docs/images/vector.jpg)
+![VECTOR, 2026-08-23: mecanum wheels on hub motors, RealSense D455F on the folding mast, RPLIDAR C1 on the lid, e-stop, Jetson Orin Nano inside](docs/images/vector.jpg)
 
 [VECTOR](docs/hardware.md) is a custom-designed holonomic mobile platform, built from
 scratch: four mecanum wheels on brushless hub motors, a steel chassis, and enough
