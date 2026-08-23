@@ -81,6 +81,7 @@ SCAN = [(15, 0.0, 1000.0),      # kept  -> ( 1.0,  0.0)
         (20, 270.0, 500.0),     # kept  -> ( 0.0, -0.5)
         (18, 45.0, 0.0)]        # dropped: distance 0 = invalid measure
 EXPECTED = [(1.0, 0.0, 0.0), (0.0, -2.0, 0.0), (0.0, 0.5, 0.0)]   # clockwise heading: 90 deg = right
+EXPECTED_ALL = [(1.0, 0.0, 0.0), (0.0, -2.0, 0.0), (-3.0, 0.0, 0.0), (0.0, 0.5, 0.0)]   # + the weak (quality 5) return at 180 deg, kept by the default
 
 points = scan_to_points(SCAN, min_quality=10)
 check(len(points) == 3, f"min_quality=10 keeps 3 of 5 measures (got {len(points)})")
@@ -183,8 +184,10 @@ check(wait_for(lambda: len(clouds) >= 2, 4.0),
 check(spy.count("RPLIDAR C1 up on /dev/ttyUSB0 @ 460800 baud") == 1,
       "logs the sensor coming up, with its port and baud rate")
 xyz = clouds[0].as_numpy()[0]
-check(xyz.shape == (3, 3), f"cloud carries the 3 valid measures {xyz.shape}")
-check(all(close(g, e) for row, exp in zip(xyz, EXPECTED)
+# the module's default is min_quality=0 since 2026-08-23: every measure with a
+# distance is kept (the weak return included), only the distance-0 one is dropped
+check(xyz.shape == (4, 3), f"cloud carries the 4 measures that have a distance {xyz.shape}")
+check(all(close(g, e) for row, exp in zip(xyz, EXPECTED_ALL)
           for g, e in zip(row, exp)),
       f"cloud points = {[tuple(round(float(v), 3) for v in r) for r in xyz]} m")
 check(clouds[0].frame_id == "lidar_link", "frame_id survives ModuleConfig")
