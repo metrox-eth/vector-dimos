@@ -52,4 +52,13 @@ if cks:
     t0 = time.perf_counter(); f = find_frontiers(occ, (sx, sy), 99, 6); dt = time.perf_counter() - t0
     print(f"  real checkpoint {os.path.basename(cks[-1])}: {len(f)} frontiers in {dt * 1000:.0f} ms (dimOS's search: ~16 s)")
     assert dt < 0.5
+# failed-goal memory: a goal the planner rejected is skipped for a while, no hot loop
+from vector_dimos.fast_explorer import VectorExplorer, FAILED_GOAL_HOLD_S
+from dimos_lcm.std_msgs import Bool
+ex = VectorExplorer.__new__(VectorExplorer)
+ex._failed_goals = []; ex._last_goal = (1.0, 2.0)
+import threading; ex.goal_reached_event = threading.Event()
+t0 = time.time(); ex._on_goal_reached(Bool(data=False)); dt = time.time() - t0
+assert ex.goal_reached_event.is_set() and len(ex._failed_goals) == 1 and dt >= 0.9, (dt, ex._failed_goals)
+print(f"  failed goal remembered ({len(ex._failed_goals)}), explorer woken after a {dt:.1f} s breath; hold {FAILED_GOAL_HOLD_S:.0f} s")
 print("TEST PASSED")
