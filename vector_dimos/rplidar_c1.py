@@ -28,8 +28,9 @@ logger = setup_logger()
 
 # The C1 comes with a CP2102 USB-UART dongle -> /dev/ttyUSB0 on the Jetson.
 DEFAULT_PORT = "/dev/ttyUSB0"
-# 460800 is the C1's line rate. The rplidar lib defaults to 115200 (A1/A2), so
-# it MUST be passed explicitly or the descriptor read never syncs.
+# 460800 is the C1's line rate. The reader is our own (c1_serial.py, plain
+# pyserial): rplidar-roboticia 0.9.5 answered "Descriptor length mismatch" on
+# this unit (2026-08-23) while the raw SLAMTEC protocol worked first try.
 DEFAULT_BAUDRATE = 460800
 DEFAULT_FRAME = "lidar_link"
 RETRY_PERIOD_S = 5.0
@@ -112,19 +113,18 @@ class RPLidarC1(Module):
     # Named _worker, NOT _loop: dimOS's Module keeps its asyncio event
     # loop in self._loop, which would shadow the method and make the
     # thread target the event loop object.
+    # Injection point for the cold bench (a fake device class); None = C1Lidar.
+    lidar_class: Any = None
+
     def _worker(self) -> None:
-        try:
-            from rplidar import RPLidar
-        except ImportError:
-            logger.error("rplidar-roboticia is not installed - lidar is off "
-                         "(pip install 'vector-dimos[rplidar]')")
-            return
+        from vector_dimos.c1_serial import C1Lidar
+        RPLidar = self.lidar_class or C1Lidar
 
         last_error: str | None = None
         while not self._stop_event.is_set():
             lidar = None
             try:
-                # RPLidar opens the serial port inside __init__: a missing
+                # The reader opens the serial port inside __init__: a missing
                 # device or a permission error raises right here.
                 lidar = RPLidar(self.port, baudrate=self.baudrate)
                 logger.info("RPLIDAR C1 up on %s @ %d baud: %s",
