@@ -62,6 +62,10 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             logger.exception("Replan failed; planner monitor keeps running")
 
     _path_started_at: float = float("inf")
+    # dimOS's default is 8 s / 0.4 m. "Stuck for eight seconds is already dead
+    # for a robot doing 0.3 m/s" (metrox, 23/08): 2.5 s, same 5 cm/s floor.
+    _stuck_time_window: float = 2.5
+    _stuck_threshold: float = 0.12
     def _plan_path(self) -> None:
         super()._plan_path()
         if self._local_planner.get_state() != NavigationState.IDLE:
