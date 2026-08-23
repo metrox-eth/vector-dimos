@@ -65,7 +65,7 @@ def _explore_blueprint():
     from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
     from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
-    from dimos.navigation.frontier_exploration.wavefront_frontier_goal_selector import WavefrontFrontierExplorer
+    from vector_dimos.fast_explorer import VectorExplorer
     from dimos.navigation.movement_manager.movement_manager import MovementManager
     from vector_dimos.recovering_planner import RecoveringPlanner
     from dimos.visualization.vis_module import vis_module
@@ -91,7 +91,7 @@ def _explore_blueprint():
         # camera mast stands at the front bumper: give the planner a footprint with margin
         RecoveringPlanner.blueprint(robot_width=0.62, robot_rotation_diameter=0.80),
         MovementManager.blueprint(),
-        WavefrontFrontierExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0, min_frontier_perimeter=0.3,
+        VectorExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0, min_frontier_perimeter=0.3,
                                             # 1 % gain per goal made it quit once the first room was known while the
                                             # workshop was still unknown (23/08 18:36, after 29 m): 0.1 %, 6 tries
                                             info_gain_threshold=0.001, num_no_gain_attempts=6,
