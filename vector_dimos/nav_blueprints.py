@@ -82,9 +82,9 @@ def _explore_blueprint():
                                   base_transform=CAMERA_MOUNT),
         RPLidarC1.blueprint(),
         LidarOdometry.blueprint(use_gyro_prior=False),
-        # carve_columns=False: a collision's virtual obstacle (stuck_guard) and low boxes
-        # seen once must persist even when the lidar plane passes above them
-        VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=10, carve_columns=False),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
+        # carve_columns=True (their default, 'latest observation wins'): this voxel map is the Rerun visual only -
+        # navigation runs on costmap2d, which keeps its own memory. With False every passer-by left a ghost trail (metrox, 23/08).
+        VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=10, carve_columns=True),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
         # dimOS's height-cost defaults are for a quadruped (can_climb 0.15 m, pass
         # under 0.6 m): VECTOR climbs nothing (3 cm) and its camera top is ~0.85 m.
         VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
