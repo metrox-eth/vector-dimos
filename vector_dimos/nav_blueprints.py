@@ -92,7 +92,10 @@ def _explore_blueprint():
         RecoveringPlanner.blueprint(robot_width=0.62, robot_rotation_diameter=0.80),
         MovementManager.blueprint(),
         WavefrontFrontierExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0, min_frontier_perimeter=0.3,
-                                            info_gain_threshold=0.01, max_explored_distance=12.0, goal_timeout=15.0),
+                                            # 1 % gain per goal made it quit once the first room was known while the
+                                            # workshop was still unknown (23/08 18:36, after 29 m): 0.1 %, 6 tries
+                                            info_gain_threshold=0.001, num_no_gain_attempts=6,
+                                            max_explored_distance=12.0, goal_timeout=15.0),
         StuckGuard.blueprint(),
         vis_module(viewer_backend=global_config.viewer),
     ).remappings([

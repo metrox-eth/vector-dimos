@@ -61,7 +61,7 @@ CAMERA_PITCH_RAD = math.radians(1.4)  # camera looks 1.4 deg DOWN (same fit); ro
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 3                # one depth frame in three (15 fps -> 5 Hz)
 DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
-OBSTACLE_Z_M = (0.12, 0.70)    # the rover's height band in world z: legs yes, table tops no, floor noise no
+OBSTACLE_Z_M = (0.12, 1.30)    # world z band the camera turns into floor obstacles. Upper bound 1.30, not 0.70 (metrox, 23/08): a table top is a BLOCK - the rover goes around tables like a human, never between the legs; a lamp head on a tripod counts too
 
 
 def _yaw_quat(yaw: float) -> Quaternion:
@@ -71,6 +71,27 @@ def _yaw_quat(yaw: float) -> Quaternion:
 def _se2(dx: float, dy: float, dyaw: float) -> np.ndarray:
     c, s = math.cos(dyaw), math.sin(dyaw)
     return np.array([[c, -s, 0.0, dx], [s, c, 0.0, dy], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
+
+
+def split_floor_and_obstacles(bx: np.ndarray, by: np.ndarray, bz: np.ndarray,
+                              floor_z: np.ndarray, cell_m: float = 0.05) -> tuple[np.ndarray, np.ndarray]:
+    """Masks (obstacle, floor) over base-frame depth points.
+
+    Obstacle = above the floor threshold and below OBSTACLE_Z_M[1] (1.30 m:
+    table tops included, so a table is a block the rover walks around).
+    Floor = at floor level. Under a table the camera sees BOTH the top and
+    the floor between the legs on the same ground cell; the obstacle wins,
+    so floor samples on a cell that also holds an obstacle are dropped -
+    otherwise hit and miss cancel and the table vanishes from the costmap.
+    """
+    obst = (bz > floor_z) & (bz < OBSTACLE_Z_M[1])
+    floor = (bz <= floor_z) & (bz > -0.10)
+    if obst.any() and floor.any():
+        keys_o = set(map(tuple, np.floor(np.stack([bx[obst], by[obst]], 1) / cell_m).astype(np.int64)))
+        fk = np.floor(np.stack([bx, by], 1) / cell_m).astype(np.int64)
+        under = np.array([tuple(k) in keys_o for k in fk])
+        floor = floor & ~under
+    return obst, floor
 
 
 class LidarOdometry(Module):
@@ -211,12 +232,11 @@ class LidarOdometry(Module):
         # floor threshold grows with range (depth noise ~1-2 % of range): a 5 cm
         # chair base is an obstacle at 1 m, floor noise is not an obstacle at 3 m
         floor_z = 0.03 + 0.03 * np.clip(bx - 1.0, 0.0, None)
-        band = (bz > floor_z) & (bz < OBSTACLE_Z_M[1])
-        floor = (bz <= floor_z) & (bz > -0.10)
-        if not band.any() and not floor.any():
+        obst, floor = split_floor_and_obstacles(bx, by, bz, floor_z)
+        if not obst.any() and not floor.any():
             return
         fx, fy = bx[floor], by[floor]          # bare floor: published separately, z = 0 (costmap2d misses)
-        bx, by, bz = bx[band], by[band], bz[band]
+        bx, by, bz = bx[obst], by[obst], bz[obst]
         # pose at the frame's capture time (the depth handler runs 50-200 ms late;
         # at 17 deg/s that smeared the camera layer by several degrees per frame)
         fts = float(getattr(msg, "ts", 0.0) or 0.0)
