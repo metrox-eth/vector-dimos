@@ -91,9 +91,23 @@ def test_reinforcement_is_capped_and_unlearning_bounded() -> None:
     print(f"  30 viewpoints -> score capped at {HIT_CAP}; forgotten after {n} clear revolutions (bounded)")
 
 
+def test_checkpoint_roundtrip(tmp_path=None) -> None:
+    import os, tempfile
+    g = fresh()
+    for i in range(3):
+        g.lidar_revolution(LEG, (0.0, 0.15 * i))
+    d = tempfile.mkdtemp(); path = os.path.join(d, "ck.npz")
+    size = g.save(path, (0.3, 0.0))
+    g2 = ScoredGrid.load(path)
+    assert g2.value_at(1.0, 0.0) == 100 and np.array_equal(g2.occupancy(), g.occupancy())
+    print(f"  checkpoint saved ({size / 1024:.0f} kB for a {g.n}x{g.n} grid) and reloaded identical")
+
+
 if __name__ == "__main__":
     for t in (test_leg_seen_from_one_spot_is_occupied_and_ray_is_free, test_ramp_hit_from_one_spot_never_becomes_a_wall,
               test_chair_moved_is_forgotten_by_lidar_rays, test_low_object_only_the_camera_can_forget,
-              test_reinforcement_is_capped_and_unlearning_bounded):
+              test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip):
         print(t.__name__); t()
     print("TEST PASSED")
+
+
