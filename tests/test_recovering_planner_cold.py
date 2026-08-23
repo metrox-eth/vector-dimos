@@ -79,6 +79,7 @@ def test_replan_backs_up_only_when_stuck() -> None:
     calls = []
     planner, fake = make_planner(moves=True)
     planner._current_goal = PoseStamped(position=Vector3(4.0, 1.0, 0.0))
+    planner._path_started_at = time.perf_counter() - 30.0   # has been driving a path
     planner._back_up = lambda: calls.append("backup") or 0.25  # type: ignore[method-assign]
     RecoveringGlobalPlanner.__mro__[1]._replan_path = lambda self: calls.append("replan")  # type: ignore[method-assign]
     planner._position_tracker.is_stuck = lambda: False  # type: ignore[method-assign]
@@ -87,6 +88,11 @@ def test_replan_backs_up_only_when_stuck() -> None:
     planner._replan_path()
     assert calls == ["replan", "backup", "replan"], calls
     print(f"  order: {calls}")
+    calls.clear()
+    planner._path_started_at = float("inf")                 # fresh goal, no path driven yet
+    planner._replan_path()
+    assert calls == ["replan"], calls
+    print("  stuck but not driving a path -> no back-up")
 
 
 def test_replan_without_goal_neither_backs_up_nor_dies() -> None:
@@ -104,6 +110,7 @@ def test_replan_without_goal_neither_backs_up_nor_dies() -> None:
         return 0.25
 
     planner._current_goal = PoseStamped(position=Vector3(4.0, 1.0, 0.0))
+    planner._path_started_at = time.perf_counter() - 30.0
     planner._back_up = cancel_during_backup  # type: ignore[method-assign]
     RecoveringGlobalPlanner.__mro__[1]._replan_path = lambda self: calls.append("replan")  # type: ignore[method-assign]
     planner._replan_path()

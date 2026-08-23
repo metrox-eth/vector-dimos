@@ -73,11 +73,13 @@ class StuckGuard(Module):
         self._lidar.append((time.monotonic(), float(p.x), float(p.y), yaw))
 
     async def handle_cmd_vel(self, msg: Twist) -> None:
-        v = math.hypot(float(msg.linear.x), float(msg.linear.y))
-        # A pure spin is not a push. The path follower always mixes a yaw
-        # correction (|wz| ~ 0.2) into forward motion, so gate on the linear
-        # part, not on the presence of a turn (seen 23/08: cmd read 0 all run).
-        self._cmd.append((time.monotonic(), v if v >= 0.05 else 0.0))
+        vx = float(msg.linear.x)
+        # A pure spin is not a push, and neither is the planner's back-up
+        # (reverse): the guard tripped on its own recovery and planted 3 ghost
+        # obstacles (23/08 17:00). The path follower always mixes a yaw
+        # correction (|wz| ~ 0.2) into forward motion, so gate on forward
+        # speed only, not on the presence of a turn.
+        self._cmd.append((time.monotonic(), vx if vx >= 0.05 else 0.0))
 
     async def handle_coordinator_joint_state(self, msg: JointState) -> None:
         names = list(msg.name); pos = list(msg.position)
