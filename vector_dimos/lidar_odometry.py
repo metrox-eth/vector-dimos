@@ -51,11 +51,12 @@ from dimos.utils.logging_config import setup_logger
 logger = setup_logger()
 
 PLANE_THICKNESS_M = 0.05
-LIDAR_HEIGHT_M = 0.30          # lidar_link above base_link (lid of the chassis)
-# D455F on the mast: ~0.21 m ahead of the lidar (the mast sits at the lidar's
-# 0.21 m return), 0.80 m up (measured), level, looking forward. Optical frame x right,
+LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (metrox, 2026-08-23: 37 cm; centred in width, 3 cm behind the length centre)
+# D455F on the mast at the front bumper: 0.30 m ahead of the lidar (rover 54 cm
+# long, lidar 3 cm behind its centre), 0.80 m up (floor reads 0.80 m below the
+# optical axis, flat with range; depth scale checked against the lidar), level. Optical frame x right,
 # y down, z forward -> base: X = z, Y = -x, Z = -y.
-CAMERA_XYZ_BASE = (0.21, 0.0, 0.80)   # measured 2026-08-23: floor reads 0.79-0.83 m below the optical axis, constant with range (level)
+CAMERA_XYZ_BASE = (0.30, 0.0, 0.80)   # measured 2026-08-23: floor reads 0.79-0.83 m below the optical axis, constant with range (level)
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 3                # one depth frame in three (15 fps -> 5 Hz)
 DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
@@ -189,7 +190,7 @@ class LidarOdometry(Module):
         h, w = d.shape
         vs, us = np.mgrid[0:h:DEPTH_STRIDE, 0:w:DEPTH_STRIDE]
         z = d[vs, us].astype(np.float64) / 1000.0
-        ok = (z > 0.15) & (z < DEPTH_MAX_M)
+        ok = (z > 0.30) & (z < DEPTH_MAX_M)          # < 0.30 m = the rover's own front, not the world
         if not ok.any():
             return
         z, us, vs = z[ok], us[ok], vs[ok]
@@ -197,7 +198,10 @@ class LidarOdometry(Module):
         yo = (vs - cy) * z / fy          # optical y (down)
         # optical -> base (camera level, looking forward), then camera offset
         bx, by, bz = z + CAMERA_XYZ_BASE[0], -xo + CAMERA_XYZ_BASE[1], -yo + CAMERA_XYZ_BASE[2]
-        band = (bz > OBSTACLE_Z_M[0]) & (bz < OBSTACLE_Z_M[1])
+        # floor threshold grows with range (depth noise ~1-2 % of range): a 5 cm
+        # chair base is an obstacle at 1 m, floor noise is not an obstacle at 3 m
+        floor_z = 0.03 + 0.03 * np.clip(bx - 1.0, 0.0, None)
+        band = (bz > floor_z) & (bz < OBSTACLE_Z_M[1])
         if not band.any():
             return
         bx, by, bz = bx[band], by[band], bz[band]

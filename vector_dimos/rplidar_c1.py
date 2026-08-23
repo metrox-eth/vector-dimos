@@ -64,8 +64,13 @@ def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
 # (tests/probe_rplidar.py): a constant 0.21-0.22 m return over the lidar's
 # 350-10 degree sectors. Everything inside that wedge closer than MASK_RANGE_M
 # is the mast, not the world; the costmap must never see it.
-MAST_MASK_DEG: tuple[tuple[float, float], ...] = ((340.0, 20.0),)   # (start, end), wraps past 360
-MASK_RANGE_M = 0.35
+MAST_MASK_DEG: tuple[tuple[float, float], ...] = ((315.0, 45.0),)   # mast AND the bumper bar's ends (+-37 deg at 0.38 m); wraps past 360
+MASK_RANGE_M = 0.50
+# Anything closer than this in ANY direction is the rover itself (e-stop box,
+# cables on the lid: 0.25 m returns mapped as obstacles that followed the
+# rover around on 2026-08-23). The chassis is ~0.45 m long, the lidar is at
+# its centre.
+MIN_RANGE_M = 0.40
 
 
 def _in_mask(angle_deg: float, distance_m: float,
@@ -92,7 +97,7 @@ def scan_to_points(scan: list[tuple[float, float, float]],
     """
     return [(*polar_to_xy(angle, distance), 0.0)
             for (quality, angle, distance) in scan
-            if quality >= min_quality and distance > 0
+            if quality >= min_quality and distance > MIN_RANGE_M * 1000.0
             and not _in_mask(angle, distance / 1000.0, mask, mask_range_m)]
 
 
