@@ -73,6 +73,44 @@ def _se2(dx: float, dy: float, dyaw: float) -> np.ndarray:
     return np.array([[c, -s, 0.0, dx], [s, c, 0.0, dy], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]])
 
 
+FREE_RAY_EVERY = 5          # revolutions between two free-floor injections (10 Hz lidar -> 2 Hz)
+FREE_RAY_MAX_M = 2.5        # how far along a ray we dare call the floor free
+FREE_RAY_STEP_M = 0.10
+FREE_RAY_MARGIN_M = 0.10    # stop this short of the hit
+
+
+def free_floor_along_rays(pts_xy: np.ndarray, step: float = FREE_RAY_STEP_M,
+                          max_m: float = FREE_RAY_MAX_M, margin: float = FREE_RAY_MARGIN_M,
+                          start: float = 0.30) -> np.ndarray:
+    """Floor samples (x, y, 0) along each lidar ray, from `start` up to the hit
+    minus `margin` (capped at max_m), in the lidar frame.
+
+    A 2D lidar only ever yields obstacles; the "simple" costmap marks a cell
+    FREE only if it holds a point below min_height. Without this the only free
+    cells were the floor the camera saw, the explorer found no frontier and
+    gave up after 2 goals (23/08 17:27). A ray that reached 2 m says the floor
+    under it carried nothing at 0.37 m - good enough for a frontier; a real
+    low obstacle the camera sees overrides it (obstacles win in the kernel).
+    """
+    if len(pts_xy) == 0:
+        return np.zeros((0, 3))
+    r = np.hypot(pts_xy[:, 0], pts_xy[:, 1])
+    ux, uy = pts_xy[:, 0] / np.maximum(r, 1e-9), pts_xy[:, 1] / np.maximum(r, 1e-9)
+    end = np.minimum(r - margin, max_m)
+    out = []
+    for d in np.round(np.arange(start, max_m + 1e-9, step), 3):
+        ok = end >= d - 1e-6
+        if not ok.any():
+            break
+        out.append(np.stack([ux[ok] * d, uy[ok] * d, np.zeros(int(ok.sum()))], axis=1))
+    if not out:
+        return np.zeros((0, 3))
+    samples = np.concatenate(out)
+    keys = np.floor(samples[:, :2] / 0.05).astype(np.int64)
+    _, idx = np.unique(keys, axis=0, return_index=True)
+    return samples[idx]
+
+
 class VoxelVote:
     """Temporal vote before a lidar return may enter the (never-forgetting) map.
 
@@ -155,6 +193,7 @@ class LidarOdometry(Module):
         self._K: tuple[float, float, float, float] | None = None
         self._pose_hist: list[tuple[float, float, float, float]] = []   # (wall ts, x, y, yaw), last ~3 s
         self._vote = VoxelVote(0.05)
+        self._frames = 0
         self._yaw_rate = 0.0
         self._depth_n = 0
         self._depth_pts_last = 0
@@ -354,6 +393,12 @@ class LidarOdometry(Module):
         world_pts = self._vote.vote(world_pts)
         if len(world_pts):
             self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
+        self._frames += 1
+        if self._frames % FREE_RAY_EVERY == 0:
+            floor = free_floor_along_rays(pts[:, :2])
+            if len(floor):
+                floor_w = (floor @ R2.T) + np.array([x, y, 0.0])
+                self.lidar.publish(PointCloud2.from_numpy(floor_w.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
         self.tf.publish(TFMessage(
             Transform(translation=Vector3(x, y, 0.0), rotation=q, frame_id=self.world_frame, child_frame_id=self.base_frame, ts=ts),
             Transform(translation=Vector3(0.0, 0.0, LIDAR_HEIGHT_M), rotation=Quaternion(0, 0, 0, 1),
