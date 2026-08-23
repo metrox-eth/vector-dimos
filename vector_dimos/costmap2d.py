@@ -23,6 +23,7 @@ Numbers (HIT_CAP, FREE_FLOOR, OCCUPIED_AT) are a starting point to be tested.
 from __future__ import annotations
 
 import math
+import os
 import time
 from typing import Any
 
@@ -47,6 +48,9 @@ OCCUPIED_AT = 2              # two hits from two places = an obstacle
 NEW_VIEWPOINT_M = 0.10       # a hit counts only if the rover moved this much since the cell's last hit
 LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M)
 PUBLISH_EVERY = 5            # lidar revolutions between two costmap publications (10 Hz -> 2 Hz)
+CHECKPOINT_EVERY_S = 30.0    # metrox 23/08: 'when it crashes we lose everything - resume from a minute before'
+CHECKPOINT_KEEP = 40         # 20 minutes of history
+CHECKPOINT_DIR = os.path.expanduser("~/.local/state/vector/checkpoints")
 
 
 class ScoredGrid:
@@ -143,6 +147,22 @@ class ScoredGrid:
             return None
         return np.unique(np.stack([gx, gy], 1), axis=0).T
 
+    # ---- checkpoints -------------------------------------------------------
+    def save(self, path: str, pose_xy: tuple[float, float] | None = None) -> int:
+        """Full state to a compressed .npz; returns the file size in bytes."""
+        np.savez_compressed(path, lidar=self.lidar, low=self.low, seen=self.seen, last_hit_xy=self._last_hit_xy,
+                            res=self.res, ox=self.ox, oy=self.oy, n=self.n,
+                            pose_xy=np.array(pose_xy if pose_xy else (np.nan, np.nan)), ts=time.time())
+        return os.path.getsize(path)
+
+    @classmethod
+    def load(cls, path: str) -> "ScoredGrid":
+        z = np.load(path)
+        g = cls.__new__(cls)
+        g.res, g.n, g.ox, g.oy = float(z["res"]), int(z["n"]), float(z["ox"]), float(z["oy"])
+        g.lidar, g.low, g.seen, g._last_hit_xy = z["lidar"], z["low"], z["seen"], z["last_hit_xy"]
+        return g
+
     # ---- output ------------------------------------------------------------
     def occupancy(self) -> np.ndarray:
         """int8 grid: 100 occupied, 0 free (observed), -1 unknown."""
@@ -184,6 +204,8 @@ class VectorCostMap(Module):
         self._grid: ScoredGrid | None = None
         self._pose_xy: tuple[float, float] | None = None
         self._revolutions = 0
+        self._ckpt_dir = os.path.join(CHECKPOINT_DIR, time.strftime("%Y%m%d-%H%M%S"))
+        self._last_ckpt = time.monotonic()
 
     @rpc
     def start(self) -> None:
@@ -218,10 +240,26 @@ class VectorCostMap(Module):
             self._revolutions += 1
             if self._revolutions % PUBLISH_EVERY == 0:
                 self._publish()
+            if time.monotonic() - self._last_ckpt >= CHECKPOINT_EVERY_S:
+                self._checkpoint()
         else:
             self._grid.camera_obstacles(pts[~is_lidar][:, :2], self._pose_xy)
             if is_lidar.any():
                 self._grid.lidar_revolution(pts[is_lidar][:, :2], self._pose_xy)
+
+    def _checkpoint(self) -> None:
+        assert self._grid is not None
+        self._last_ckpt = time.monotonic()
+        try:
+            os.makedirs(self._ckpt_dir, exist_ok=True)
+            path = os.path.join(self._ckpt_dir, time.strftime("costmap_%H%M%S.npz"))
+            size = self._grid.save(path, self._pose_xy)
+            old = sorted(f for f in os.listdir(self._ckpt_dir) if f.endswith(".npz"))
+            for f in old[:-CHECKPOINT_KEEP]:
+                os.remove(os.path.join(self._ckpt_dir, f))
+            logger.info(f"costmap checkpoint {os.path.basename(path)}: {size / 1024:.0f} kB, {int(self._grid.seen.sum())} cells seen")
+        except Exception:  # noqa: BLE001
+            logger.exception("costmap checkpoint failed")
 
     def _publish(self) -> None:
         assert self._grid is not None
