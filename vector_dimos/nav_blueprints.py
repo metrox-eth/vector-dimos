@@ -82,8 +82,9 @@ def _explore_blueprint():
                                   base_transform=CAMERA_MOUNT),
         RPLidarC1.blueprint(),
         LidarOdometry.blueprint(use_gyro_prior=False),
-        # carve_columns=False (their default, 'latest observation wins'): this voxel map is the Rerun visual only -
-        # navigation runs on costmap2d, which keeps its own memory. With False every passer-by left a ghost trail (metrox, 23/08).
+        # carve_columns=False: this voxel map is the Rerun visual only (navigation runs on costmap2d). True ('latest
+        # observation wins') erased the camera's table tops on every lidar hit in the same column and the map lost its detail
+        # (metrox, 23/08 22:30). Cost of False: a passer-by leaves a ghost trail, until a health-based mapper replaces this one.
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=10, carve_columns=False),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
         # dimOS's height-cost defaults are for a quadruped (can_climb 0.15 m, pass
         # under 0.6 m): VECTOR climbs nothing (3 cm) and its camera top is ~0.85 m.
