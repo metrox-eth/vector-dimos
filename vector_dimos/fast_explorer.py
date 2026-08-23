@@ -12,7 +12,11 @@ resolution cells; centroids ranked by their own `_rank_frontiers`.
 
 Second fix: their explorer only wakes on goal_reached == True. On "No path
 found" the planner publishes False and the explorer slept its full
-goal_timeout (15 s) for nothing. Any goal_reached message wakes it now.
+goal_timeout (15 s) for nothing. Any goal_reached message wakes it now -
+but a failed goal is remembered and frontiers near it are skipped for
+FAILED_GOAL_HOLD_S, with a short breath before the next pick: without
+that the loop re-published the same unreachable goal 3x per second and
+pinned a core (23/08 21:25).
 """
 
 from __future__ import annotations
@@ -31,6 +35,9 @@ from dimos_lcm.std_msgs import Bool
 logger = setup_logger()
 
 _EIGHT = np.ones((3, 3), dtype=bool)
+FAILED_GOAL_HOLD_S = 60.0    # a goal the planner could not reach is avoided this long
+FAILED_GOAL_RADIUS_M = 0.6
+FAIL_BREATH_S = 1.0          # pause after a failed goal before picking the next
 
 
 def find_frontiers(grid: np.ndarray, start_xy: tuple[int, int], occupancy_threshold: int,
@@ -71,6 +78,9 @@ def find_frontiers(grid: np.ndarray, start_xy: tuple[int, int], occupancy_thresh
 class VectorExplorer(WavefrontFrontierExplorer):
     """Drop-in for WavefrontFrontierExplorer: same goals, no 20-40 s pauses."""
 
+    _failed_goals: list[tuple[float, float, float]] = []   # (x, y, monotonic time)
+    _last_goal: tuple[float, float] | None = None
+
     def detect_frontiers(self, robot_pose: Vector3, costmap: OccupancyGrid) -> list[Vector3]:
         t0 = time.perf_counter()
         grid_pos = costmap.world_to_grid(robot_pose)
@@ -79,11 +89,30 @@ class VectorExplorer(WavefrontFrontierExplorer):
                                self.config.occupancy_threshold, min_cells)
         if not found:
             return []
-        centroids = [costmap.grid_to_world(Vector3(cx, cy, 0.0)) for cx, cy, _ in found]
-        sizes = [s for _, _, s in found]
+        now = time.monotonic()
+        self._failed_goals = [f for f in self._failed_goals if now - f[2] < FAILED_GOAL_HOLD_S]
+        centroids, sizes = [], []
+        for cx, cy, size in found:
+            w = costmap.grid_to_world(Vector3(cx, cy, 0.0))
+            if any((w.x - fx) ** 2 + (w.y - fy) ** 2 < FAILED_GOAL_RADIUS_M ** 2 for fx, fy, _ in self._failed_goals):
+                continue
+            centroids.append(w); sizes.append(size)
+        if not centroids:
+            logger.info(f"frontiers: {len(found)} clusters, all near recently failed goals")
+            return []
         logger.info(f"frontiers: {len(found)} clusters in {(time.perf_counter() - t0) * 1000:.0f} ms")
         return self._rank_frontiers(centroids, sizes, robot_pose, costmap)
 
+    def _rank_frontiers(self, centroids, sizes, robot_pose, costmap):  # type: ignore[override]
+        ranked = super()._rank_frontiers(centroids, sizes, robot_pose, costmap)
+        if ranked:
+            self._last_goal = (float(ranked[0].x), float(ranked[0].y))
+        return ranked
+
     def _on_goal_reached(self, msg: Bool) -> None:
-        # True = arrived, False = the planner gave up (no path): either way, pick the next frontier now
+        # True = arrived; False = the planner gave up (no path). Either way pick the
+        # next frontier now - but remember a failed goal and breathe before retrying.
+        if not getattr(msg, "data", False) and self._last_goal is not None:
+            self._failed_goals.append((self._last_goal[0], self._last_goal[1], time.monotonic()))
+            time.sleep(FAIL_BREATH_S)
         self.goal_reached_event.set()
