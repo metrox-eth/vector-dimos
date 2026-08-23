@@ -60,19 +60,19 @@ class LogSpy:
 print("A. polar_to_xy / scan_to_points (no lib, no sensor)")
 
 x, y = polar_to_xy(90.0, 2000.0)
-check(close(x, 0.0) and close(y, 2.0),
-      f"90 deg, 2000 mm -> (0.0, 2.0) m  (got ({x:.9f}, {y:.9f}))")
+check(close(x, 0.0) and close(y, -2.0),   # SLAMTEC heading is clockwise: 90 deg = the robot's RIGHT
+      f"90 deg (clockwise), 2000 mm -> (0.0, -2.0) m, the robot's right  (got ({x:.9f}, {y:.9f}))")
 x, y = polar_to_xy(0.0, 1500.0)
 check(close(x, 1.5) and close(y, 0.0), "0 deg, 1500 mm -> (1.5, 0.0) m")
 x, y = polar_to_xy(180.0, 1000.0)
 check(close(x, -1.0) and close(y, 0.0), "180 deg, 1000 mm -> (-1.0, 0.0) m")
 x, y = polar_to_xy(270.0, 500.0)
-check(close(x, 0.0) and close(y, -0.5), "270 deg, 500 mm -> (0.0, -0.5) m")
+check(close(x, 0.0) and close(y, 0.5), "270 deg (clockwise), 500 mm -> (0.0, +0.5) m, the robot's left")
 x, y = polar_to_xy(45.0, 1414.213562)
-check(close(x, 1.0) and close(y, 1.0), "45 deg, 1414.2136 mm -> (1.0, 1.0) m")
+check(close(x, 1.0) and close(y, -1.0), "45 deg (clockwise), 1414.2136 mm -> (1.0, -1.0) m")
 x, y = polar_to_xy(30.0, 4000.0)
-check(close(x, 3.464101615) and close(y, 2.0),
-      "30 deg, 4000 mm -> (3.4641016, 2.0) m")
+check(close(x, 3.464101615) and close(y, -2.0),
+      "30 deg (clockwise), 4000 mm -> (3.4641016, -2.0) m")
 
 # One canned revolution: 3 keepers, one weak return, one invalid (distance 0).
 SCAN = [(15, 0.0, 1000.0),      # kept  -> ( 1.0,  0.0)
@@ -80,7 +80,7 @@ SCAN = [(15, 0.0, 1000.0),      # kept  -> ( 1.0,  0.0)
         (5, 180.0, 3000.0),     # dropped: quality 5 < 10
         (20, 270.0, 500.0),     # kept  -> ( 0.0, -0.5)
         (18, 45.0, 0.0)]        # dropped: distance 0 = invalid measure
-EXPECTED = [(1.0, 0.0, 0.0), (0.0, 2.0, 0.0), (0.0, -0.5, 0.0)]
+EXPECTED = [(1.0, 0.0, 0.0), (0.0, -2.0, 0.0), (0.0, 0.5, 0.0)]   # clockwise heading: 90 deg = right
 
 points = scan_to_points(SCAN, min_quality=10)
 check(len(points) == 3, f"min_quality=10 keeps 3 of 5 measures (got {len(points)})")
