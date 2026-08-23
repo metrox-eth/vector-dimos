@@ -45,6 +45,7 @@ class StuckGuard(Module):
     coordinator_joint_state: In[JointState]
     cmd_vel: In[Twist]                      # what the planner asks for
     lidar: Out[PointCloud2]
+    slip: Out[Bool]                         # True on every trip: planner backs off 20 cm, odometry stops trusting the wheels, map stops writing
 
     def __init__(self, world_frame: str = "world", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -109,9 +110,9 @@ class StuckGuard(Module):
         if now - self._last_debug >= 2.0:
             self._last_debug = now
             logger.info(f"stuck guard: cmd {vcmd:.3f} m/s, wheels {dw:.3f} m, lidar {dl:.3f} m over {WINDOW_S:.0f} s")
-        # stuck = asked to move (or the wheels did) and the world did not move
-        asked = vcmd * WINDOW_S
-        if not ((dw >= MIN_WHEEL_M and dl < MAX_RATIO * dw) or (asked >= MIN_WHEEL_M and dl < MAX_RATIO * asked)):
+        # stuck = the wheels turned for real and the world did not move. Only
+        # that: the "commanded speed" path fired on every slow start (23/08).
+        if not (dw >= MIN_WHEEL_M and dl < MAX_RATIO * dw):
             return
         # stuck: wheels claim dw metres, the world says dl
         self._last_trip = now; self.trips += 1
@@ -133,7 +134,8 @@ class StuckGuard(Module):
         # and ends the exploration for good (2026-08-23). The planner has its own
         # "Robot is stuck. Replanning" - with the obstacle now in the map, the
         # replanned path goes elsewhere.
+        self.slip.publish(Bool(data=True))
         for _ in range(3):
             self.lidar.publish(cloud)
-        logger.warning(f"STUCK #{self.trips}: cmd {vcmd:.2f} m/s, wheels {dw:.2f} m, lidar {dl:.2f} m in {WINDOW_S:.0f} s -> "
-                       f"stop_movement + virtual obstacle at ({cx:+.2f}, {cy:+.2f}), heading {math.degrees(heading):+.0f} deg")
+        logger.warning(f"SLIP #{self.trips}: wheels {dw:.2f} m, lidar {dl:.2f} m in {WINDOW_S:.0f} s -> "
+                       f"slip reflex + virtual obstacle at ({cx:+.2f}, {cy:+.2f}), heading {math.degrees(heading):+.0f} deg")

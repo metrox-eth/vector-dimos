@@ -10,18 +10,21 @@ Field request (metrox, 23/08/2026): "il faudrait qu'il revienne 20-40 cm en
 arrière s'il ne sait pas ce qu'il y a derrière lui".
 """
 
+import threading
 import time
 
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
+from dimos.core.stream import In
 from dimos.navigation.base import NavigationState
 from dimos.navigation.replanning_a_star.global_planner import GlobalPlanner
 from dimos.navigation.replanning_a_star.module import ReplanningAStarPlanner
+from dimos_lcm.std_msgs import Bool
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
 
-BACKUP_DISTANCE_M = 0.25
+BACKUP_DISTANCE_M = 0.20   # metrox: 'just enough to turn'
 BACKUP_SPEED_MPS = 0.10
 BACKUP_TIMEOUT_S = 5.0
 BACKUP_PERIOD_S = 0.05  # base watchdog is 0.2 s; 10 Hz left gaps that stopped the wheels
@@ -40,6 +43,8 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         # spend 3 s backing up, and an assert there kills the thread for the
         # rest of the run (seen 23/08: no "Arrived"/"stuck" handled after it).
         try:
+            if self._recovering:
+                return                     # the slip reflex owns the wheels right now
             with self._lock:
                 has_goal = self._current_goal is not None and self._current_odom is not None
             if not has_goal:
@@ -62,6 +67,32 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             logger.exception("Replan failed; planner monitor keeps running")
 
     _path_started_at: float = float("inf")
+    _recovering: bool = False
+
+    def slip(self) -> bool:
+        """Slip reflex (stuck_guard saw the wheels turn while the lidar pose
+        stood still, within 1 s): stop, back off BACKUP_DISTANCE_M in our own
+        thread, then ask the monitor for a replan. While the wheels push, the
+        odometry slides with them and smears the map (23/08 18:45: 25 s of
+        pushing, map lost) - the only cure is to stop within the second.
+        Returns False if a recovery is already running."""
+        if self._recovering:
+            return False
+        self._recovering = True
+        threading.Thread(target=self._slip_recovery, daemon=True).start()
+        return True
+
+    def _slip_recovery(self) -> None:
+        try:
+            self._back_up()
+            with self._lock:
+                has_goal = self._current_goal is not None
+            if has_goal:
+                self._on_stopped_navigating("obstacle_found")
+        except Exception:  # noqa: BLE001
+            logger.exception("Slip recovery failed")
+        finally:
+            self._recovering = False
     # dimOS's default is 8 s / 0.4 m. "Stuck for eight seconds is already dead
     # for a robot doing 0.3 m/s" (metrox, 23/08): 2.5 s, same 5 cm/s floor.
     _stuck_time_window: float = 2.5
@@ -109,8 +140,15 @@ class RecoveringGlobalPlanner(GlobalPlanner):
 
 
 class RecoveringPlanner(ReplanningAStarPlanner):
-    """Drop-in for ReplanningAStarPlanner with the back-up recovery."""
+    """Drop-in for ReplanningAStarPlanner with the back-up recovery and the
+    slip reflex (``slip`` In, fed by stuck_guard.py)."""
+
+    slip: In[Bool]
 
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         self._planner = RecoveringGlobalPlanner(self._planner._global_config)
+
+    async def handle_slip(self, msg: Bool) -> None:
+        if getattr(msg, "data", False):
+            self._planner.slip()
