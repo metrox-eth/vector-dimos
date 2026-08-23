@@ -81,6 +81,7 @@ class LidarOdometry(Module):
     camera_info: In[CameraInfo]     # colour intrinsics (= aligned depth intrinsics)
     odom: Out[PoseStamped]
     lidar: Out[PointCloud2]
+    camera_floor: Out[PointCloud2]   # world-frame floor samples (z = 0) the depth camera saw bare: what lets costmap2d forget a low object
     tf: Out[TFMessage]
 
     def __init__(self, max_range_m: float = 12.0, min_range_m: float = 0.35,
@@ -211,8 +212,10 @@ class LidarOdometry(Module):
         # chair base is an obstacle at 1 m, floor noise is not an obstacle at 3 m
         floor_z = 0.03 + 0.03 * np.clip(bx - 1.0, 0.0, None)
         band = (bz > floor_z) & (bz < OBSTACLE_Z_M[1])
-        if not band.any():
+        floor = (bz <= floor_z) & (bz > -0.10)
+        if not band.any() and not floor.any():
             return
+        fx, fy = bx[floor], by[floor]          # bare floor: published separately, z = 0 (costmap2d misses)
         bx, by, bz = bx[band], by[band], bz[band]
         # pose at the frame's capture time (the depth handler runs 50-200 ms late;
         # at 17 deg/s that smeared the camera layer by several degrees per frame)
@@ -222,6 +225,14 @@ class LidarOdometry(Module):
         pose = self._pose_at(fts) if fts > 0 else self.pose2d
         x, y, yaw = pose
         c, s_ = math.cos(yaw), math.sin(yaw)
+        if len(fx):
+            fwx, fwy = c * fx - s_ * fy + x, s_ * fx + c * fy + y
+            fpts = np.stack([fwx, fwy, np.zeros_like(fwx)], axis=1)
+            fkeys = np.floor(fpts / 0.05).astype(np.int64)
+            _, fidx = np.unique(fkeys, axis=0, return_index=True)
+            self.camera_floor.publish(PointCloud2.from_numpy(fpts[fidx].astype(np.float32), frame_id=self.world_frame, timestamp=time.time()))
+        if len(bx) == 0:
+            return
         wx, wy = c * bx - s_ * by + x, s_ * bx + c * by + y
         pts = np.stack([wx, wy, bz], axis=1)
         # voxel-deduplicate at the map resolution
