@@ -22,6 +22,8 @@ class FakeLocalPlanner:
         self.cmd_vel: Subject = Subject()
         self.stopped = 0
         self.sent: list[Twist] = []
+        self._lock = threading.Lock()
+        self._state = "path_following"
 
     def stop_planning(self) -> None:
         self.stopped += 1
@@ -93,6 +95,17 @@ def test_replan_backs_up_only_when_stuck() -> None:
     planner._replan_path()
     assert calls == ["replan"], calls
     print("  stuck but not driving a path -> no back-up")
+    calls.clear()
+    planner._path_started_at = time.perf_counter() - 30.0
+    fake._state = "initial_rotation"                         # turning in place: position still, not stuck
+    planner._replan_path()
+    assert calls == [], calls
+    planner._in_stop_message = True                          # but a follower stop message still replans
+    planner._replan_path()
+    planner._in_stop_message = False
+    assert calls == ["backup", "replan"], calls
+    fake._state = "path_following"
+    print("  rotating in place -> ignored by the stuck detector; follower stop message -> handled")
 
 
 def test_replan_without_goal_neither_backs_up_nor_dies() -> None:

@@ -45,6 +45,12 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         try:
             if self._recovering:
                 return                     # the slip reflex owns the wheels right now
+            # The stuck detector reads position only: while the follower turns in
+            # place (initial/final rotation) the position does not change and a
+            # 2.5 s window reads "stuck" -> replan -> new rotation -> "stuck"...
+            # (20 bursts in the kitchen, 23/08 19:35). Rotating is not stuck.
+            if not self._in_stop_message and self._local_planner_state() in ("initial_rotation", "final_rotation"):
+                return
             with self._lock:
                 has_goal = self._current_goal is not None and self._current_odom is not None
             if not has_goal:
@@ -68,6 +74,19 @@ class RecoveringGlobalPlanner(GlobalPlanner):
 
     _path_started_at: float = float("inf")
     _recovering: bool = False
+    _in_stop_message: bool = False
+
+    def _local_planner_state(self) -> str:
+        with self._local_planner._lock:
+            return str(self._local_planner._state)
+
+    def _handle_stop_message(self, stop_message) -> None:  # type: ignore[override]
+        # so _replan_path can tell "the follower stopped (obstacle/arrived)" from "the monitor thinks we are stuck"
+        self._in_stop_message = True
+        try:
+            super()._handle_stop_message(stop_message)
+        finally:
+            self._in_stop_message = False
 
     def slip(self) -> bool:
         """Slip reflex (stuck_guard saw the wheels turn while the lidar pose
