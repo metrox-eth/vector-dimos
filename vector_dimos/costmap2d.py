@@ -48,6 +48,8 @@ OCCUPIED_AT = 2              # two hits from two places = an obstacle
 NEW_VIEWPOINT_M = 0.10       # a hit counts only if the rover moved this much since the cell's last hit
 LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M)
 PUBLISH_EVERY = 5            # lidar revolutions between two costmap publications (10 Hz -> 2 Hz)
+RAY_MAX_M = 4.0              # rays are carved (misses) up to this range only: 12 m x 0.025 m steps cost 227 ms per revolution (2.3 cores at 10 Hz, 23/08 20:20)
+RAY_EVERY = 2                # carve on every other revolution; hits are taken on all
 CHECKPOINT_EVERY_S = 30.0    # metrox 23/08: 'when it crashes we lose everything - resume from a minute before'
 CHECKPOINT_KEEP = 40         # 20 minutes of history
 CHECKPOINT_DIR = os.path.expanduser("~/.local/state/vector/checkpoints")
@@ -79,7 +81,8 @@ class ScoredGrid:
         gx, gy = self.cell(xs, ys)
         if len(gx) == 0:
             return 0
-        gx, gy = np.unique(np.stack([gx, gy], 1), axis=0).T
+        flat = np.unique(gy * self.n + gx)
+        gx, gy = flat % self.n, flat // self.n
         last = self._last_hit_xy[gy, gx]
         moved = np.isnan(last[:, 0]) | (np.hypot(last[:, 0] - from_xy[0], last[:, 1] - from_xy[1]) >= NEW_VIEWPOINT_M)
         cur = layer[gy, gx].astype(np.int16)
@@ -99,15 +102,20 @@ class ScoredGrid:
         layer[gy, gx] = np.maximum(layer[gy, gx].astype(np.int16) - 1, FREE_FLOOR).astype(np.int8)
         self.seen[gy, gx] = True
 
+    _revs: int = 0
+
     def lidar_revolution(self, hits_xy: np.ndarray, from_xy: tuple[float, float]) -> None:
         """World-frame lidar hits of one revolution, seen from `from_xy`:
-        the cells along each ray (up to just short of the hit) take a miss,
-        the hit cells a hit. Lidar layer only."""
+        the cells along each ray (up to just short of the hit, RAY_MAX_M at
+        most, every RAY_EVERY-th revolution) take a miss, the hit cells a hit.
+        Lidar layer only."""
         if len(hits_xy) == 0:
             return
-        cells = self._ray_cells(from_xy, hits_xy)
-        if cells is not None:
-            self._miss(self.lidar, cells[0], cells[1])
+        self._revs += 1
+        if self._revs % RAY_EVERY == 0:
+            cells = self._ray_cells(from_xy, hits_xy)
+            if cells is not None:
+                self._miss(self.lidar, cells[0], cells[1])
         self._hit(self.lidar, hits_xy[:, 0], hits_xy[:, 1], from_xy)
 
     def camera_obstacles(self, pts_xy: np.ndarray, from_xy: tuple[float, float]) -> None:
@@ -119,33 +127,36 @@ class ScoredGrid:
         gx, gy = self.cell(pts_xy[:, 0], pts_xy[:, 1])
         if len(gx) == 0:
             return
-        gx, gy = np.unique(np.stack([gx, gy], 1), axis=0).T
+        flat = np.unique(gy * self.n + gx)
+        gx, gy = flat % self.n, flat // self.n
         self._miss(self.low, gx, gy)
         self._miss(self.lidar, gx, gy)
 
     def _ray_cells(self, from_xy: tuple[float, float], hits_xy: np.ndarray):
-        """Cells crossed by the rays from `from_xy` to each hit, stopping one
-        cell short of the hit (sampled every half cell; duplicates removed)."""
+        """Cells crossed by the rays from `from_xy` to each hit (capped at
+        RAY_MAX_M), stopping one cell short of the hit; one sample per cell."""
         dx, dy = hits_xy[:, 0] - from_xy[0], hits_xy[:, 1] - from_xy[1]
         r = np.hypot(dx, dy)
         keep = r > self.res
         if not keep.any():
             return None
         dx, dy, r = dx[keep], dy[keep], r[keep]
-        step = self.res * 0.5
-        n_steps = np.floor((r - self.res) / step).astype(int)
-        xs, ys = [], []
-        for i in range(1, int(n_steps.max()) + 1):
-            sel = n_steps >= i
-            d = i * step
-            xs.append(from_xy[0] + dx[sel] / r[sel] * d)
-            ys.append(from_xy[1] + dy[sel] / r[sel] * d)
-        if not xs:
+        end = np.minimum(r - self.res, RAY_MAX_M)
+        n_steps = np.floor(end / self.res).astype(int)
+        nmax = int(n_steps.max())
+        if nmax < 1:
             return None
-        gx, gy = self.cell(np.concatenate(xs), np.concatenate(ys))
+        # (rays x steps) sample grid in one shot, masked past each ray's end
+        d = (np.arange(1, nmax + 1) * self.res)[None, :]
+        ux, uy = (dx / r)[:, None], (dy / r)[:, None]
+        valid = d <= end[:, None]
+        xs = (from_xy[0] + ux * d)[valid]
+        ys = (from_xy[1] + uy * d)[valid]
+        gx, gy = self.cell(xs, ys)
         if len(gx) == 0:
             return None
-        return np.unique(np.stack([gx, gy], 1), axis=0).T
+        flat = np.unique(gy * self.n + gx)
+        return flat % self.n, flat // self.n
 
     # ---- checkpoints -------------------------------------------------------
     def save(self, path: str, pose_xy: tuple[float, float] | None = None) -> int:
@@ -161,6 +172,7 @@ class ScoredGrid:
         g = cls.__new__(cls)
         g.res, g.n, g.ox, g.oy = float(z["res"]), int(z["n"]), float(z["ox"]), float(z["oy"])
         g.lidar, g.low, g.seen, g._last_hit_xy = z["lidar"], z["low"], z["seen"], z["last_hit_xy"]
+        g._revs = 0
         return g
 
     # ---- output ------------------------------------------------------------
