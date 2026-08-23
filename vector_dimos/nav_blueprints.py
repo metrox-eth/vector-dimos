@@ -54,7 +54,7 @@ def _explore_blueprint():
     from dimos.mapping.voxels.module import VoxelGridMapper
     from dimos.navigation.frontier_exploration.wavefront_frontier_goal_selector import WavefrontFrontierExplorer
     from dimos.navigation.movement_manager.movement_manager import MovementManager
-    from dimos.navigation.replanning_a_star.module import ReplanningAStarPlanner
+    from vector_dimos.recovering_planner import RecoveringPlanner
     from dimos.visualization.vis_module import vis_module
     from vector_dimos.lidar_odometry import LidarOdometry
     from vector_dimos.rplidar_c1 import RPLidarC1
@@ -75,7 +75,7 @@ def _explore_blueprint():
         CostMapper.blueprint(config=HeightCostConfig(can_climb=0.03, can_pass_under=0.88, ignore_noise=0.0, smoothing=0.0)),   # a single-voxel column (a table leg) must stay an obstacle
         # the rover is 54x46 cm but its corners sweep 0.71 m when it pivots and the
         # camera mast stands at the front bumper: give the planner a footprint with margin
-        ReplanningAStarPlanner.blueprint(robot_width=0.62, robot_rotation_diameter=0.80),
+        RecoveringPlanner.blueprint(robot_width=0.62, robot_rotation_diameter=0.80),
         MovementManager.blueprint(),
         WavefrontFrontierExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0, min_frontier_perimeter=0.3,
                                             info_gain_threshold=0.01, max_explored_distance=12.0, goal_timeout=15.0),
