@@ -36,7 +36,7 @@ the left wheels forward.
 | Protection | General disconnect, per-driver breakers, 100 A main fuse |
 | Metering | PZEM-017 shunt meter (100 A) — shares the RS485 bus with the drivers |
 
-![VECTOR from above: RPLIDAR C1 centred on the lid (on the ReSpeaker), e-stop box, XT60 power, the camera mast and bumper bar at the front](docs/images/vector_top.jpg)
+![VECTOR from above: RPLIDAR C1 centred on the lid (on the ReSpeaker), e-stop box, XT60 power, the camera mast and bumper bar at the front](images/vector_top.jpg)
 
 ## Geometry
 
