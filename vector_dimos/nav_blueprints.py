@@ -26,10 +26,10 @@ def _nav_blueprint():
         _coordinator_blueprint(),
         RealSenseCamera.blueprint(width=640, height=480, fps=15,
                                   enable_depth=True, enable_pointcloud=False,
-                                  enable_imu=False),
+                                  enable_imu=False),   # their 2nd (motion) pipeline fails on the RSUSB build: "No device connected"
         RPLidarC1.blueprint(),
-        LidarOdometry.blueprint(),
-        VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world"),
+        LidarOdometry.blueprint(use_gyro_prior=False),
+        VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
         CostMapper.blueprint(),
         vis_module(viewer_backend=global_config.viewer),
     ).remappings([
