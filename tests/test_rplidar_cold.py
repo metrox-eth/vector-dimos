@@ -95,6 +95,16 @@ check(len(scan_to_points(SCAN, min_quality=16)) == 1,
 check(scan_to_points([], 10) == [], "an empty scan yields no points")
 
 
+# --- A2. the mast mask (measured 2026-08-23: 0.21 m over 350-10 deg) --------
+from vector_dimos.rplidar_c1 import scan_to_points, MAST_MASK_DEG, MASK_RANGE_M
+scan = [(40, 0.0, 210.0), (40, 355.0, 220.0), (40, 12.0, 215.0),   # the mast: dropped
+        (40, 0.0, 1200.0), (40, 5.0, 800.0),                         # same wedge, far: kept
+        (40, 90.0, 210.0), (40, 180.0, 150.0),                       # outside the wedge, near: kept
+        (3, 45.0, 500.0), (40, 60.0, 0.0)]                           # weak / invalid: dropped
+pts = scan_to_points(scan, min_quality=10)
+check(len(pts) == 4, f"mast wedge {MAST_MASK_DEG} under {MASK_RANGE_M} m dropped, 4 real points kept ({len(pts)})")
+check(close(pts[0][0], 1.2) and close(pts[0][1], 0.0), "a far point inside the wedge survives at 1.2 m on +x")
+
 # --- B. retry loop on a fake rplidar lib ----------------------------------
 print("\nB. retry loop (fake lib, no sensor)")
 
@@ -204,7 +214,7 @@ check(not lidar_module._thread.is_alive() and stop_s < 3.0,
       f"stop() joins the loop in {stop_s:.2f} s (retry wait is interruptible)")
 
 rp.logger = real_logger
-del sys.modules["rplidar"]
+rp.RPLidarC1.lidar_class = None
 
 
 # --- C. the real reader, against a port that does not exist ---------------

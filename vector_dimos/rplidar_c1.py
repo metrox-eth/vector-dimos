@@ -55,17 +55,40 @@ def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
     return distance_m * math.cos(theta), distance_m * math.sin(theta)
 
 
+# The camera mast stands in the scan plane. Measured on the rover 2026-08-23
+# (tests/probe_rplidar.py): a constant 0.21-0.22 m return over the lidar's
+# 350-10 degree sectors. Everything inside that wedge closer than MASK_RANGE_M
+# is the mast, not the world; the costmap must never see it.
+MAST_MASK_DEG: tuple[tuple[float, float], ...] = ((340.0, 20.0),)   # (start, end), wraps past 360
+MASK_RANGE_M = 0.35
+
+
+def _in_mask(angle_deg: float, distance_m: float,
+             mask: tuple[tuple[float, float], ...], mask_range_m: float) -> bool:
+    if distance_m >= mask_range_m:
+        return False
+    a = angle_deg % 360.0
+    for start, end in mask:
+        if (start <= a <= end) if start <= end else (a >= start or a <= end):
+            return True
+    return False
+
+
 def scan_to_points(scan: list[tuple[float, float, float]],
-                   min_quality: int) -> list[tuple[float, float, float]]:
+                   min_quality: int,
+                   mask: tuple[tuple[float, float], ...] = MAST_MASK_DEG,
+                   mask_range_m: float = MASK_RANGE_M) -> list[tuple[float, float, float]]:
     """A 360-degree scan -> flat (x, y, 0.0) points in metres.
 
     ``scan`` is what ``iter_scans`` yields: (quality, angle_deg, distance_mm)
-    measures. Weak returns (quality below min_quality) and invalid ones (the
-    lib reports distance 0 for those) are dropped.
+    measures. Weak returns (quality below min_quality), invalid ones (distance
+    0) and the mast's own reflection (inside ``mask`` and closer than
+    ``mask_range_m``) are dropped.
     """
     return [(*polar_to_xy(angle, distance), 0.0)
             for (quality, angle, distance) in scan
-            if quality >= min_quality and distance > 0]
+            if quality >= min_quality and distance > 0
+            and not _in_mask(angle, distance / 1000.0, mask, mask_range_m)]
 
 
 class RPLidarC1(Module):
