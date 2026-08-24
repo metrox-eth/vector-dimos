@@ -60,19 +60,19 @@ class LogSpy:
 print("A. polar_to_xy / scan_to_points (no lib, no sensor)")
 
 x, y = polar_to_xy(90.0, 2000.0)
-check(close(x, 0.0) and close(y, -2.0),   # SLAMTEC heading is clockwise: 90 deg = the robot's RIGHT
-      f"90 deg (clockwise), 2000 mm -> (0.0, -2.0) m, the robot's right  (got ({x:.9f}, {y:.9f}))")
+check(close(x, 0.0) and close(y, 2.0),   # body flipped 24/08: raw 90 deg (old right) = the NEW left
+      f"90 deg (clockwise), 2000 mm -> (0.0, 2.0) m, the robot's right  (got ({x:.9f}, {y:.9f}))")
 x, y = polar_to_xy(0.0, 1500.0)
-check(close(x, 1.5) and close(y, 0.0), "0 deg, 1500 mm -> (1.5, 0.0) m")
+check(close(x, -1.5) and close(y, 0.0), "0 deg raw, 1500 mm -> (-1.5, 0.0) m, the NEW tail")
 x, y = polar_to_xy(180.0, 1000.0)
-check(close(x, -1.0) and close(y, 0.0), "180 deg, 1000 mm -> (-1.0, 0.0) m")
+check(close(x, 1.0) and close(y, 0.0), "180 deg raw, 1000 mm -> (+1.0, 0.0) m, the bumper")
 x, y = polar_to_xy(270.0, 500.0)
-check(close(x, 0.0) and close(y, 0.5), "270 deg (clockwise), 500 mm -> (0.0, +0.5) m, the robot's left")
+check(close(x, 0.0) and close(y, -0.5), "270 deg raw, 500 mm -> (0.0, -0.5) m, the NEW right")
 x, y = polar_to_xy(45.0, 1414.213562)
-check(close(x, 1.0) and close(y, -1.0), "45 deg (clockwise), 1414.2136 mm -> (1.0, -1.0) m")
+check(close(x, -1.0) and close(y, 1.0), "45 deg raw, 1414.2136 mm -> (-1.0, +1.0) m")
 x, y = polar_to_xy(30.0, 4000.0)
-check(close(x, 3.464101615) and close(y, -2.0),
-      "30 deg (clockwise), 4000 mm -> (3.4641016, -2.0) m")
+check(close(x, -3.464101615) and close(y, 2.0),
+      "30 deg raw, 4000 mm -> (-3.4641016, +2.0) m")
 
 # One canned revolution: 3 keepers, one weak return, one invalid (distance 0).
 SCAN = [(15, 0.0, 1000.0),      # kept  -> ( 1.0,  0.0)
@@ -80,8 +80,8 @@ SCAN = [(15, 0.0, 1000.0),      # kept  -> ( 1.0,  0.0)
         (5, 180.0, 3000.0),     # dropped: quality 5 < 10
         (20, 270.0, 500.0),     # kept  -> ( 0.0, -0.5)
         (18, 45.0, 0.0)]        # dropped: distance 0 = invalid measure
-EXPECTED = [(1.0, 0.0, 0.0), (0.0, -2.0, 0.0), (0.0, 0.5, 0.0)]   # clockwise heading: 90 deg = right
-EXPECTED_ALL = [(1.0, 0.0, 0.0), (0.0, -2.0, 0.0), (-3.0, 0.0, 0.0), (0.0, 0.5, 0.0)]   # + the weak (quality 5) return at 180 deg, kept by the default
+EXPECTED = [(-1.0, 0.0, 0.0), (0.0, 2.0, 0.0), (0.0, -0.5, 0.0)]   # body flipped 24/08: raw 0 deg = new tail
+EXPECTED_ALL = [(-1.0, 0.0, 0.0), (0.0, 2.0, 0.0), (3.0, 0.0, 0.0), (0.0, -0.5, 0.0)]   # body FLIPPED 24/08: raw 0 deg = new tail   # + the weak (quality 5) return at 180 deg, kept by the default
 
 points = scan_to_points(SCAN, min_quality=10)
 check(len(points) == 3, f"min_quality=10 keeps 3 of 5 measures (got {len(points)})")
@@ -107,7 +107,7 @@ scan = [(40, 0.0, 210.0), (40, 355.0, 220.0),                        # the mast 
         (3, 60.0, 500.0), (40, 60.0, 0.0)]                           # weak / invalid: dropped
 pts = scan_to_points(scan, min_quality=10)
 check(len(pts) == 5, f"mast bar under {MASK_RANGE_M} m and anything under 0.40 m dropped, 5 real points kept ({len(pts)})")
-check(any(close(x, 1.2) and close(y, 0.0) for x, y, _ in pts), "a far point inside the bar's bearing survives at 1.2 m on +x")
+check(any(close(x, -1.2) and close(y, 0.0) for x, y, _ in pts), "a far point inside the bar's bearing survives at 1.2 m toward the NEW tail")
 
 # --- B. retry loop on a fake rplidar lib ----------------------------------
 print("\nB. retry loop (fake lib, no sensor)")

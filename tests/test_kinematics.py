@@ -15,12 +15,12 @@ def check(cond, label):
 
 # pure forward: all wheels equal and positive
 w = inverse(1.0, 0.0, 0.0, G)
-check(all(abs(x - w[0]) < 1e-12 for x in w) and w[0] > 0,
-      "pure vx -> 4 equal forward wheels")
+check(all(abs(x - w[0]) < 1e-12 for x in w) and w[0] < 0,
+      "pure vx (toward the bumper) -> 4 equal BACKWARD wheels in the old labels (body flipped 24/08)")
 # pure strafe: FL/RR negative, FR/RL positive (the mecanum signature)
 w = inverse(0.0, 1.0, 0.0, G)
-check(w[0] < 0 and w[1] > 0 and w[2] > 0 and w[3] < 0,
-      "pure vy -> diagonal pattern (FL-,FR+,RL+,RR-)")
+check(w[0] > 0 and w[1] < 0 and w[2] < 0 and w[3] > 0,
+      "pure vy (new left) -> diagonal pattern inverted (FL+,FR-,RL-,RR+) - body flipped 24/08")
 # pure spin: left side backward, right side forward
 w = inverse(0.0, 0.0, 1.0, G)
 check(w[0] < 0 and w[1] > 0 and w[2] < 0 and w[3] > 0,
