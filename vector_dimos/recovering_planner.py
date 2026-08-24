@@ -159,10 +159,13 @@ class RecoveringGlobalPlanner(GlobalPlanner):
 
 
 class RecoveringPlanner(ReplanningAStarPlanner):
-    """Drop-in for ReplanningAStarPlanner with the back-up recovery and the
-    slip reflex (``slip`` In, fed by stuck_guard.py)."""
+    """Drop-in for ReplanningAStarPlanner with the back-up recovery, the slip
+    reflex (``slip`` In: stuck_guard + imu_slip - the map also rolls back) and
+    the bump reflex (``bump`` In: the physical bumper/sonar - same stop and
+    20 cm back-off, no rollback: the map was honest, the world was invisible)."""
 
     slip: In[Bool]
+    bump: In[Bool]
 
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
@@ -171,3 +174,7 @@ class RecoveringPlanner(ReplanningAStarPlanner):
     async def handle_slip(self, msg: Bool) -> None:
         if getattr(msg, "data", False):
             self._planner.slip()
+
+    async def handle_bump(self, msg: Bool) -> None:
+        if getattr(msg, "data", False):
+            self._planner.slip()   # same reflex: stop, back off 0.20 m, replan
