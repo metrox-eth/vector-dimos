@@ -92,6 +92,8 @@ def disks():
         dev, mnt, fs = line.split()[:3]
         if fs not in ("ext4", "vfat", "xfs", "btrfs", "f2fs") or mnt in seen:
             continue
+        if mnt.startswith("/boot"):
+            continue  # boot partitions: noise on the panel
         seen.add(mnt)
         try:
             st = os.statvfs(mnt)
