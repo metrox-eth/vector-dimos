@@ -125,7 +125,21 @@ for _ in range(6):
         blip = r
 check("2-chunk blip (0.2 s) rejected", blip is None)
 
-print("E. module without hardware = clean no-op")
+print("E. find_respeaker_card (real /proc/asound/cards format)")
+from vector_dimos.respeaker import find_respeaker_card  # noqa: E402
+
+CARDS = """ 0 [Array          ]: USB-Audio - reSpeaker XVF3800 4-Mic Array
+                      Seeed Studio reSpeaker XVF3800 4-Mic Array at usb-3610000.usb-2.2, high speed
+ 1 [HDA            ]: tegra-hda - NVIDIA Jetson Orin Nano HDA
+                      NVIDIA Jetson Orin Nano HDA at 0x3518000 irq 121
+"""
+check("finds card 0", find_respeaker_card(CARDS) == "0")
+CARDS2 = CARDS.replace(" 0 [", " 3 [").replace("XVF3800 4-Mic", "XVF3800 4-Mic")
+check("finds renumbered card 3", find_respeaker_card(CARDS2) == "3")
+check("no respeaker -> None", find_respeaker_card(" 1 [HDA ]: tegra-hda - NVIDIA HDA") is None)
+check("empty -> None", find_respeaker_card("") is None)
+
+print("F. module without hardware = clean no-op")
 try:
     import usb.core  # noqa: F401
     print("  (pyusb present on this machine - D covered on the Jetson instead)")

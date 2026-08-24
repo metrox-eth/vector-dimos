@@ -3,9 +3,12 @@
 Ported from Sam's ROS2 ``respeaker_node.py`` (rover_nvme_archive). Two
 transports on one USB device, exactly like the original:
 
-- **pyaudio**: 2-channel 16 kHz capture. Channel 0 is the XMOS-beamformed
-  voice. Audio stays *inside this module* (ring buffer) — the future STT
-  stage consumes it in-process; only the direction crosses the LCM bus.
+- **arecord subprocess**: 2-channel 16 kHz raw capture straight from ALSA
+  (``plughw``). PortAudio/Pulse hung forever inside its constructor when
+  running in a dimos forkserver worker (24/08: thread stuck in pipe_read,
+  capture fd held, zero log lines) - a child process reading raw PCM cannot
+  hang us. Channel 0 is the XMOS-beamformed voice; audio stays *inside this
+  module* (ring buffer), only the direction and transcripts cross the bus.
 - **pyusb**: vendor control transfers -> speech energy per beam + azimuth.
   ``doa`` (Float32, degrees) is published only while speech is detected.
 - **STT stage** (in-process): energy VAD segments utterances from the ch0
@@ -45,6 +48,13 @@ from dimos.msgs.std_msgs.Float32 import Float32
 from dimos.msgs.std_msgs.String import String
 
 logger = logging.getLogger(__name__)
+
+
+def _log(msg: str) -> None:
+    """Worker INFO logs are swallowed by default logging config: print to
+    stderr, which dimos captures in the launch log (the ALSA lines prove it)."""
+    import sys
+    print(f"[respeaker] {msg}", file=sys.stderr, flush=True)
 
 RESPEAKER_VID = 0x2886
 RESPEAKER_PID = 0x001A
@@ -126,6 +136,24 @@ def parse_response(raw: bytes, data_type: str):
     return None
 
 
+def _read_file(path: str) -> str | None:
+    try:
+        with open(path) as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def find_respeaker_card(cards_text: str) -> str | None:
+    """Card number of the XVF3800 in /proc/asound/cards content, or None."""
+    for line in cards_text.splitlines():
+        if "XVF3800" in line or "respeaker" in line.lower():
+            parts = line.strip().split()
+            if parts and parts[0].isdigit():
+                return parts[0]
+    return None
+
+
 def dfu_reset() -> bool:
     """Firmware reset (Sam's boot fix: humming mics on cold boot)."""
     import usb.core
@@ -183,8 +211,7 @@ class ReSpeakerMic(Module):
         self._chunks: collections.deque[bytes] = collections.deque(
             maxlen=max(1, int(buffer_seconds * SAMPLE_RATE / CHUNK_SIZE)))
         self._usb: ReSpeakerUSB | None = None
-        self._pa = None
-        self._stream = None
+        self._proc = None
         self._running = False
         self.last_doa: float | None = None
 
@@ -206,7 +233,7 @@ class ReSpeakerMic(Module):
             self._usb = ReSpeakerUSB()
             self._usb.open()
             version = self._usb.read("VERSION")
-            logger.info("respeaker: DOA open (firmware %s)", version)
+            _log(f"DOA open (firmware {version})")
         except Exception:  # noqa: BLE001 - no mic, robot still runs
             logger.exception("respeaker: USB DOA unavailable, module inactive")
             self._usb = None
@@ -222,58 +249,65 @@ class ReSpeakerMic(Module):
     def stop(self) -> None:
         self._running = False
         time.sleep(0.15)
-        if self._stream is not None:
+        if self._proc is not None:
             try:
-                self._stream.stop_stream()
-                self._stream.close()
+                self._proc.terminate()
             except Exception:  # noqa: BLE001
                 pass
-            self._stream = None
-        if self._pa is not None:
-            try:
-                self._pa.terminate()
-            except Exception:  # noqa: BLE001
-                pass
-            self._pa = None
+            self._proc = None
         if self._usb is not None:
             self._usb.close()
             self._usb = None
         super().stop()
 
-    # ---- capture ------------------------------------------------------------
-    def _find_input_index(self):
-        for i in range(self._pa.get_device_count()):
-            info = self._pa.get_device_info_by_index(i)
-            name = str(info.get("name", "")).lower()
-            if ("respeaker" in name or "xvf3800" in name or "seeed" in name) \
-                    and int(info.get("maxInputChannels", 0)) >= CHANNELS:
-                return i
-        return None
-
+    # ---- capture (arecord subprocess, raw ALSA) -----------------------------
     def _audio_loop(self) -> None:
-        try:
-            import pyaudio
-        except ImportError:
-            logger.warning("respeaker: pyaudio missing, audio capture off (DOA still on)")
+        import subprocess
+        card = None
+        for attempt in range(15):   # post-DFU, ALSA re-registers the card slowly
+            card = find_respeaker_card(_read_file("/proc/asound/cards") or "")
+            if card is not None:
+                break
+            time.sleep(1.0)
+        if card is None:
+            _log("no reSpeaker ALSA card after 15 s - no capture, DOA still on")
             return
-        try:
-            self._pa = pyaudio.PyAudio()
-            self._stream = self._pa.open(
-                format=pyaudio.paInt16, channels=CHANNELS, rate=SAMPLE_RATE,
-                input=True, input_device_index=self._find_input_index(),
-                frames_per_buffer=CHUNK_SIZE)
-        except Exception:  # noqa: BLE001
-            logger.exception("respeaker: audio stream failed, DOA still on")
-            return
-        logger.info("respeaker: audio capture on (16 kHz, ch0 beamformed)")
-        while self._running:
+        dev = f"plughw:{card},0"
+        chunk_bytes = CHUNK_SIZE * CHANNELS * 2
+        cmd = ["arecord", "-D", dev, "-f", "S16_LE", "-r", str(SAMPLE_RATE),
+               "-c", str(CHANNELS), "-t", "raw", "-q"]
+        restarts = 0
+        while self._running and restarts < 20:
             try:
-                data = self._stream.read(CHUNK_SIZE, exception_on_overflow=False)
-            except Exception:  # noqa: BLE001
-                if self._running:
-                    logger.exception("respeaker: audio read error, capture stopped")
+                self._proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                              stderr=subprocess.DEVNULL)
+            except OSError as e:
+                _log(f"arecord launch failed: {e}")
                 return
-            self.push_chunk(data)
+            _log(f"audio capture on ({dev} via arecord, 16 kHz)")
+            n, level_max = 0, 0.0
+            run_started = time.monotonic()
+            while self._running:
+                buf = b""
+                while self._running and len(buf) < chunk_bytes:
+                    r = self._proc.stdout.read(chunk_bytes - len(buf))
+                    if not r:
+                        break
+                    buf += r
+                if len(buf) < chunk_bytes:
+                    break   # arecord died (DFU replug, unplug...)
+                self.push_chunk(buf)
+                n += 1
+                level_max = max(level_max, self._vad._floor)
+                if n % 300 == 0:   # every 30 s: proof of life + noise floor
+                    _log(f"capture alive: {n} chunks, noise floor {self._vad._floor:.0f}")
+            if not self._running:
+                return
+            if time.monotonic() - run_started > 60.0:
+                restarts = 0   # a long stable run forgives earlier flapping
+            restarts += 1
+            _log(f"arecord ended, restart {restarts}/20")
+            time.sleep(2.0)
 
     def push_chunk(self, interleaved: bytes) -> None:
         """Keep channel 0 (beamformed voice) of one interleaved 2-ch chunk."""
@@ -283,6 +317,7 @@ class ReSpeakerMic(Module):
         if self.stt_enabled:
             utterance = self._vad.feed(mono)
             if utterance is not None:
+                _log(f"utterance captured: {len(utterance) / 2 / SAMPLE_RATE:.1f} s")
                 self._utterances.append(utterance)
                 self._utt_event.set()
 
@@ -315,11 +350,10 @@ class ReSpeakerMic(Module):
             return
         try:
             model = WhisperModel(self.stt_model, device="cpu", compute_type="int8")
-        except Exception:  # noqa: BLE001
-            logger.exception("respeaker: whisper model load failed, STT off")
+        except Exception as e:  # noqa: BLE001
+            _log(f"whisper model load FAILED: {e} - STT off")
             return
-        logger.info("respeaker: STT on (faster-whisper %s int8, lang=%s)",
-                    self.stt_model, self.stt_language or "auto")
+        _log(f"STT on (faster-whisper {self.stt_model} int8, lang={self.stt_language or 'auto'})")
         import numpy as np
         while self._running:
             if not self._utt_event.wait(timeout=0.5):
@@ -334,15 +368,14 @@ class ReSpeakerMic(Module):
                         audio, language=self.stt_language, beam_size=1)
                     text = " ".join(seg.text.strip() for seg in segments
                                     if seg.no_speech_prob < 0.6).strip()
-                except Exception:  # noqa: BLE001
-                    logger.exception("respeaker: transcribe failed")
+                except Exception as e:  # noqa: BLE001
+                    _log(f"transcribe FAILED: {e}")
                     continue
                 dt = time.monotonic() - t0
                 if not text:
                     continue
                 self.last_transcript = text
-                logger.info("respeaker: heard %r (%.1f s audio, %.1f s stt, doa %s)",
-                            text, len(audio) / SAMPLE_RATE, dt, self.last_doa)
+                _log(f"heard {text!r} ({len(audio) / SAMPLE_RATE:.1f} s audio, {dt:.1f} s stt, doa {self.last_doa})")
                 self.transcript.publish(String(data=text))
 
 
