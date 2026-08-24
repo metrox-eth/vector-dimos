@@ -3,10 +3,14 @@
 The physical layer of metrox's bumper build (24/08: aluminium profile, red
 RC-car springs, V-156 switches, TPU strikers, printed sonar housing).
 
-Wiring convention (no runtime pull-up on Jetson GPIO, so the switches FEED
-3.3 V): switch COM -> 3.3 V (pin 1/17), switch NO -> its input pin; pressed
-reads HIGH. Sonar: Vcc 3.3 V or 5 V (tested by metrox), Trig -> output pin,
-Echo -> input pin (through a divider if fed 5 V).
+Wiring: ONE contiguous 2x6 block on header pins 29-40 (metrox crimps a
+single wide Dupont housing and populates only the used positions):
+  29/31/33/35 switch NO contacts - 32 = software 3.3 V OUT feeding the four
+  switch COMs (pressed reads HIGH; no runtime pull-ups on Jetson GPIO, the
+  inputs rely on the default pull-downs - verify with a multimeter, add 10k
+  to GND if a pin floats) - 36 sonar Trig - 37 sonar Echo (divider if 5 V)
+  - 30/34/39 GND. The only wire outside the block: sonar Vcc to pin 2 (5 V)
+  or 1/17 (3.3 V per metrox's bench test); a GPIO cannot source its 2-15 mA.
 
 What the robot does in the room:
   * a switch closes -> STOP + back off 20 cm (the planner's ``bump`` reflex,
@@ -85,12 +89,14 @@ class BumperSonar(Module):
 
     def __init__(self,
                  switch_pins: tuple[int, ...] = (29, 31, 33, 35),
+                 switch_power_pin: int = 32,
                  switch_xy: tuple[tuple[float, float], ...] = ((0.30, 0.18), (0.30, 0.06), (0.30, -0.06), (0.30, -0.18)),
-                 sonar_trig_pin: int = 7, sonar_echo_pin: int = 15,
+                 sonar_trig_pin: int = 36, sonar_echo_pin: int = 37,
                  sonar_xy: tuple[float, float] = (0.30, 0.0),
                  enabled: bool = True, world_frame: str = "world", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.switch_pins, self.switch_xy = switch_pins, switch_xy
+        self.switch_power_pin = switch_power_pin
         self.sonar_trig_pin, self.sonar_echo_pin, self.sonar_xy = sonar_trig_pin, sonar_echo_pin, sonar_xy
         self.enabled, self.world_frame = enabled, world_frame
         self._gpio = None
@@ -112,6 +118,8 @@ class BumperSonar(Module):
             self._gpio = self._make_backend()
             for p in self.switch_pins:
                 self._gpio.setup_in(p)
+            self._gpio.setup_out(self.switch_power_pin)
+            self._gpio.write(self.switch_power_pin, True)   # feeds the switch COMs
             self._gpio.setup_out(self.sonar_trig_pin)
             self._gpio.setup_in(self.sonar_echo_pin)
         except Exception:  # noqa: BLE001 - no header, no bumper; the robot still runs
