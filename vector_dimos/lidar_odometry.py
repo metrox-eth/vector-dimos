@@ -58,8 +58,8 @@ LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (metrox, 2026-08-23:
 # long, lidar 3 cm behind its centre), 0.80 m up (floor reads 0.80 m below the
 # optical axis, flat with range; depth scale checked against the lidar), level. Optical frame x right,
 # y down, z forward -> base: X = z, Y = -x, Z = -y.
-CAMERA_XYZ_BASE = (0.30, 0.0, 0.57)   # depth origin above base_link: 0.57 m by floor-plane fit (RANSAC, 23/08); metrox's tape says 0.60 to the lens - the 0.80 shipped before put the floor 23 cm too high in the map
-CAMERA_PITCH_RAD = math.radians(1.4)  # camera looks 1.4 deg DOWN (same fit); roll 0.1 deg ignored
+CAMERA_XYZ_BASE = (-0.20, 0.0, 0.56)  # camera moved to the REAR mast 24/08 (bumper build): 20 cm behind the lidar axis (metrox's tape), 0.56 m up, floor-plane fit; sees the floor from ~0.95 m ahead, its own body not at all
+CAMERA_PITCH_RAD = math.radians(1.1)  # looks 1.1 deg DOWN (floor fit 24/08); roll -0.1 ignored
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 3                # one depth frame in three (15 fps -> 5 Hz)
 DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
