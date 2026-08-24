@@ -45,7 +45,10 @@ def _nav_blueprint():
         LidarOdometry.blueprint(use_gyro_prior=False),
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
         VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
-        vis_module(viewer_backend=global_config.viewer),
+        # 512MB replay history instead of the 25% default: on the 8 GB Jetson
+        # that default let the Rerun bridge grow to 2.7 GB (measured 24/08).
+        vis_module(viewer_backend=global_config.viewer,
+                   rerun_config={"memory_limit": "512MB"}),
     ).remappings([
         (VectorControlCoordinator, "twist_command", "cmd_vel"),
     ])
@@ -107,7 +110,10 @@ def _explore_blueprint():
         ImuSlipDetector.blueprint(),   # the body as witness: slip in 0.2-0.5 s, wheels in the air included
         BumperSonar.blueprint(),       # the muzzle: 4 switches (contact = learned + back off) + sonar (map ahead, stop under 15 cm); degrades to no-op without GPIO
         VectorMemory.blueprint(),    # every run recorded (dimOS memory): replay, draw, tune planners without the robot
-        vis_module(viewer_backend=global_config.viewer),
+        # 512MB replay history instead of the 25% default: on the 8 GB Jetson
+        # that default let the Rerun bridge grow to 2.7 GB (measured 24/08).
+        vis_module(viewer_backend=global_config.viewer,
+                   rerun_config={"memory_limit": "512MB"}),
     ).remappings([
         (VectorControlCoordinator, "twist_command", "cmd_vel"),
     ])
