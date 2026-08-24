@@ -43,7 +43,7 @@ def _nav_blueprint():
                                enable_imu=True, imu_hz=200,
                                base_transform=CAMERA_MOUNT),   # their 2nd (motion) pipeline fails on the RSUSB build: "No device connected"
         RPLidarC1.blueprint(),
-        ReSpeakerMic.blueprint(),
+        ReSpeakerMic.blueprint(stt_language="fr"),   # auto-detect mangles short utterances
         LidarOdometry.blueprint(use_gyro_prior=False),
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
         VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
@@ -89,7 +89,7 @@ def _explore_blueprint():
                                enable_imu=True, imu_hz=200,
                                base_transform=CAMERA_MOUNT),
         RPLidarC1.blueprint(),
-        ReSpeakerMic.blueprint(),
+        ReSpeakerMic.blueprint(stt_language="fr"),   # auto-detect mangles short utterances
         LidarOdometry.blueprint(use_gyro_prior=False),
         # carve_columns=False: this voxel map is the Rerun visual only (navigation runs on costmap2d). True ('latest
         # observation wins') erased the camera's table tops on every lidar hit in the same column and the map lost its detail
