@@ -28,7 +28,7 @@ def _nav_blueprint():
     `pointcloud` -> LidarOdometry `pointcloud`; LidarOdometry `lidar` (world
     frame) -> VoxelGridMapper `lidar`; `global_map` -> CostMapper."""
     from dimos.core.global_config import global_config
-    from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
+    from vector_dimos.camera import VectorCamera
     from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
     from dimos.visualization.vis_module import vis_module
@@ -37,10 +37,10 @@ def _nav_blueprint():
 
     return autoconnect(
         _coordinator_blueprint(),
-        RealSenseCamera.blueprint(width=640, height=480, fps=15,
-                                  enable_depth=True, enable_pointcloud=False,
-                                  enable_imu=False,
-                                  base_transform=CAMERA_MOUNT),   # their 2nd (motion) pipeline fails on the RSUSB build: "No device connected"
+        VectorCamera.blueprint(width=640, height=480, fps=15,
+                               enable_depth=True, enable_pointcloud=False,
+                               enable_imu=True, imu_hz=200,
+                               base_transform=CAMERA_MOUNT),   # their 2nd (motion) pipeline fails on the RSUSB build: "No device connected"
         RPLidarC1.blueprint(),
         LidarOdometry.blueprint(use_gyro_prior=False),
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
@@ -62,10 +62,11 @@ def _explore_blueprint():
     Bool(True) on `explore_cmd`; cap the speed with `dimos --nerf-speed 0.3`
     (the local planner's default is 0.55 m/s)."""
     from dimos.core.global_config import global_config
-    from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
+    from vector_dimos.camera import VectorCamera
     from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
     from vector_dimos.fast_explorer import VectorExplorer
+    from vector_dimos.imu_slip import ImuSlipDetector
     from vector_dimos.memory import VectorMemory
     from dimos.navigation.movement_manager.movement_manager import MovementManager
     from vector_dimos.recovering_planner import RecoveringPlanner
@@ -76,10 +77,10 @@ def _explore_blueprint():
 
     return autoconnect(
         _coordinator_blueprint(),
-        RealSenseCamera.blueprint(width=640, height=480, fps=15,
-                                  enable_depth=True, enable_pointcloud=False,
-                                  enable_imu=False,
-                                  base_transform=CAMERA_MOUNT),
+        VectorCamera.blueprint(width=640, height=480, fps=15,
+                               enable_depth=True, enable_pointcloud=False,
+                               enable_imu=True, imu_hz=200,
+                               base_transform=CAMERA_MOUNT),
         RPLidarC1.blueprint(),
         LidarOdometry.blueprint(use_gyro_prior=False),
         # carve_columns=False: this voxel map is the Rerun visual only (navigation runs on costmap2d). True ('latest
@@ -102,6 +103,7 @@ def _explore_blueprint():
                                             info_gain_threshold=0.001, num_no_gain_attempts=6,
                                             max_explored_distance=12.0, goal_timeout=15.0),
         StuckGuard.blueprint(),
+        ImuSlipDetector.blueprint(),   # the body as witness: slip in 0.2-0.5 s, wheels in the air included
         VectorMemory.blueprint(),    # every run recorded (dimOS memory): replay, draw, tune planners without the robot
         vis_module(viewer_backend=global_config.viewer),
     ).remappings([
