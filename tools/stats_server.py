@@ -72,6 +72,19 @@ def meminfo():
     }
 
 
+def gpu_percent():
+    """Orin GPU load: /sys value is in tenths of a percent."""
+    for path in ("/sys/devices/platform/bus@0/17000000.gpu/load",
+                 "/sys/devices/gpu.0/load"):
+        raw = _read(path)
+        if raw is not None:
+            try:
+                return round(int(raw) / 10.0, 1)
+            except ValueError:
+                pass
+    return None
+
+
 def temps():
     zones = {}
     for z in glob.glob("/sys/class/thermal/thermal_zone*"):
@@ -176,6 +189,7 @@ def collect():
         "hostname": socket.gethostname(),
         "uptime_s": int(uptime),
         "cpu_percent": cpu_percent(),
+        "gpu_percent": gpu_percent(),
         "load_1m": round(load_1m, 2),
         **meminfo(),
         "temps": temps(),
