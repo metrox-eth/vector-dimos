@@ -74,6 +74,7 @@ from vector_dimos.respeaker import ReSpeakerMic  # noqa: E402
 mic = ReSpeakerMic.__new__(ReSpeakerMic)  # no Module __init__: buffer only
 import collections
 mic._chunks = collections.deque(maxlen=int(30 * SAMPLE_RATE / CHUNK_SIZE))
+mic.stt_enabled = False
 n = CHUNK_SIZE
 interleaved = struct.pack(f"<{2 * n}h",
                           *[v for i in range(n) for v in (i % 1000, -7)])
@@ -84,7 +85,47 @@ check("chunk length = CHUNK_SIZE mono samples", len(samples) == n, f"{len(sample
 check("ch0 values kept (i%1000)", samples[:5] == (0, 1, 2, 3, 4), f"{samples[:5]}")
 check("ch1 (-7) dropped", -7 not in samples[:100])
 
-print("D. module without hardware = clean no-op")
+print("D. EnergyVAD segmentation (known chunks in, known utterance out)")
+from vector_dimos.respeaker import EnergyVAD  # noqa: E402
+
+def mk(level, n=CHUNK_SIZE):
+    return struct.pack(f"<{n}h", *([level] * n))
+
+vad = EnergyVAD()
+check("RMS of constant 1000 = 1000", abs(EnergyVAD.rms(mk(1000)) - 1000.0) < 0.01)
+
+out = [vad.feed(mk(50)) for _ in range(5)]
+check("5 silence chunks -> nothing", all(o is None for o in out))
+
+out = [vad.feed(mk(3000)) for _ in range(8)]
+check("8 speech chunks -> still open", all(o is None for o in out))
+
+utt = None
+for _ in range(6):
+    r = vad.feed(mk(50))
+    if r is not None:
+        utt = r
+check("utterance closes after 0.6 s silence", utt is not None)
+if utt is not None:
+    n_chunks = len(utt) // (2 * CHUNK_SIZE)
+    # preroll (maxlen 3) holds [sil, speech1, speech2] when the trigger
+    # fires, so: 1 pre-speech context + 8 speech + 6 closing silence = 15.
+    check("length = 1 context + 8 speech + 6 silence = 15 chunks",
+          n_chunks == 15, f"{n_chunks}")
+
+vad2 = EnergyVAD()
+for _ in range(3):
+    vad2.feed(mk(40))
+for _ in range(2):
+    vad2.feed(mk(3000))
+blip = None
+for _ in range(6):
+    r = vad2.feed(mk(40))
+    if r is not None:
+        blip = r
+check("2-chunk blip (0.2 s) rejected", blip is None)
+
+print("E. module without hardware = clean no-op")
 try:
     import usb.core  # noqa: F401
     print("  (pyusb present on this machine - D covered on the Jetson instead)")
