@@ -5,6 +5,10 @@ Three sections:
   B. the module's retry loop driven by a FAKE rplidar lib: sensor absent ->
      sensor appears -> sensor yanked mid-scan -> sensor back.
   C. the real rplidar lib against a port that does not exist, if installed.
+
+
+Run with the robot's dimos stack STOPPED: a live stack on the same LCM bus
+starves the bench module's pub/sub and section B reads zero clouds (24/08).
 """
 import sys
 import time
