@@ -36,6 +36,7 @@ from dimos.msgs.geometry_msgs.Pose import Pose
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.nav_msgs.OccupancyGrid import OccupancyGrid
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+from dimos_lcm.std_msgs import Bool
 from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
@@ -50,9 +51,11 @@ LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar
 PUBLISH_EVERY = 5            # lidar revolutions between two costmap publications (10 Hz -> 2 Hz)
 RAY_MAX_M = 4.0              # rays are carved (misses) up to this range only: 12 m x 0.025 m steps cost 227 ms per revolution (2.3 cores at 10 Hz, 23/08 20:20)
 RAY_EVERY = 2                # carve on every other revolution; hits are taken on all
+ROLLBACK_WINDOW_S = 2.5      # writes stay undoable this long: on a slip the last ~2 s already polluted the map before the guard could fire (metrox, 24/08: 'retroactif a une ou deux secondes')
 CHECKPOINT_EVERY_S = 30.0    # metrox 23/08: 'when it crashes we lose everything - resume from a minute before'
 CHECKPOINT_KEEP = 40         # 20 minutes of history
 CHECKPOINT_DIR = os.path.expanduser("~/.local/state/vector/checkpoints")
+SLIP_ROLLBACK_S = 2.0        # how far back a slip erases
 
 
 class ScoredGrid:
@@ -68,6 +71,8 @@ class ScoredGrid:
         self.low = np.zeros((self.n, self.n), dtype=np.int8)       # what the camera / a bump saw below the scan plane
         self.seen = np.zeros((self.n, self.n), dtype=bool)
         self._last_hit_xy = np.full((self.n, self.n, 2), np.nan, dtype=np.float32)
+        # undo journal: (monotonic time, layer, flat indices, applied deltas, seen-was-new mask)
+        self._journal: list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
 
     # ---- coordinates -------------------------------------------------------
     def cell(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -91,7 +96,10 @@ class ScoredGrid:
         # parked rover sees its obstacles at once, and a false positive
         # repeated from the same spot stays two misses away from gone.
         cap = np.where(moved, HIT_CAP, OCCUPIED_AT)
-        layer[gy, gx] = np.minimum(cur + 1, cap).astype(np.int8)
+        new = np.minimum(cur + 1, cap).astype(np.int8)
+        self._journal.append((time.monotonic(), layer, gy * self.n + gx,
+                              (new - cur).astype(np.int8), ~self.seen[gy, gx]))
+        layer[gy, gx] = new
         self._last_hit_xy[gy[moved], gx[moved]] = from_xy
         self.seen[gy, gx] = True
         return int(moved.sum())
@@ -99,7 +107,11 @@ class ScoredGrid:
     def _miss(self, layer: np.ndarray, gx: np.ndarray, gy: np.ndarray) -> None:
         if len(gx) == 0:
             return
-        layer[gy, gx] = np.maximum(layer[gy, gx].astype(np.int16) - 1, FREE_FLOOR).astype(np.int8)
+        cur = layer[gy, gx].astype(np.int16)
+        new = np.maximum(cur - 1, FREE_FLOOR).astype(np.int8)
+        self._journal.append((time.monotonic(), layer, gy * self.n + gx,
+                              (new - cur).astype(np.int8), ~self.seen[gy, gx]))
+        layer[gy, gx] = new
         self.seen[gy, gx] = True
 
     _revs: int = 0
@@ -158,6 +170,29 @@ class ScoredGrid:
         flat = np.unique(gy * self.n + gx)
         return flat % self.n, flat // self.n
 
+    def prune_journal(self, now: float | None = None) -> None:
+        now = time.monotonic() if now is None else now
+        cutoff = now - ROLLBACK_WINDOW_S
+        while self._journal and self._journal[0][0] < cutoff:
+            self._journal.pop(0)
+
+    def rollback(self, seconds: float, now: float | None = None) -> int:
+        """Undo every write of the last `seconds` (metrox's retroactive freeze:
+        by the time the slip guard fires, the sliding pose has already written
+        ~1-2 s of garbage into the map). Deltas are the values actually
+        applied, so the undo is exact even across the score clamps. Returns
+        the number of batches undone."""
+        now = time.monotonic() if now is None else now
+        cutoff = now - seconds
+        undone = 0
+        while self._journal and self._journal[-1][0] >= cutoff:
+            _, layer, flat, delta, seen_was_new = self._journal.pop()
+            gy, gx = flat // self.n, flat % self.n
+            layer[gy, gx] = (layer[gy, gx].astype(np.int16) - delta).astype(np.int8)
+            self.seen[gy[seen_was_new], gx[seen_was_new]] = False
+            undone += 1
+        return undone
+
     # ---- checkpoints -------------------------------------------------------
     def save(self, path: str, pose_xy: tuple[float, float] | None = None) -> int:
         """Full state to a compressed .npz; returns the file size in bytes."""
@@ -208,6 +243,7 @@ class VectorCostMap(Module):
     lidar: In[PointCloud2]
     camera_floor: In[PointCloud2]
     odom: In[PoseStamped]
+    slip: In[Bool]                  # stuck_guard: undo the last SLIP_ROLLBACK_S of map writes
     global_costmap: Out[OccupancyGrid]
 
     def __init__(self, world_frame: str = "world", **kwargs: Any) -> None:
@@ -233,6 +269,11 @@ class VectorCostMap(Module):
         if self._grid is None:
             self._grid = ScoredGrid(centre=self._pose_xy)
 
+    async def handle_slip(self, msg: Bool) -> None:
+        if self._grid is not None and getattr(msg, "data", False):
+            undone = self._grid.rollback(SLIP_ROLLBACK_S)
+            logger.warning(f"slip: rolled back the last {SLIP_ROLLBACK_S:.0f} s of map writes ({undone} batches)")
+
     async def handle_camera_floor(self, msg: PointCloud2) -> None:
         if self._grid is None:
             return
@@ -252,6 +293,7 @@ class VectorCostMap(Module):
             self._revolutions += 1
             if self._revolutions % PUBLISH_EVERY == 0:
                 self._publish()
+            self._grid.prune_journal()
             if time.monotonic() - self._last_ckpt >= CHECKPOINT_EVERY_S:
                 self._checkpoint()
         else:
