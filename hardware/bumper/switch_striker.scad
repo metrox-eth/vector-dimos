@@ -12,7 +12,7 @@ hole_d       = 4.4;   // passage vis M4
 hole_spacing = 16;    // entraxe des deux trous, le long de la rainure [mm]
 head_d       = 8.4;   // fraisage tete conique M4 (0 = pas de fraisage)
 head_depth   = 2.2;
-nose_chamfer = 2;     // petit chanfrein du bout
+nose_chamfer = 0;    // AUCUN chanfrein : la languette du V-156 veut une face franche (metrox 24/08)
 
 module striker() {
     difference() {
