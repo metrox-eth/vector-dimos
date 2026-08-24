@@ -37,6 +37,9 @@ DEFAULT_FRAME = "lidar_link"
 RETRY_PERIOD_S = 5.0
 
 
+LIDAR_YAW_OFFSET_DEG = 180.0   # 24/08: body convention rotated 180 deg (bumper = new nose); the lidar itself did not move. Recalibrate with tools/mars sweep if the velcro ever shifts.
+
+
 def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
     """One lidar measure -> (x, y) in metres in the sensor frame.
 
@@ -55,7 +58,7 @@ def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
     # 2-4, "left hand"); the robot frame is right-handed (x forward, y left),
     # so the sign of y is flipped here. Settled 2026-08-23 on the datasheet;
     # the first map of a known room is the check.
-    theta = math.radians(angle_deg)
+    theta = math.radians(angle_deg + LIDAR_YAW_OFFSET_DEG)
     distance_m = distance_mm / 1000.0
     return distance_m * math.cos(theta), -distance_m * math.sin(theta)
 

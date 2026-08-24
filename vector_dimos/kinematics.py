@@ -22,6 +22,12 @@ from dataclasses import dataclass
 
 RPM_PER_RAD_S = 60.0 / (2.0 * math.pi)
 
+# 24/08/2026: the rover's front and rear were SWAPPED (the sprung bumper is the
+# new nose, the mast with the camera is the new tail). The wheels, wiring and
+# labels did not move; the body convention rotated 180 deg. One switch flips
+# both directions of the kinematics so "forward" means "toward the bumper".
+BODY_FLIPPED = True
+
 
 @dataclass(frozen=True)
 class MecanumGeometry:
@@ -35,7 +41,10 @@ class MecanumGeometry:
 
 
 def inverse(vx: float, vy: float, wz: float, g: MecanumGeometry):
-    """Body twist -> wheel angular velocities [rad/s] (FL, FR, BL, BR)."""
+    """Body twist -> wheel angular velocities [rad/s] (FL, FR, BL, BR).
+    Wheel labels are the ORIGINAL chassis labels (wiring unchanged)."""
+    if BODY_FLIPPED:
+        vx, vy = -vx, -vy
     r, k = g.wheel_radius_m, g.k
     return (
         (vx - vy - k * wz) / r,
@@ -52,6 +61,8 @@ def forward(w_fl: float, w_fr: float, w_bl: float, w_br: float,
     vx = r / 4.0 * (w_fl + w_fr + w_bl + w_br)
     vy = r / 4.0 * (-w_fl + w_fr + w_bl - w_br)
     wz = r / (4.0 * k) * (-w_fl + w_fr - w_bl + w_br)
+    if BODY_FLIPPED:
+        vx, vy = -vx, -vy
     return vx, vy, wz
 
 
