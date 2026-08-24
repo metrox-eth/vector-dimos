@@ -37,7 +37,7 @@ DEFAULT_FRAME = "lidar_link"
 RETRY_PERIOD_S = 5.0
 
 
-LIDAR_YAW_OFFSET_DEG = 180.0   # 24/08: body convention rotated 180 deg (bumper = new nose); the lidar itself did not move. Recalibrate with tools/mars sweep if the velcro ever shifts.
+LIDAR_YAW_OFFSET_DEG = 177.25  # 180 (convention retournee 24/08) - 2.75 (pose du lidar sur son velcro, calibree contre la couche camera : mediane 6 cm). Recalibrer avec le sweep tools/mars si le velcro bouge.
 
 
 def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
