@@ -8,13 +8,13 @@ from dimos.core.coordination.blueprints import autoconnect
 
 from vector_dimos.blueprints import VectorControlCoordinator, _coordinator_blueprint
 def camera_mount():
-    """base_link -> camera_link as mounted: 0.30 m ahead of the lidar axis,
-    0.57 m up (CAMERA_XYZ_BASE). Their default is identity, which drew the
-    Rerun frustum on the floor under the lidar (metrox noticed, 23/08)."""
+    """base_link -> camera_link as mounted since 24/08 (bumper build): 0.20 m
+    BEHIND the lidar axis (metrox's tape), 0.56 m up (floor fit). Matches
+    CAMERA_XYZ_BASE in lidar_odometry.py."""
     from dimos.msgs.geometry_msgs.Quaternion import Quaternion
     from dimos.msgs.geometry_msgs.Transform import Transform
     from dimos.msgs.geometry_msgs.Vector3 import Vector3
-    return Transform(translation=Vector3(0.30, 0.0, 0.57), rotation=Quaternion(0.0, 0.0, 0.0, 1.0))
+    return Transform(translation=Vector3(-0.20, 0.0, 0.56), rotation=Quaternion(0.0, 0.0, 0.0, 1.0))
 
 
 CAMERA_MOUNT = camera_mount()
