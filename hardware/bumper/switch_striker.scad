@@ -7,7 +7,7 @@
 width        = 30;    // largeur, le long de la rainure [mm]
 tip_from_hole = 22;   // centre des trous -> bout [mm] (10 sortie profile + 12 depassement)
 tail         = 8;     // matiere derriere les trous [mm]
-thickness    = 4;     // epaisseur [mm]
+thickness    = 10;   // epaisseur [mm] (metrox 24/08)
 hole_d       = 4.4;   // passage vis M4
 hole_spacing = 16;    // entraxe des deux trous, le long de la rainure [mm]
 head_d       = 8.4;   // fraisage tete conique M4 (0 = pas de fraisage)
