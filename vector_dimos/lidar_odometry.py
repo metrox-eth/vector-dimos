@@ -63,6 +63,15 @@ CAMERA_PITCH_RAD = math.radians(1.1)  # looks 1.1 deg DOWN (floor fit 24/08); ro
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 3                # one depth frame in three (15 fps -> 5 Hz)
 DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
+OBSTACLE_MAX_M = 0.0            # 25/08 22h: camera LOW-OBSTACLE layer SUSPENDED (0.0 = none). Even under
+                                # 1.8 m the marble reflections re-walled the explorer while driving (566 low
+                                # cells, 0.5 m2 reachable, 0 frontiers - 3rd walled run in a row). Low objects
+                                # stay covered by sonar (<0.55 m ahead) + contact switches + footprint clearing.
+                                # Re-enable by raising this once a reflection-proof filter exists and is BENCHED
+                                # against the marble. Was: camera obstacles trusted to 1.8 m; on the polished marble the
+                                # depth reflections past ~2 m armed phantom low cells (2872 cells, only
+                                # 29% lidar-corroborated, ring-walled the explorer - measured 25/08 21:35).
+                                # Floor misses keep the full DEPTH_MAX_M range: erasing stays cheap.
 OBSTACLE_Z_M = (0.12, 1.30)    # world z band the camera turns into floor obstacles. Upper bound 1.30, not 0.70 (metrox, 23/08): a table top is a BLOCK - the rover goes around tables like a human, never between the legs; a lamp head on a tripod counts too
 
 
@@ -240,7 +249,8 @@ class LidarOdometry(Module):
         if not obst.any() and not floor.any():
             return
         fx, fy = bx[floor], by[floor]          # bare floor: published separately, z = 0 (costmap2d misses)
-        bx, by, bz = bx[obst], by[obst], bz[obst]
+        near = np.hypot(bx, by) < OBSTACLE_MAX_M   # see OBSTACLE_MAX_M: distant "low obstacles" are marble ghosts
+        bx, by, bz = bx[obst & near], by[obst & near], bz[obst & near]
         # pose at the frame's capture time (the depth handler runs 50-200 ms late;
         # at 17 deg/s that smeared the camera layer by several degrees per frame)
         fts = float(getattr(msg, "ts", 0.0) or 0.0)

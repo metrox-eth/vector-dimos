@@ -13,9 +13,14 @@ neighbours are unobserved). metrox's spec, from living with a Xiaomi vacuum:
     certain than "occupied" (two misses from gone); a table leg seen from
     twenty positions is solid (up to ten misses);
   * two layers, because the sensors do not see the same things: what the
-    lidar put down a lidar ray may clear; what the camera or a bump put down
-    (a low box, under the 0.37 m scan plane) only the camera seeing the floor
-    there may clear.
+    lidar put down a lidar ray may clear; what the camera put down (a low box,
+    under the 0.37 m scan plane) only the camera seeing the floor there may
+    clear.
+
+Sensor doctrine (metrox, 25/08): only the lidar and the camera write here.
+The sonar brakes and the contact switches protect - neither leaves a trace in
+the map. What the body drove over (body_clear) is still cleared: that one is a
+physical certainty, not a sensor reading.
 
 Numbers (HIT_CAP, FREE_FLOOR, OCCUPIED_AT) are a starting point to be tested.
 """
@@ -68,7 +73,7 @@ class ScoredGrid:
         self.ox = centre[0] - span_m / 2.0
         self.oy = centre[1] - span_m / 2.0
         self.lidar = np.zeros((self.n, self.n), dtype=np.int8)     # what the lidar saw at 0.37 m
-        self.low = np.zeros((self.n, self.n), dtype=np.int8)       # what the camera / a bump saw below the scan plane
+        self.low = np.zeros((self.n, self.n), dtype=np.int8)       # what the camera saw below the scan plane
         self.seen = np.zeros((self.n, self.n), dtype=bool)
         self._last_hit_xy = np.full((self.n, self.n, 2), np.nan, dtype=np.float32)
         # undo journal: (monotonic time, layer, flat indices, applied deltas, seen-was-new mask)
@@ -170,6 +175,25 @@ class ScoredGrid:
         flat = np.unique(gy * self.n + gx)
         return flat % self.n, flat // self.n
 
+    def body_clear(self, pose: tuple) -> None:
+        """The body IS here: every cell under the body footprint (0.625 x
+        0.46 m with the bumper bars - metrox 25/08 22h - exact, never wider,
+        so a wall against the bumper survives)
+        is certainly free. Both layers to the floor, seen. No journal entry:
+        a slip rollback must not resurrect an obstacle under the chassis.
+        Born 25/08: the rover kept walling itself in with patches laid on
+        cells it then drove over."""
+        x, y, yaw = pose
+        c, s = np.cos(yaw), np.sin(yaw)
+        lx = np.arange(-0.31, 0.31 + 1e-9, self.res / 2)
+        ly = np.arange(-0.23, 0.23 + 1e-9, self.res / 2)
+        bx, by = np.meshgrid(lx, ly)
+        gx, gy = self.cell((x + c * bx - s * by).ravel(), (y + s * bx + c * by).ravel())
+        if len(gx):
+            self.lidar[gy, gx] = FREE_FLOOR
+            self.low[gy, gx] = FREE_FLOOR
+            self.seen[gy, gx] = True
+
     def prune_journal(self, now: float | None = None) -> None:
         now = time.monotonic() if now is None else now
         cutoff = now - ROLLBACK_WINDOW_S
@@ -235,10 +259,13 @@ class ScoredGrid:
 
 class VectorCostMap(Module):
     """Replaces dimOS's CostMapper on VECTOR. Ins: `lidar` (world cloud from
-    lidar_odometry: lidar returns at z = 0.37, camera obstacles and bump
-    patches at other heights), `camera_floor` (world floor samples, z = 0),
-    `odom` (lidar pose in world). Out: `global_costmap` (the stream name the
-    planner and the explorer already listen to)."""
+    lidar_odometry: lidar returns at z = 0.37, camera obstacles at other
+    heights), `camera_floor` (world floor samples, z = 0), `odom` (lidar pose
+    in world), `slip` (stuck_guard). Out: `global_costmap` (the stream name
+    the planner and the explorer already listen to).
+
+    The lidar and the camera are the only writers: the sonar and the contact
+    switches are reflexes, not mappers (sensor doctrine, 25/08)."""
 
     lidar: In[PointCloud2]
     camera_floor: In[PointCloud2]
@@ -254,6 +281,7 @@ class VectorCostMap(Module):
         self._revolutions = 0
         self._ckpt_dir = os.path.join(CHECKPOINT_DIR, time.strftime("%Y%m%d-%H%M%S"))
         self._last_ckpt = time.monotonic()
+        self._last_clear: tuple | None = None   # (x, y, yaw) of the last body_clear
 
     @rpc
     def start(self) -> None:
@@ -268,6 +296,14 @@ class VectorCostMap(Module):
         self._pose_xy = (float(msg.position.x), float(msg.position.y))
         if self._grid is None:
             self._grid = ScoredGrid(centre=self._pose_xy)
+        q = msg.orientation
+        yaw = float(np.arctan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)))
+        lc = self._last_clear
+        if (lc is None
+                or (self._pose_xy[0] - lc[0]) ** 2 + (self._pose_xy[1] - lc[1]) ** 2 > 0.03 ** 2
+                or abs((yaw - lc[2] + np.pi) % (2 * np.pi) - np.pi) > np.radians(10.0)):
+            self._last_clear = (self._pose_xy[0], self._pose_xy[1], yaw)
+            self._grid.body_clear(self._last_clear)
 
     async def handle_slip(self, msg: Bool) -> None:
         if self._grid is not None and getattr(msg, "data", False):
