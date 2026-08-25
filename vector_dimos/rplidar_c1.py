@@ -80,7 +80,7 @@ MASK_RANGE_M = 0.30
 # cables on the lid: 0.25 m returns mapped as obstacles that followed the
 # rover around on 2026-08-23). The chassis is ~0.45 m long, the lidar is at
 # its centre.
-MIN_RANGE_M = 0.40
+MIN_RANGE_M = 0.30  # was 0.40: that software cut blinded the exact annulus the pivot corners sweep (median contact radius 0.400 m, envelope 0.388 m - impact autopsy 25/08, 9/11 contacts in 0.35-0.46 m). The directional self-hit mask handles the body; 0.30 matches it.
 
 
 def _in_mask(angle_deg: float, distance_m: float,
