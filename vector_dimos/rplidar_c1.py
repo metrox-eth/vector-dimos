@@ -37,7 +37,14 @@ DEFAULT_FRAME = "lidar_link"
 RETRY_PERIOD_S = 5.0
 
 
-LIDAR_YAW_OFFSET_DEG = 182.75  # 180 (convention retournee 24/08) + 2.75 (pose velcro, calibree contre la couche camera). Recalibrer avec le sweep tools/mars si le velcro bouge.
+LIDAR_YAW_OFFSET_DEG = 2.75
+# 25/08 22h57: the 180 flip term is GONE. The 25/08 rebuild remounted the lidar
+# dead centre in its original orientation, so the +180 kept from the 24/08 body
+# flip turned the whole lidar layer 180 deg from reality: camera obstacles read
+# 38.8 cm off (best fit +181.25), sonar patches 65.6 cm off (10.8 cm once
+# rotated 180), while the 23/08 pre-rebuild control sits at 5.2 cm with no flip.
+# Keep only the 2.75 velcro term. Confirm at the next drive: one forward metre
+# must move the lidar pose forward. Recalibrate with tools/mars if velcro moves.
 
 
 def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
