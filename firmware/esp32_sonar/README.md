@@ -24,3 +24,5 @@ marché du premier coup, en 3,3 V, ZÉRO résistance.
 - Flash : esptool erase_flash + write_flash 0 (BOOT enfoncé + RST pour entrer
   en bootloader), puis mpremote cp main.py :main.py
 - Validé : main à ~30 cm → lectures 0,24-0,30 m ; fond de scène stable à 1,074 m.
+- **Portée utile MESURÉE par metrox (monté, 3,3 V) : 66 cm max → seuil de
+  confiance logiciel = 0,55 m.** Au-delà : « hors de portée », jamais « libre ».
