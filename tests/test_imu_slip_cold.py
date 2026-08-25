@@ -11,6 +11,7 @@ import time
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.msgs.sensor_msgs.Imu import Imu
 from dimos.msgs.sensor_msgs.JointState import JointState
+from vector_dimos import persistent_map
 from vector_dimos.imu_slip import ImuSlipDetector
 
 
@@ -28,6 +29,11 @@ def make() -> ImuSlipDetector:
     d._gyro = deque(maxlen=256); d._accel = deque(maxlen=256); d._wheel_v = deque(maxlen=128)
     d._mismatch_since = 0.0; d._last_trip = 0.0; d.trips = 0
     d.slip = Probe()
+    # no zone file: this bench is about the detector itself. The
+    # no_slip_reflex zones have their own bench (test_relocalization_cold.py).
+    d._xy = None
+    d._quiet = persistent_map.ZoneWatch(persistent_map.NO_SLIP_REFLEX, "/nonexistent/keepout.json")
+    d._last_quiet_log = 0.0
     return d
 
 

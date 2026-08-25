@@ -44,6 +44,8 @@ from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos_lcm.std_msgs import Bool
 from dimos.utils.logging_config import setup_logger
 
+from vector_dimos import persistent_map
+
 logger = setup_logger()
 
 RESOLUTION_M = 0.05
@@ -59,8 +61,11 @@ RAY_EVERY = 2                # carve on every other revolution; hits are taken o
 ROLLBACK_WINDOW_S = 2.5      # writes stay undoable this long: on a slip the last ~2 s already polluted the map before the guard could fire (metrox, 24/08: 'retroactif a une ou deux secondes')
 CHECKPOINT_EVERY_S = 30.0    # metrox 23/08: 'when it crashes we lose everything - resume from a minute before'
 CHECKPOINT_KEEP = 40         # 20 minutes of history
-CHECKPOINT_DIR = os.path.expanduser("~/.local/state/vector/checkpoints")
+CHECKPOINT_DIR = persistent_map.CHECKPOINT_DIR
 SLIP_ROLLBACK_S = 2.0        # how far back a slip erases
+PROMOTE_EVERY_S = 300.0      # the persistent map is refreshed this often (and on a clean stop)
+PROMOTE_MIN_CELLS = 2000     # a run that mapped almost nothing never replaces the saved flat
+FRAME_DECISION_S = 20.0      # if no relocalization verdict arrives by then, start fresh as before
 
 
 class ScoredGrid:
@@ -78,6 +83,7 @@ class ScoredGrid:
         self._last_hit_xy = np.full((self.n, self.n, 2), np.nan, dtype=np.float32)
         # undo journal: (monotonic time, layer, flat indices, applied deltas, seen-was-new mask)
         self._journal: list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
+        self._keepout: np.ndarray | None = None   # cells the rover may never enter, whatever the layers say
 
     # ---- coordinates -------------------------------------------------------
     def cell(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -85,6 +91,24 @@ class ScoredGrid:
         gy = np.floor((np.asarray(y) - self.oy) / self.res).astype(np.int64)
         ok = (gx >= 0) & (gx < self.n) & (gy >= 0) & (gy < self.n)
         return gx[ok], gy[ok]
+
+    # ---- keep-out zones ----------------------------------------------------
+    def set_keepouts(self, zones: list[dict]) -> int:
+        """The `forbidden` zones the owner drew once on the persistent map.
+
+        They are NOT a score, they are a decision - so they are applied in
+        `occupancy()`, after every layer. Nothing writes them away: not a
+        lidar ray seeing through the doorway, not `body_clear` (the rover
+        cannot certify a cell it should never have stood on), not a slip
+        rollback. The only way out is the keep-out file.
+
+        The other zone type, `no_slip_reflex`, is not a map fact at all - it
+        is read by the two slip guards, and this grid ignores it.
+        """
+        forbidden = persistent_map.zones_of(zones, persistent_map.FORBIDDEN)
+        self._keepout = (persistent_map.keepout_mask(forbidden, self.res, self.ox, self.oy, self.n)
+                         if forbidden else None)
+        return 0 if self._keepout is None else int(self._keepout.sum())
 
     # ---- learning ----------------------------------------------------------
     def _hit(self, layer: np.ndarray, xs: np.ndarray, ys: np.ndarray, from_xy: tuple[float, float]) -> int:
@@ -232,6 +256,10 @@ class ScoredGrid:
         g.res, g.n, g.ox, g.oy = float(z["res"]), int(z["n"]), float(z["ox"]), float(z["oy"])
         g.lidar, g.low, g.seen, g._last_hit_xy = z["lidar"], z["low"], z["seen"], z["last_hit_xy"]
         g._revs = 0
+        # a loaded map is CONTINUED now, not just inspected: it needs the undo
+        # journal and the keep-out slot __init__ would have given it.
+        g._journal = []
+        g._keepout = None
         return g
 
     # ---- output ------------------------------------------------------------
@@ -241,6 +269,8 @@ class ScoredGrid:
         out = np.full((self.n, self.n), -1, dtype=np.int8)
         out[self.seen] = 0
         out[score >= OCCUPIED_AT] = 100
+        if self._keepout is not None:
+            out[self._keepout] = 100        # last word, after every layer
         return out
 
     def value_at(self, x: float, y: float) -> int:
@@ -257,6 +287,20 @@ class ScoredGrid:
         return self.occupancy()[y0:y1, x0:x1], self.ox + x0 * self.res, self.oy + y0 * self.res
 
 
+def _zone_summary(zones: list[dict], forbidden_cells: int) -> str:
+    """One readable line: what is forbidden, and where the reflexes stay quiet."""
+    parts = []
+    forbidden = persistent_map.zones_of(zones, persistent_map.FORBIDDEN)
+    quiet = persistent_map.zones_of(zones, persistent_map.NO_SLIP_REFLEX)
+    if forbidden:
+        parts.append(f"{len(forbidden)} forbidden over {forbidden_cells} cells "
+                     f"({', '.join(z['label'] for z in forbidden)})")
+    if quiet:
+        parts.append(f"{len(quiet)} no-slip-reflex, read by the slip guards, not by the map "
+                     f"({', '.join(z['label'] for z in quiet)})")
+    return "; ".join(parts)
+
+
 class VectorCostMap(Module):
     """Replaces dimOS's CostMapper on VECTOR. Ins: `lidar` (world cloud from
     lidar_odometry: lidar returns at z = 0.37, camera obstacles at other
@@ -271,6 +315,7 @@ class VectorCostMap(Module):
     camera_floor: In[PointCloud2]
     odom: In[PoseStamped]
     slip: In[Bool]                  # stuck_guard: undo the last SLIP_ROLLBACK_S of map writes
+    reloc_frame: In[PoseStamped]    # lidar_odometry's verdict: which frame this run lives in, and when to freeze
     global_costmap: Out[OccupancyGrid]
 
     def __init__(self, world_frame: str = "world", **kwargs: Any) -> None:
@@ -282,20 +327,46 @@ class VectorCostMap(Module):
         self._ckpt_dir = os.path.join(CHECKPOINT_DIR, time.strftime("%Y%m%d-%H%M%S"))
         self._last_ckpt = time.monotonic()
         self._last_clear: tuple | None = None   # (x, y, yaw) of the last body_clear
+        # which frame this run writes in. None until lidar_odometry says: the
+        # map is not created before, or a fresh grid would be born in the wrong
+        # place and the persistent map could never be continued.
+        self._frame: str | None = None
+        self._frozen = False                    # relocalizing: write NOTHING, never corrupt the map
+        self._t0 = time.monotonic()
+        self._last_promote = time.monotonic()
+        self._keepout_mtime = 0.0
+        self._zones: list[dict] = []
 
     @rpc
     def start(self) -> None:
         super().start()
         logger.info(f"VECTOR costmap up: {RESOLUTION_M} m cells, hit cap {HIT_CAP}, free floor {FREE_FLOOR}, occupied at {OCCUPIED_AT}")
+        if not persistent_map.enabled():
+            self._decide("fresh", "PERSISTENT_MAP=0: no saved map, no relocalization, no keep-out zone")
 
     @rpc
     def stop(self) -> None:
+        """A clean shutdown is the best moment to hand the flat over to the
+        next session: checkpoint, then promote."""
+        try:
+            if self._grid is not None:
+                self._checkpoint()
+                self._promote(force=True)
+        except Exception:  # noqa: BLE001
+            logger.exception("costmap: promoting the map on stop failed")
         super().stop()
 
     async def handle_odom(self, msg: PoseStamped) -> None:
         self._pose_xy = (float(msg.position.x), float(msg.position.y))
+        if self._frame is None:
+            if time.monotonic() - self._t0 < FRAME_DECISION_S:
+                return              # waiting for the relocalization verdict: create nothing yet
+            self._decide("fresh", f"no relocalization verdict in {FRAME_DECISION_S:.0f} s")
         if self._grid is None:
             self._grid = ScoredGrid(centre=self._pose_xy)
+            logger.info(f"costmap: fresh grid centred on ({self._pose_xy[0]:+.2f}, {self._pose_xy[1]:+.2f})")
+        if self._frozen:
+            return                  # the pose is not trusted: not even body_clear
         q = msg.orientation
         yaw = float(np.arctan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)))
         lc = self._last_clear
@@ -305,20 +376,92 @@ class VectorCostMap(Module):
             self._last_clear = (self._pose_xy[0], self._pose_xy[1], yaw)
             self._grid.body_clear(self._last_clear)
 
+    async def handle_reloc_frame(self, msg: PoseStamped) -> None:
+        """lidar_odometry publishes its frame state on every revolution:
+        ``reloc:searching`` (relocalizing - write nothing), ``reloc:persistent``
+        (this run continues the saved map) or ``reloc:fresh`` (own frame, as
+        before this existed). Idempotent on purpose: the state is republished
+        at 10 Hz, so no start-up race can lose the verdict."""
+        state = str(getattr(msg, "frame_id", "") or "").removeprefix("reloc:")
+        if state == "searching":
+            if not self._frozen:
+                self._frozen = True
+                logger.warning("costmap: relocalizing - map writing frozen (no hit, no miss, no body_clear)")
+            return
+        if state not in ("persistent", "fresh"):
+            return
+        if self._frame is None:
+            self._decide(state, "lidar_odometry relocalized against the saved map"
+                         if state == "persistent" else "lidar_odometry started a fresh frame")
+        elif state == "persistent" and self._frame == "fresh":
+            # The boot grace window paid off: a standing rover could not tell
+            # where it was, it drove a little and now it can. The few minutes
+            # of fresh-frame map built meanwhile are dropped - they are in the
+            # wrong frame, and everything they saw is about to be seen again.
+            logger.warning(f"costmap: relocalized late - dropping the fresh map "
+                           f"({int(self._grid.seen.sum()) if self._grid else 0} cells) and continuing "
+                           "the persistent one")
+            self._grid = None
+            self._last_clear = None
+            self._frame = None
+            self._decide("persistent", "lidar_odometry relocalized during the boot grace window")
+        if self._frozen:
+            self._frozen = False
+            logger.info(f"costmap: relocalized, map writing resumed in the {self._frame} frame")
+
+    def _decide(self, frame: str, why: str) -> None:
+        """Settle the frame this run writes in - once, and out loud."""
+        self._frame = frame
+        if frame == "persistent":
+            try:
+                self._grid = ScoredGrid.load(persistent_map.MAP_PATH)
+                self._zones = persistent_map.load_keepouts()
+                self._keepout_mtime = (os.path.getmtime(persistent_map.KEEPOUT_PATH)
+                                       if os.path.isfile(persistent_map.KEEPOUT_PATH) else 0.0)
+                cells = self._grid.set_keepouts(self._zones)
+                logger.info(f"costmap: CONTINUING the persistent map ({why}) - "
+                            f"{int(self._grid.seen.sum())} cells already known, origin "
+                            f"({self._grid.ox:+.1f}, {self._grid.oy:+.1f}), "
+                            f"zones drawn on {persistent_map.keepout_frame()!r}: "
+                            + (_zone_summary(self._zones, cells) or "none"))
+                return
+            except Exception:  # noqa: BLE001
+                logger.exception("costmap: the persistent map would not load - falling back to a fresh frame")
+                self._frame = "fresh"
+        logger.warning(f"costmap: FRESH frame ({why}). This map has its own arbitrary origin, so the "
+                       "keep-out zones do NOT apply to it - they are coordinates in the persistent frame.")
+
+    def _reload_keepouts(self) -> None:
+        """Pick up an edit of keepout.json without a restart - the stack is not
+        something the owner can restart on a whim."""
+        if self._frame != "persistent" or self._grid is None:
+            return
+        try:
+            mtime = (os.path.getmtime(persistent_map.KEEPOUT_PATH)
+                     if os.path.isfile(persistent_map.KEEPOUT_PATH) else 0.0)
+            if mtime == self._keepout_mtime:
+                return
+            self._keepout_mtime = mtime
+            self._zones = persistent_map.load_keepouts()
+            cells = self._grid.set_keepouts(self._zones)
+            logger.info("costmap: zones reloaded - " + (_zone_summary(self._zones, cells) or "none"))
+        except Exception:  # noqa: BLE001
+            logger.exception("costmap: keep-out zones would not reload - the previous ones stay in force")
+
     async def handle_slip(self, msg: Bool) -> None:
         if self._grid is not None and getattr(msg, "data", False):
             undone = self._grid.rollback(SLIP_ROLLBACK_S)
             logger.warning(f"slip: rolled back the last {SLIP_ROLLBACK_S:.0f} s of map writes ({undone} batches)")
 
     async def handle_camera_floor(self, msg: PointCloud2) -> None:
-        if self._grid is None:
+        if self._grid is None or self._frozen:
             return
         pts = np.asarray(msg.as_numpy()[0], dtype=np.float64)
         if len(pts):
             self._grid.camera_floor(pts[:, :2])
 
     async def handle_lidar(self, msg: PointCloud2) -> None:
-        if self._grid is None or self._pose_xy is None:
+        if self._grid is None or self._pose_xy is None or self._frozen:
             return
         pts = np.asarray(msg.as_numpy()[0], dtype=np.float64)
         if len(pts) == 0:
@@ -348,8 +491,45 @@ class VectorCostMap(Module):
             for f in old[:-CHECKPOINT_KEEP]:
                 os.remove(os.path.join(self._ckpt_dir, f))
             logger.info(f"costmap checkpoint {os.path.basename(path)}: {size / 1024:.0f} kB, {int(self._grid.seen.sum())} cells seen")
+            self._reload_keepouts()
+            self._promote()
         except Exception:  # noqa: BLE001
             logger.exception("costmap checkpoint failed")
+
+    _promote_refused = False
+
+    def _promote(self, force: bool = False) -> None:
+        """Hand the freshest checkpoint over to the next session.
+
+        The one rule that matters: a run with its OWN arbitrary frame never
+        silently replaces a persistent map that already exists. Overwriting it
+        would move the whole flat under the keep-out zones, which are
+        coordinates in the persistent frame - the toilets would end up
+        somewhere else. Bootstrapping the first map is allowed; replacing one
+        is an explicit decision (PERSISTENT_MAP_REBASE=1).
+        """
+        assert self._grid is not None
+        if not persistent_map.enabled():
+            return
+        if not force and time.monotonic() - self._last_promote < PROMOTE_EVERY_S:
+            return
+        self._last_promote = time.monotonic()
+        seen = int(self._grid.seen.sum())
+        if seen < PROMOTE_MIN_CELLS:
+            return                       # a run that saw almost nothing is not a flat
+        if self._frame != "persistent" and persistent_map.map_exists() and not persistent_map.rebase_allowed():
+            if not self._promote_refused:
+                self._promote_refused = True
+                logger.warning("costmap: NOT promoting this run - it has its own frame and a persistent map "
+                               "already exists. Set PERSISTENT_MAP_REBASE=1 to replace the saved flat.")
+            return
+        ckpt = persistent_map.newest_checkpoint(self._ckpt_dir)
+        if ckpt is None:
+            return
+        persistent_map.promote(ckpt)
+        logger.info(f"costmap: persistent map updated from {os.path.basename(ckpt)} "
+                    f"({seen} cells known, {len(persistent_map.generations())} older generations kept) "
+                    f"-> {persistent_map.MAP_PATH}")
 
     def _publish(self) -> None:
         assert self._grid is not None

@@ -19,14 +19,29 @@ Streams
   coordinator_joint_state : In[JointState]   base/vx, base/vy, base/wz positions = wheel odom
   odom   : Out[PoseStamped]  lidar pose in `world`
   lidar  : Out[PointCloud2]  the revolution re-expressed in `world` (VoxelGridMapper input)
+  reloc_frame : Out[PoseStamped]  which frame this run lives in (costmap2d listens)
   tf     : Out[TFMessage]    world->base_link, base_link->lidar_link
 
 A planar scan leaves z/roll/pitch unobservable for a 3D ICP: the cloud is
 thickened (copies at +-PLANE_THICKNESS_M) and the pose is projected on SE(2).
+
+Where `world` IS (2026-08-26). kiss-icp always starts at its own identity, so
+until now every restart gave the flat a new arbitrary origin: the map could
+not be kept, keep-out zones had no frame to be drawn in, and hand-carrying the
+rover scan-matched the new room against a stale memory and offset the walls.
+This module now holds an `_origin` on top of kiss-icp - the transform from its
+frame into the frame the saved map lives in. At boot the first RELOC_REVS
+revolutions are matched against the persistent map
+(`vector_dimos.relocalize2d`); on acceptance the origin is set and the
+continued map shares the saved frame, on rejection the run starts fresh
+exactly as before, with the score numbers logged. The same search is re-run
+when the body is moved without the wheels, and NOTHING is written to the map
+while it runs.
 """
 from __future__ import annotations
 
 import math
+import os
 import threading
 import time
 from typing import Any
@@ -48,6 +63,9 @@ from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.msgs.tf2_msgs.TFMessage import TFMessage
 from dimos_lcm.std_msgs import Bool
 from dimos.utils.logging_config import setup_logger
+
+from vector_dimos import persistent_map
+from vector_dimos.relocalize2d import MapField, relocalize
 
 logger = setup_logger()
 
@@ -75,6 +93,21 @@ OBSTACLE_MAX_M = 1.8            # 25/08 23h42: camera low-obstacle layer RE-ENAB
                                 # depth reflections past ~2 m armed phantom low cells (2872 cells, only
                                 # 29% lidar-corroborated, ring-walled the explorer - measured 25/08 21:35).
                                 # Floor misses keep the full DEPTH_MAX_M range: erasing stays cheap.
+# --- relocalization: the map as a place the rover comes back to ----------
+# Every restart used to birth an amnesiac map with a fresh arbitrary origin.
+# When a persistent map exists, the first revolutions are matched against it
+# and the odometry origin is set so the CONTINUED map shares the saved frame.
+RELOC_REVS = 8                 # revolutions accumulated per attempt (~0.8 s at 10 Hz)
+RELOC_RETRY_S = 5.0            # between two attempts
+BOOT_GRACE_S = 120.0           # after a refused boot attempt, keep trying this long WHILE exploring
+                               # (see the class docstring: a standing rover has one viewpoint)
+CARRY_RESIDUAL_M = 0.35        # the body outran the wheels by this much in CARRY_WINDOW_S: it was carried
+CARRY_WINDOW_S = 1.0
+CARRY_COOLDOWN_S = 15.0
+LOST_SIGMA_M = 1.0             # kiss-icp's adaptive threshold above this...
+LOST_SIGMA_S = 1.5             # ...for this long = scan matching no longer converging
+CURRENT_MAP_MAX_AGE_S = 300.0  # a checkpoint older than this is not "the current map" any more
+
 OBSTACLE_Z_M = (0.12, 1.30)    # world z band the camera turns into floor obstacles. Upper bound 1.30, not 0.70 (metrox, 23/08): a table top is a BLOCK - the rover goes around tables like a human, never between the legs; a lamp head on a tripod counts too
 
 
@@ -118,6 +151,7 @@ class LidarOdometry(Module):
     odom: Out[PoseStamped]
     lidar: Out[PointCloud2]
     camera_floor: Out[PointCloud2]   # world-frame floor samples (z = 0) the depth camera saw bare: what lets costmap2d forget a low object
+    reloc_frame: Out[PoseStamped]    # which frame this run lives in, republished every revolution (costmap2d listens)
     tf: Out[TFMessage]
 
     def __init__(self, max_range_m: float = 12.0, min_range_m: float = 0.35,
@@ -159,6 +193,25 @@ class LidarOdometry(Module):
         self._yaw_rate = 0.0
         self._depth_n = 0
         self._depth_pts_last = 0
+        # relocalization. `_origin` carries the kiss-icp frame into the frame
+        # the map lives in: published pose = _origin (+) kiss pose. kiss-icp is
+        # never told about it, so its own scan-to-map keeps working untouched.
+        self._origin: tuple[float, float, float] = (0.0, 0.0, 0.0)
+        self._frame = "fresh"           # "fresh" (own arbitrary origin) | "persistent" (the saved flat)
+        # "idle" | "searching" (map writing FROZEN) | "retrying" (boot grace: keep
+        # looking while the rover explores and the fresh map keeps building)
+        self._reloc_state = "idle"
+        self._boot_deadline = 0.0
+        self._reloc_gen = 0             # a search started before the last reset is stale
+        self._reloc_pts: list[np.ndarray] = []
+        self._reloc_thread: Any = None
+        self._reloc_result: Any = None
+        self._reloc_reason = ""
+        self._reloc_next = 0.0
+        self._wheel_hist: list[tuple[float, float, float]] = []   # (wall ts, x, y), last ~3 s
+        self._lost_since = 0.0
+        self._carry_cooldown = 0.0
+        self._cfg: Any = None
 
     # ── lifecycle ──────────────────────────────────────────────────────
     @rpc
@@ -175,11 +228,19 @@ class LidarOdometry(Module):
         # kiss-icp defaults are tuned for cars (2 m initial threshold)
         cfg.adaptive_threshold.initial_threshold = self.initial_threshold_m
         cfg.adaptive_threshold.min_motion_th = 0.02
+        self._cfg = cfg
         self._kiss = KissICP(cfg)
         self._lock = threading.Lock()
         logger.info(f"lidar odometry up (kiss-icp, voxel {self.voxel_size_m} m, range "
                     f"{self.min_range_m}-{self.max_range_m} m, priors: gyro={self.use_gyro_prior} "
                     f"axis {self.gyro_axis}, wheels={self.use_wheel_prior}) -> {self.world_frame}")
+        if not persistent_map.enabled():
+            logger.info("PERSISTENT_MAP=0: fresh frame, as before this existed")
+        elif not persistent_map.map_exists():
+            logger.info(f"no persistent map at {persistent_map.MAP_PATH} yet: fresh frame, "
+                        "and this run will become the first one")
+        else:
+            self._begin_relocalization("boot", reset_kiss=False)
 
     @rpc
     def stop(self) -> None:
@@ -207,6 +268,9 @@ class LidarOdometry(Module):
         except ValueError:
             return
         self._wheel = (float(pos[ix]), float(pos[iy]), float(pos[ith]))
+        now = time.time()
+        self._wheel_hist.append((now, self._wheel[0], self._wheel[1]))
+        self._wheel_hist = [w for w in self._wheel_hist if now - w[0] < 3.0]
 
     async def handle_camera_info(self, msg: CameraInfo) -> None:
         K = list(msg.K or [])
@@ -257,8 +321,8 @@ class LidarOdometry(Module):
         # pose at the frame's capture time (the depth handler runs 50-200 ms late;
         # at 17 deg/s that smeared the camera layer by several degrees per frame)
         fts = float(getattr(msg, "ts", 0.0) or 0.0)
-        if abs(self._yaw_rate) > math.radians(8.0) or self.slipping:
-            return                         # turning or slipping: the camera layer would smear / the pose is not trusted
+        if abs(self._yaw_rate) > math.radians(8.0) or self.slipping or self._searching:
+            return                         # turning, slipping or relocalizing: the pose is not trusted
         pose = self._pose_at(fts) if fts > 0 else self.pose2d
         x, y, yaw = pose
         c, s_ = math.cos(yaw), math.sin(yaw)
@@ -326,6 +390,186 @@ class LidarOdometry(Module):
         self._prior_used = "+".join(used) or "cv"
         return _se2(dx, dy, dyaw)
 
+    # ── relocalization ─────────────────────────────────────────────────
+    @property
+    def _searching(self) -> bool:
+        """Frozen: nothing goes into the map until we know where we are."""
+        return self._reloc_state == "searching"
+
+    def _to_map_frame(self, kiss: tuple[float, float, float]) -> tuple[float, float, float]:
+        """kiss-icp's own frame -> the frame the map lives in."""
+        ox, oy, oyaw = self._origin
+        c, s = math.cos(oyaw), math.sin(oyaw)
+        return (ox + c * kiss[0] - s * kiss[1],
+                oy + s * kiss[0] + c * kiss[1],
+                math.atan2(math.sin(oyaw + kiss[2]), math.cos(oyaw + kiss[2])))
+
+    def _begin_relocalization(self, reason: str, reset_kiss: bool) -> None:
+        """Freeze map writing and start looking for where we are.
+
+        `reset_kiss` after a hand-carry: kiss-icp's local map is a memory of
+        the place the rover was picked up FROM, and scan-matching a new room
+        against it is exactly what smeared the walls. A fresh KissICP gives a
+        clean frame to search in; the origin then carries it onto the map.
+        """
+        if reset_kiss and self._cfg is not None:
+            from kiss_icp.kiss_icp import KissICP
+            with self._lock:
+                self._kiss = KissICP(self._cfg)
+                self._wheel_at_scan = None
+                self._gyro_acc, self._gyro_seen = 0.0, False
+        self._reloc_gen += 1
+        self._reloc_pts = []
+        self._reloc_thread = None
+        self._reloc_result = None
+        self._reloc_reason = reason
+        self._reloc_state = "searching"
+        self._lost_since = 0.0
+        logger.warning(f"relocalization ({reason}): map writing FROZEN, accumulating {RELOC_REVS} revolutions")
+
+    def _reference_map(self) -> str | None:
+        """What to match against: the saved flat at boot, the current map after
+        a hand-carry (the freshest checkpoint on disk - same frame, at most one
+        checkpoint period old), the saved flat as a fallback."""
+        if self._reloc_reason == "boot":
+            return persistent_map.MAP_PATH if persistent_map.map_exists() else None
+        current = persistent_map.newest_checkpoint()
+        if current is not None and time.time() - os.path.getmtime(current) < CURRENT_MAP_MAX_AGE_S:
+            return current
+        if self._frame == "persistent" and persistent_map.map_exists():
+            return persistent_map.MAP_PATH
+        return None
+
+    def _accumulate(self, pts: np.ndarray, kiss: tuple[float, float, float]) -> None:
+        """One revolution into the search batch, in the kiss-icp frame - the
+        frame the search solves for."""
+        c, s = math.cos(kiss[2]), math.sin(kiss[2])
+        self._reloc_pts.append(np.stack([c * pts[:, 0] - s * pts[:, 1] + kiss[0],
+                                         s * pts[:, 0] + c * pts[:, 1] + kiss[1]], axis=1))
+        if len(self._reloc_pts) < RELOC_REVS or self._reloc_thread is not None:
+            return
+        if self._reloc_state == "retrying" and time.monotonic() > self._boot_deadline:
+            self._reloc_state = "idle"
+            self._reloc_pts = []
+            logger.warning(f"relocalization: gave up after {BOOT_GRACE_S:.0f} s of trying - this run "
+                           "keeps its own fresh frame, and the keep-out zones do NOT apply to it")
+            return
+        if time.monotonic() < self._reloc_next:
+            self._reloc_pts = self._reloc_pts[-RELOC_REVS:]
+            return
+        path = self._reference_map()
+        if path is None:
+            self._reloc_pts = []
+            self._reloc_next = time.monotonic() + RELOC_RETRY_S
+            logger.warning("relocalization: no map to match against - map writing stays frozen "
+                           "(the rover is somewhere nothing has been saved about)")
+            return
+        batch = np.concatenate(self._reloc_pts)
+        self._reloc_pts = []
+        self._reloc_thread = threading.Thread(target=self._search, args=(batch, path, self._reloc_gen),
+                                              name="relocalize", daemon=True)
+        self._reloc_thread.start()
+
+    def _search(self, pts: np.ndarray, path: str, gen: int) -> None:
+        """The search itself, off the lidar thread (a global pass costs about a
+        second and a half; the pose must keep flowing meanwhile). The frame it
+        solves for is fixed, so nothing races - as long as that frame is still
+        the current one: a hand-carry started while a search was in flight
+        resets kiss-icp, and `gen` is how the stale answer is dropped."""
+        try:
+            from vector_dimos.costmap2d import ScoredGrid
+            field = MapField.from_grid(ScoredGrid.load(path))
+            result = (relocalize(field, pts), path, gen)
+        except Exception:  # noqa: BLE001
+            logger.exception("relocalization failed")
+            result = (None, path, gen)
+        self._reloc_result = result
+
+    def _collect_relocalization(self) -> None:
+        """Apply a finished search. Rejection at boot = start fresh, exactly as
+        before. Rejection after a hand-carry = stay frozen and try again: a map
+        is worth more than a session."""
+        if self._reloc_result is None:
+            return
+        match, path, gen = self._reloc_result
+        self._reloc_result = None
+        self._reloc_thread = None
+        if gen != self._reloc_gen:
+            logger.info("relocalization: dropping an answer computed for a frame we have left")
+            return
+        origin = os.path.basename(path)
+        if match is not None and match.accepted:
+            self._origin = (match.x, match.y, match.yaw)
+            self._pose_hist = []
+            self._wheel_hist = []
+            self._carry_cooldown = time.monotonic() + CARRY_COOLDOWN_S
+            was = self._reloc_state
+            self._reloc_state = "idle"
+            if self._reloc_reason == "boot":
+                self._frame = "persistent"
+            logger.info(f"RELOCALIZED against {origin} ({self._reloc_reason}): {match.as_log()} - "
+                        f"the map continues in the {self._frame} frame"
+                        + (", the fresh map built during the grace window is dropped"
+                           if was == "retrying" else ", writing resumed"))
+            return
+        detail = match.as_log() if match is not None else "the search raised"
+        self._reloc_next = time.monotonic() + RELOC_RETRY_S
+        if self._reloc_reason != "boot":
+            logger.warning(f"relocalization REJECTED against {origin}: {detail} - map writing stays "
+                           f"FROZEN, retrying in {RELOC_RETRY_S:.0f} s")
+            return
+        if self._reloc_state == "searching":
+            # A standing rover sees the flat from ONE spot; that is often not
+            # enough to tell two places apart (measured 26/08: refused at boot
+            # with margin 1.01, accepted with 1.46 after 90 s of driving, and
+            # the boot candidate was the WRONG one). So: start mapping fresh
+            # right away - the rover has to move for the answer to sharpen -
+            # and keep asking for BOOT_GRACE_S while it does.
+            self._reloc_state = "retrying"
+            self._frame = "fresh"
+            self._boot_deadline = time.monotonic() + BOOT_GRACE_S
+            logger.warning(f"relocalization REJECTED against {origin}: {detail} - mapping fresh for "
+                           f"now, and trying again for {BOOT_GRACE_S:.0f} s while the rover moves")
+            return
+        logger.info(f"relocalization still refused ({detail}) - retrying while exploring, "
+                    f"{max(0.0, self._boot_deadline - time.monotonic()):.0f} s of grace left")
+
+    def _carried(self, now_wall: float, x: float, y: float) -> bool:
+        """Was the body moved without the wheels, or has scan matching given up?
+
+        Two triggers, both cheap. The displacement residual is the honest one:
+        over a second, the body cannot outrun the wheels by a third of a metre
+        unless somebody picked the rover up. kiss-icp's adaptive threshold is
+        the second: when it stays above a metre, the scans stopped matching the
+        map at all. Either way the answer is the same - freeze, relocalize.
+        """
+        if self._reloc_state != "idle" or time.monotonic() < self._carry_cooldown:
+            return False
+        why = None
+        sigma = float(self._kiss.adaptive_threshold.get_threshold())
+        if sigma > LOST_SIGMA_M:
+            self._lost_since = self._lost_since or time.monotonic()
+            if time.monotonic() - self._lost_since > LOST_SIGMA_S:
+                why = f"scan matching lost (threshold {sigma:.2f} m for {LOST_SIGMA_S:.1f} s)"
+        else:
+            self._lost_since = 0.0
+        if why is None:
+            old_pose = [h for h in self._pose_hist if now_wall - h[0] >= CARRY_WINDOW_S]
+            old_wheel = [w for w in self._wheel_hist if now_wall - w[0] >= CARRY_WINDOW_S]
+            if not old_pose or not old_wheel or not self._wheel_hist:
+                return False
+            d_body = math.hypot(x - old_pose[-1][1], y - old_pose[-1][2])
+            d_wheel = math.hypot(self._wheel_hist[-1][1] - old_wheel[-1][1],
+                                 self._wheel_hist[-1][2] - old_wheel[-1][2])
+            if d_body - d_wheel > CARRY_RESIDUAL_M:
+                why = (f"the body moved {d_body:.2f} m while the wheels rolled {d_wheel:.2f} m "
+                       f"in {CARRY_WINDOW_S:.0f} s")
+        if why is None:
+            return False
+        logger.warning(f"HAND-CARRY / lost: {why}")
+        self._begin_relocalization("carried", reset_kiss=True)
+        return True
+
     # ── the work ───────────────────────────────────────────────────────
     async def handle_pointcloud(self, msg: PointCloud2) -> None:
         out = msg.as_numpy()
@@ -333,6 +577,7 @@ class LidarOdometry(Module):
         if pts.ndim != 2 or pts.shape[0] < 30:
             return
         t0 = time.monotonic()
+        self._collect_relocalization()
         thick = np.concatenate([pts, pts + [0, 0, PLANE_THICKNESS_M], pts - [0, 0, PLANE_THICKNESS_M]])
         with self._lock:
             k = self._kiss
@@ -353,7 +598,8 @@ class LidarOdometry(Module):
             self._wheel_at_scan = self._wheel
         pose = np.asarray(new_pose)
         R, t = pose[:3, :3], pose[:3, 3]
-        yaw = math.atan2(R[1, 0], R[0, 0]); x, y = float(t[0]), float(t[1])
+        kiss = (float(t[0]), float(t[1]), math.atan2(R[1, 0], R[0, 0]))
+        x, y, yaw = self._to_map_frame(kiss)
         now_wall = time.time()
         if self._pose_hist:
             pt, _, _, pyaw = self._pose_hist[-1]
@@ -367,8 +613,15 @@ class LidarOdometry(Module):
         R2 = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
         world_pts = (pts @ R2.T) + np.array([x, y, LIDAR_HEIGHT_M])
         ts = time.time(); q = _yaw_quat(yaw)
+        if self._reloc_state != "idle":
+            self._accumulate(pts, kiss)
+        elif self._carried(now_wall, x, y):
+            pass                            # _carried() opened a new search; this revolution is not written
         self.odom.publish(PoseStamped(ts, self.world_frame, position=Vector3(x, y, LIDAR_HEIGHT_M), orientation=q))
-        if not self.slipping:
+        self.reloc_frame.publish(PoseStamped(
+            ts, f"reloc:{'searching' if self._searching else self._frame}",
+            position=Vector3(self._origin[0], self._origin[1], 0.0), orientation=_yaw_quat(self._origin[2])))
+        if not self.slipping and not self._searching:
             self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
         self.tf.publish(TFMessage(
             Transform(translation=Vector3(x, y, 0.0), rotation=q, frame_id=self.world_frame, child_frame_id=self.base_frame, ts=ts),

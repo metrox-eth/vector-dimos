@@ -21,6 +21,12 @@ Publishes the same ``slip`` Bool the planner and the costmap already react
 to (stop + back off 20 cm, freeze the wheel prior, roll the map back 2 s).
 Expected reaction time ~0.3-0.5 s instead of ~1.2 s.
 
+Silent inside a ``no_slip_reflex`` zone (26/08). Slipping on a ramp is normal
+and transient; on the kitchen-workshop ramp the reflex fired twice mid-climb
+(IMU SLIP #9/#10), cut the torque, and the rover slid back down "like ice".
+That needs the rover's position, hence the ``odom`` stream, and it only counts
+once the run has relocalized into the persistent frame the zones are drawn in.
+
 The IMU frame is the D455 accel optical frame: x right, y down, z forward
 (camera pitched 1.4 deg, ignored here). Body yaw rate = -gyro.y; body
 forward acceleration = accel.z.
@@ -36,10 +42,13 @@ from typing import Any
 from dimos.core.core import rpc
 from dimos.core.module import Module
 from dimos.core.stream import In, Out
+from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.sensor_msgs.Imu import Imu
 from dimos.msgs.sensor_msgs.JointState import JointState
 from dimos.utils.logging_config import setup_logger
 from dimos_lcm.std_msgs import Bool
+
+from vector_dimos import persistent_map
 
 logger = setup_logger()
 
@@ -55,6 +64,8 @@ GRAVITY = 9.81
 class ImuSlipDetector(Module):
     imu: In[Imu]
     coordinator_joint_state: In[JointState]
+    odom: In[PoseStamped]                   # where we are: a ramp is allowed to make the wheels slip
+    reloc_frame: In[PoseStamped]            # lidar_odometry: the zones only count in the persistent frame
     slip: Out[Bool]
 
     def __init__(self, **kwargs: Any) -> None:
@@ -65,6 +76,9 @@ class ImuSlipDetector(Module):
         self._mismatch_since = 0.0
         self._last_trip = 0.0
         self.trips = 0
+        self._xy: tuple[float, float] | None = None
+        self._quiet = persistent_map.ZoneWatch(persistent_map.NO_SLIP_REFLEX)
+        self._last_quiet_log = 0.0
 
     @rpc
     def start(self) -> None:
@@ -82,6 +96,15 @@ class ImuSlipDetector(Module):
         self._gyro.append((now, -float(msg.angular_velocity.y)))
         self._accel.append((now, float(msg.linear_acceleration.z)))
         self._check(now)
+
+    async def handle_odom(self, msg: PoseStamped) -> None:
+        self._xy = (float(msg.position.x), float(msg.position.y))
+
+    async def handle_reloc_frame(self, msg: PoseStamped) -> None:
+        if self._quiet.note_frame(str(getattr(msg, "frame_id", "") or "")):
+            logger.info("IMU slip detector: persistent frame "
+                        + ("live, no-slip-reflex zones now count" if self._quiet.persistent
+                           else "lost, no-slip-reflex zones ignored"))
 
     async def handle_coordinator_joint_state(self, msg: JointState) -> None:
         now = time.monotonic()
@@ -135,9 +158,17 @@ class ImuSlipDetector(Module):
             return
         if now - self._mismatch_since < CONFIRM_S:
             return
+        kind = "rotation" if rotation else "onset"
+        zone = self._quiet.at(*self._xy) if self._xy else None
+        if zone is not None:
+            self._mismatch_since = 0.0
+            if now - self._last_quiet_log >= 5.0:
+                self._last_quiet_log = now
+                logger.info(f"IMU slip ({kind}) inside '{zone}' - no slip published, "
+                            "the wheels are meant to slip there")
+            return
         self._last_trip = now
         self._mismatch_since = 0.0
         self.trips += 1
-        kind = "rotation" if rotation else "onset"
         logger.warning(f"IMU SLIP #{self.trips} ({kind}): wheels move, the body does not")
         self.slip.publish(Bool(data=True))

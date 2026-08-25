@@ -17,6 +17,7 @@ from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos_lcm.std_msgs import Bool
 from reactivex import Subject
 
+from vector_dimos import persistent_map
 from vector_dimos.recovering_planner import RecoveringGlobalPlanner
 from vector_dimos.stuck_guard import StuckGuard
 from dimos.core.global_config import GlobalConfig
@@ -35,6 +36,10 @@ def guard_scenario(wheel_speed: float, lidar_speed: float, seconds: float = 2.5)
     g._wheel = deque(maxlen=400); g._lidar = deque(maxlen=400); g._cmd = deque(maxlen=400)
     g._last_check = 0.0; g._last_trip = 0.0; g._last_debug = 0.0; g.trips = 0
     g.world_frame = "world"; g.lidar = Probe(); g.slip = Probe()
+    # no zone file, so no no_slip_reflex zone: this bench is about the reflex
+    # itself (the zones have their own bench in test_relocalization_cold.py)
+    g._quiet = persistent_map.ZoneWatch(persistent_map.NO_SLIP_REFLEX, "/nonexistent/keepout.json")
+    g._last_quiet_log = 0.0
     t_trip = [None]
 
     async def feed() -> None:
