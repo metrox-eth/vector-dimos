@@ -1,4 +1,17 @@
-# Sonar HC-SR04 sur ESP32-S3 (MicroPython)
+# Capteurs de contact + sonar sur ESP32-S3 (MicroPython)
+
+## Carte des coins (passe validée 25/08 17h37, déterministe du premier coup)
+
+| Coin | GPIO | patte |
+|---|---|---|
+| avant-gauche | 1 | actif bas (COM chaînés sur GND, rappels internes) |
+| arrière-gauche | 2 | idem |
+| arrière-droit | 3 | idem |
+| avant-droit | 4 | idem |
+
+Sortie série : `SW a b c d` (ordre GPIO 1,2,3,4 ; 1 = appuyé) à chaque
+changement + battement 500 ms. Les résistances du peigne ont été CLIPPÉES
+(elles combattaient les rappels internes).
 
 Né le 25/08/2026, après le verdict TXB0108 (docs/verdict_museau_20260825.md) :
 le sonar ne pouvait pas vivre sur le 40-pin du Jetson ; sur l'ESP32-S3 il a
