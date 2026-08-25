@@ -6,7 +6,6 @@
 scratch: four mecanum wheels on brushless hub motors, a steel chassis, and enough
 torque to carry a robot arm. It handles gravel, grass, tiles and ramps.
 
-Why we build this way: [love-first architecture](docs/love_first.md).
 
 This package integrates VECTOR into [dimOS](https://github.com/dimensionalOS/dimos)
 as an **external blueprint package** — no fork, no patches. dimOS discovers it
