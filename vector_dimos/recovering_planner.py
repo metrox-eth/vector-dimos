@@ -88,7 +88,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         finally:
             self._in_stop_message = False
 
-    def slip(self) -> bool:
+    def slip(self, direction: float = -1.0) -> bool:
         """Slip reflex (stuck_guard saw the wheels turn while the lidar pose
         stood still, within 1 s): stop, back off BACKUP_DISTANCE_M in our own
         thread, then ask the monitor for a replan. While the wheels push, the
@@ -98,12 +98,12 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         if self._recovering:
             return False
         self._recovering = True
-        threading.Thread(target=self._slip_recovery, daemon=True).start()
+        threading.Thread(target=self._slip_recovery, args=(direction,), daemon=True).start()
         return True
 
-    def _slip_recovery(self) -> None:
+    def _slip_recovery(self, direction: float = -1.0) -> None:
         try:
-            self._back_up()
+            self._back_up(direction)
             with self._lock:
                 has_goal = self._current_goal is not None
             if has_goal:
@@ -123,7 +123,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         else:
             self._path_started_at = float("inf")
 
-    def _back_up(self) -> float:
+    def _back_up(self, direction: float = -1.0) -> float:
         """Reverse until odometry says we moved backup_distance_m, or time out.
 
         Runs in the planner's monitoring thread; the local path follower is
@@ -136,7 +136,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         if start is None:
             return 0.0
 
-        reverse = Twist(linear=Vector3(-self.backup_speed_mps, 0.0, 0.0))
+        reverse = Twist(linear=Vector3(direction * self.backup_speed_mps, 0.0, 0.0))
         t0 = time.perf_counter()
         travelled = 0.0
         while time.perf_counter() - t0 < self.backup_timeout_s:
@@ -167,6 +167,7 @@ class RecoveringPlanner(ReplanningAStarPlanner):
     slip: In[Bool]
     bump: In[Bool]
 
+    bump_rear: In[Bool]
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         self._planner = RecoveringGlobalPlanner(self._planner._global_config)
@@ -177,4 +178,8 @@ class RecoveringPlanner(ReplanningAStarPlanner):
 
     async def handle_bump(self, msg: Bool) -> None:
         if getattr(msg, "data", False):
-            self._planner.slip()   # same reflex: stop, back off 0.20 m, replan
+            self._planner.slip()   # front contact: stop, back off 0.20 m, replan
+
+    async def handle_bump_rear(self, msg: Bool) -> None:
+        if getattr(msg, "data", False):
+            self._planner.slip(direction=+1.0)   # rear contact: stop, move FORWARD 0.20 m, replan
