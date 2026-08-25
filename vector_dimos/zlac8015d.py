@@ -58,7 +58,7 @@ def _resp_ok(rr) -> bool:
 class Controller:
     """One ZLAC8015D (two wheels) on a shared MODBUS RTU bus."""
 
-    def __init__(self, unit_id: int, client=None, port: str = "/dev/ttyTHS1",
+    def __init__(self, unit_id: int, client=None, port: str = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG01OSGH-if00-port0",
                  baudrate: int = 115200):
         self.unit = unit_id
         if client is not None:

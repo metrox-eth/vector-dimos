@@ -73,7 +73,7 @@ from .zlac8015d import Controller
 
 FRONT_ID = 2   # L port = FL, R port = FR   (proven v1 topology)
 BACK_ID = 1    # L port = BL, R port = BR
-DEFAULT_PORT = "/dev/ttyTHS1"
+DEFAULT_PORT = "/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG01OSGH-if00-port0"
 BAUDRATE = 115200
 
 MOCK_BUS_ENV = "VECTOR_MOCK_BUS"
