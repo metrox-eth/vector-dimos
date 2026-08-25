@@ -1,12 +1,25 @@
 """Mapping / navigation blueprints - kept apart from blueprints.py because
 dimOS's mapping modules pull torch + open3d; a missing heavy dependency must
 only take `vector-dimos.nav` down, never the base / cockpit / lidar blueprints.
+
+Which frontier explorer the `explore` blueprint builds is an A/B switch, read
+once when the blueprint is built so a run is one strategy for its whole life:
+
+    EXPLORER_V2=0     the 25-26/08 explorer (fast_explorer.VectorExplorer):
+                      dimOS's weighted-sum scoring, its info-gain self-stop
+    unset / anything  explorer2.Explorer2: information gain per path cost, and
+    else (DEFAULT)    no way to stop but "no reachable frontier left"
+
+Both publish the same goals on the same `goal_request` topic, so the two are
+directly comparable with tools/bench_run.py on two real runs, and offline with
+tools/explore_sim.py.
 """
 from __future__ import annotations
 
 from dimos.core.coordination.blueprints import autoconnect
 
 from vector_dimos.blueprints import VectorControlCoordinator, _coordinator_blueprint
+from vector_dimos.explorer2 import explorer_v2_enabled
 def camera_mount():
     """base_link -> camera_link as mounted since 24/08 (bumper build): 0.20 m
     BEHIND the lidar axis (metrox's tape), 0.56 m up (floor fit), nose 1.1 deg
@@ -150,18 +163,44 @@ def _nav_blueprint():
 nav_blueprint = _nav_blueprint()
 
 
+def _explorer_blueprint():
+    """The frontier explorer, old or new - see the module docstring for the flag.
+
+    goal_timeout=45 in both: 15 s was sized for the stock 0.55 m/s follower, and
+    at the capped 0.149 m/s a 3 m frontier needs ~25 s, so every goal timed out
+    mid-drive (4 goals, 0 reached, 25/08 21:31). min_frontier_perimeter=0.3 in
+    both: 0.5 m of perimeter hid the doorway-sized frontiers in this flat.
+    """
+    if explorer_v2_enabled():
+        from vector_dimos.explorer2 import Explorer2
+        # No info_gain_threshold, no num_no_gain_attempts, no lookahead_distance,
+        # no max_explored_distance: v2 has no self-stop and no distance-from-
+        # explored-goals term. Passing them would be silently ignored, so they
+        # are left out on purpose.
+        return Explorer2.blueprint(min_frontier_perimeter=0.3, goal_timeout=45.0)
+    from vector_dimos.fast_explorer import VectorExplorer
+    return VectorExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0,
+                                    min_frontier_perimeter=0.3,
+                                    # 1 % gain per goal made it quit once the first room was
+                                    # known while the workshop was still unknown (23/08 18:36,
+                                    # after 29 m): 0.1 %, 6 tries
+                                    info_gain_threshold=0.001, num_no_gain_attempts=6,
+                                    max_explored_distance=12.0,
+                                    goal_timeout=45.0)
+
+
 def _explore_blueprint():
     """Autonomous exploration with dimOS's own stack on top of `nav`:
     CostMapper -> ReplanningAStarPlanner (A* + its P controller -> nav_cmd_vel)
-    -> MovementManager (-> cmd_vel, the coordinator's twist) and the wavefront
-    frontier explorer choosing goals on the costmap. Start it by publishing
-    Bool(True) on `explore_cmd`; cap the speed with `dimos --nerf-speed 0.3`
-    (the local planner's default is 0.55 m/s)."""
+    -> MovementManager (-> cmd_vel, the coordinator's twist) and a frontier
+    explorer choosing goals on the costmap - explorer2 by default, the 25-26/08
+    wavefront one under EXPLORER_V2=0 (see the module docstring). Start it by
+    publishing Bool(True) on `explore_cmd`; cap the speed with
+    `dimos --nerf-speed 0.3` (the local planner's default is 0.55 m/s)."""
     from dimos.core.global_config import global_config
     from vector_dimos.camera import VectorCamera
     from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
-    from vector_dimos.fast_explorer import VectorExplorer
     from vector_dimos.esp_sensors import EspSensors
     from vector_dimos.imu_slip import ImuSlipDetector
     from vector_dimos.memory import VectorMemory
@@ -201,15 +240,7 @@ def _explore_blueprint():
         # verdict on all 18 recorded runs (worst case 13.9 %), so the honest number stays.
         RecoveringPlanner.blueprint(robot_width=0.50, robot_rotation_diameter=0.78),
         MovementManager.blueprint(),
-        VectorExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0, min_frontier_perimeter=0.3,
-                                            # 1 % gain per goal made it quit once the first room was known while the
-                                            # workshop was still unknown (23/08 18:36, after 29 m): 0.1 %, 6 tries
-                                            info_gain_threshold=0.001, num_no_gain_attempts=6,
-                                            max_explored_distance=12.0,
-                                            # 15 s was sized for the stock 0.55 m/s follower: at the capped
-                                            # 0.149 m/s a 3 m frontier needs ~25 s - every goal timed out mid-drive
-                                            # (4 goals, 0 reached, 25/08 21:31)
-                                            goal_timeout=45.0),
+        _explorer_blueprint(),
         StuckGuard.blueprint(),
         ImuSlipDetector.blueprint(),   # the body as witness: slip in 0.2-0.5 s, wheels in the air included
         # contact corners + sonar via the ESP32 USB bridge. Neither writes the map (sensor
