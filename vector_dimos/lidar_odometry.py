@@ -63,7 +63,10 @@ CAMERA_PITCH_RAD = math.radians(1.1)  # looks 1.1 deg DOWN (floor fit 24/08); ro
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 3                # one depth frame in three (15 fps -> 5 Hz)
 DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
-OBSTACLE_MAX_M = 0.0            # 25/08 22h: camera LOW-OBSTACLE layer SUSPENDED (0.0 = none). Even under
+OBSTACLE_MAX_M = 1.8            # 25/08 23h42: camera low-obstacle layer RE-ENABLED to 1.8 m. The 'marble
+                                # ghosts' were the lidar layer rotated 180 deg (fixed in rplidar_c1.py):
+                                # the camera was right all along. 1.8 m cap kept for far-range depth noise.
+                                # WAS suspended 22h with this note: Even under
                                 # 1.8 m the marble reflections re-walled the explorer while driving (566 low
                                 # cells, 0.5 m2 reachable, 0 frontiers - 3rd walled run in a row). Low objects
                                 # stay covered by sonar (<0.55 m ahead) + contact switches + footprint clearing.
