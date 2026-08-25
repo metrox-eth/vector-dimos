@@ -6,6 +6,12 @@ glass), this module publishes ``slip`` — the recovering planner stops and
 backs off, the odometry stops trusting the wheels, and the costmap rolls
 back the writes the sliding pose just made.
 
+It stays silent inside a `no_slip_reflex` zone (26/08). On a ramp the wheels
+DO slip, briefly and normally; tripping there cut the torque mid-climb and the
+rover slid back down. The zone only counts once the run has relocalized into
+the persistent frame - in a fresh-frame run those coordinates are somewhere
+else in the flat.
+
 It does NOT write the map (sensor doctrine, metrox 25/08): only the lidar
 and the camera put obstacles down. A slip says "something is here that I
 cannot see", which is a reason to back off, not a measurement — and the
@@ -31,6 +37,8 @@ from dimos.msgs.sensor_msgs.JointState import JointState
 from dimos_lcm.std_msgs import Bool  # the same class the planner / explorer / movement manager declare
 from dimos.utils.logging_config import setup_logger
 
+from vector_dimos import persistent_map
+
 logger = setup_logger()
 
 WINDOW_S = 1.5          # compare wheel vs lidar displacement over this window. 1.0 s fired on
@@ -46,6 +54,7 @@ class StuckGuard(Module):
     odom: In[PoseStamped]
     coordinator_joint_state: In[JointState]
     cmd_vel: In[Twist]                      # what the planner asks for
+    reloc_frame: In[PoseStamped]            # lidar_odometry: which frame we are in (the zones are drawn in the persistent one)
     slip: Out[Bool]                         # True on every trip: planner backs off 20 cm, odometry stops trusting the wheels, map rolls back
 
     def __init__(self, **kwargs: Any) -> None:
@@ -57,6 +66,8 @@ class StuckGuard(Module):
         self._last_debug = 0.0
         self.trips = 0
         self._cmd: deque[tuple[float, float]] = deque(maxlen=400)   # (t, |v| commanded)
+        self._quiet = persistent_map.ZoneWatch(persistent_map.NO_SLIP_REFLEX)
+        self._last_quiet_log = 0.0
 
     @rpc
     def start(self) -> None:
@@ -72,6 +83,12 @@ class StuckGuard(Module):
         q = msg.orientation if hasattr(msg, "orientation") else msg.pose.orientation
         yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
         self._lidar.append((time.monotonic(), float(p.x), float(p.y), yaw))
+
+    async def handle_reloc_frame(self, msg: PoseStamped) -> None:
+        if self._quiet.note_frame(str(getattr(msg, "frame_id", "") or "")):
+            logger.info("stuck guard: persistent frame "
+                        + ("live, no-slip-reflex zones now count" if self._quiet.persistent
+                           else "lost, no-slip-reflex zones ignored"))
 
     async def handle_cmd_vel(self, msg: Twist) -> None:
         v = math.hypot(float(msg.linear.x), float(msg.linear.y))
@@ -113,6 +130,13 @@ class StuckGuard(Module):
         # stuck = the wheels turned for real and the world did not move. Only
         # that: the "commanded speed" path fired on every slow start (23/08).
         if not (dw >= MIN_WHEEL_M and dl < MAX_RATIO * dw):
+            return
+        zone = self._quiet.at(l[2], l[3])          # l[2], l[3] = the latest lidar-odometry x, y
+        if zone is not None:
+            if now - self._last_quiet_log >= 5.0:
+                self._last_quiet_log = now
+                logger.info(f"stuck guard: wheels {dw:.2f} m, body {dl:.2f} m inside "
+                            f"'{zone}' - no slip published, the wheels are meant to slip there")
             return
         # stuck: wheels claim dw metres, the world says dl
         self._last_trip = now; self.trips += 1
