@@ -37,6 +37,16 @@ class RecoveringGlobalPlanner(GlobalPlanner):
     backup_speed_mps: float = BACKUP_SPEED_MPS
     backup_timeout_s: float = BACKUP_TIMEOUT_S
 
+    # dimOS PController enforces a 0.2 m/s floor (_min_linear_velocity) that
+    # silently overrides any NERF_SPEED cap below 0.2: the 0.149 m/s
+    # exploration cap came out as 0.2 on the wheels (seen 25/08 21:06).
+    # VECTOR drives cleanly at 0.10 m/s on hard floor (adherence matrix
+    # 101-111%, 25/08), so lower the floor and keep the cap real.
+    def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+        super().__init__(*args, **kwargs)
+        self._local_planner._controller._min_linear_velocity = 0.10
+        self._local_planner._controller._min_angular_velocity = 0.10
+
     def _replan_path(self) -> None:
         # Runs in the planner's monitoring thread. Upstream asserts a goal
         # exists; the goal can vanish (explorer cancels on "no path") while we

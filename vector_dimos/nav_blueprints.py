@@ -103,16 +103,28 @@ def _explore_blueprint():
         # width 0.46 + 4 cm: in discovery mode the rover drives along its length and turns in place,
         # so its lateral clearance is what matters (metrox, 23/08: 'pas de crabe pendant qu'on mappe');
         # 0.62 (a disc for the corners) walled off every 60-70 cm gap - 11 'no path' from a 50 cm clearance
-        RecoveringPlanner.blueprint(robot_width=0.50, robot_rotation_diameter=0.72),
+        # 62.5 x 46 cm with the bumper bars (metrox 25/08): real diagonal 0.776, so 0.78 is honest.
+        # Measured 25/08 on the newest costmap checkpoint (20260825-221223/costmap_224656.npz, 19.4 m2
+        # observed): 3084 observed free cells clear an inflation radius of 0.39 m, 3278 clear 0.36 m -
+        # 0.78 costs 5.9 % of the goal-capable space, not the walling-off it was suspected of. Same
+        # verdict on all 18 recorded runs (worst case 13.9 %), so the honest number stays.
+        RecoveringPlanner.blueprint(robot_width=0.50, robot_rotation_diameter=0.78),
         MovementManager.blueprint(),
         VectorExplorer.blueprint(safe_distance=0.35, lookahead_distance=4.0, min_frontier_perimeter=0.3,
                                             # 1 % gain per goal made it quit once the first room was known while the
                                             # workshop was still unknown (23/08 18:36, after 29 m): 0.1 %, 6 tries
                                             info_gain_threshold=0.001, num_no_gain_attempts=6,
-                                            max_explored_distance=12.0, goal_timeout=15.0),
+                                            max_explored_distance=12.0,
+                                            # 15 s was sized for the stock 0.55 m/s follower: at the capped
+                                            # 0.149 m/s a 3 m frontier needs ~25 s - every goal timed out mid-drive
+                                            # (4 goals, 0 reached, 25/08 21:31)
+                                            goal_timeout=45.0),
         StuckGuard.blueprint(),
         ImuSlipDetector.blueprint(),   # the body as witness: slip in 0.2-0.5 s, wheels in the air included
-        EspSensors.blueprint(),       # contact corners + sonar via the ESP32 USB bridge (front bump = back off, rear bump = move forward, sonar patches < 0.55 m)
+        # contact corners + sonar via the ESP32 USB bridge. Neither writes the map (sensor
+        # doctrine, 25/08): front bump = back off, rear bump = move forward, sonar = the forward
+        # brake in adapter.py (creep under 0.55 m, stop under 0.30 m).
+        EspSensors.blueprint(),
         VectorMemory.blueprint(),    # every run recorded (dimOS memory): replay, draw, tune planners without the robot
         # 512MB replay history instead of the 25% default: on the 8 GB Jetson
         # that default let the Rerun bridge grow to 2.7 GB (measured 24/08).

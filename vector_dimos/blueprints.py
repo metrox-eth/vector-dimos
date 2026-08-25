@@ -42,7 +42,9 @@ from dimos.control.components import (HardwareComponent, HardwareType,
                                       make_twist_base_joints)
 from dimos.control.coordinator import ControlCoordinator, TaskConfig
 from dimos.core.coordination.blueprints import autoconnect
+from dimos.core.stream import In
 from dimos.hardware.drive_trains.registry import twist_base_adapter_registry
+from dimos.msgs.std_msgs.Float32 import Float32
 
 # Register the VECTOR adapter under its name (idempotent-guarded).
 try:
@@ -66,16 +68,33 @@ _base_joints = make_twist_base_joints("base")
 class VectorControlCoordinator(ControlCoordinator):
     """Stock ControlCoordinator, deployed under this package's import path.
 
-    No behaviour is added or changed. Its only job is to make the forkserver
-    worker import vector_dimos.blueprints (see this module's docstring), which
-    is what registers the 'vector' twist base adapter in the process that
-    actually instantiates it.
+    Two jobs, both of them plumbing:
+
+    1. make the forkserver worker import vector_dimos.blueprints (see this
+       module's docstring), which is what registers the 'vector' twist base
+       adapter in the process that actually instantiates it;
+    2. carry `sonar_range` (metres, from vector_dimos.esp_sensors) down to
+       that adapter's forward brake. The adapter is not a dimOS module - it is
+       built by this coordinator, inside this process - so the stream has to
+       land here and be handed over. The braking itself lives in
+       adapter.brake_forward, at the point where a twist becomes wheel RPM.
     """
+
+    sonar_range: In[Float32]
 
     # Run the control loop in its own process. Measured 2026-08-23: sharing a
     # worker (and its GIL) with the RealSense point cloud left a 1 s twist
     # executing for 1.49 s even with the command queue clamped to one.
     dedicated_worker = True
+
+    async def handle_sonar_range(self, msg: Float32) -> None:
+        """Hand the front distance to every adapter that wants it."""
+        distance = float(getattr(msg, "data", 0.0))
+        # snapshot: _hardware is mutated under a threading lock by add/remove
+        for connected in list(self._hardware.values()):
+            note = getattr(connected.adapter, "note_sonar_range", None)
+            if callable(note):
+                note(distance)
 
 
 def _vector_base(hw_id: str = "base",

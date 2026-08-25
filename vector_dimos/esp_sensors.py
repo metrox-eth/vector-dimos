@@ -6,54 +6,62 @@ The ESP firmware (firmware/esp32_sonar/) prints:
     SW a b c d     on every debounced change + 500 ms heartbeat (1 = pressed)
     SONAR <m>      at 10 Hz (-1 = no echo)
 
-This module feeds the SAME outputs the old GPIO BumperSonar fed, so the
-costmap and the recovering planner wiring stay untouched, plus a rear line:
-- ``bump``      (Bool) front corner contact  -> planner: stop, back off, replan
-- ``bump_rear`` (Bool) rear corner contact   -> planner: stop, move forward, replan
-- ``lidar``     (PointCloud2) world-frame obstacle patches into the costmap
+Sensor doctrine (metrox, 25/08): this module does NOT write the map. The
+lidar is the backbone of localization and mapping; the RealSense camera is
+the only other sensor allowed to put obstacles down. The switches and the
+sonar are reflexes:
+
+- ``bump``        (Bool) front corner contact -> planner: stop, back off, replan
+- ``bump_rear``   (Bool) rear corner contact  -> planner: stop, move forward, replan
+- ``sonar_range`` (Float32, metres) front proximity -> the base adapter's
+  forward brake (adapter.brake_forward). A reading is a speed limit for the
+  next second, never a fact about the world.
 
 Corner map (validated live 25/08 17h37): SW order = GPIO 1,2,3,4 =
 avant-gauche, arriere-gauche, arriere-droit, avant-droit.
-Sonar: front centre, usable range measured by metrox = 66 cm -> trust cap
-0.55 m (regle du monde 17). Median of 3, spread < 0.10 m.
+Sonar: front centre of the bumper, usable range measured by metrox = 66 cm
+-> trust cap 0.55 m (regle du monde 17). Median of 3, spread < 0.10 m.
 """
 
 from __future__ import annotations
 
 import logging
-import math
 import threading
 import time
 from typing import Any
 
-import numpy as np
-
 from dimos.core.core import rpc
 from dimos.core.module import Module
-from dimos.core.stream import In, Out
-from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
-from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+from dimos.core.stream import Out
+from dimos.msgs.std_msgs.Float32 import Float32
 from dimos_lcm.std_msgs import Bool
 
 logger = logging.getLogger(__name__)
 
+
+def _log(msg: str) -> None:
+    """Worker INFO logs are swallowed: print to stderr (lesson from respeaker)."""
+    import sys
+    print(f"[esp_sensors] {msg}", file=sys.stderr, flush=True)
+
 ESP_PORT = "/dev/serial/by-id/usb-Espressif_Systems_Espressif_Device_80b54ee325280000-if00"
 ESP_BAUD = 115200
 
-# SW index -> (nom, position corps (x, y), arriere ?)
-CORNERS = (
-    ("avant-gauche",  (0.30,  0.20), False),
-    ("arriere-gauche", (-0.30, 0.20), True),
-    ("arriere-droit", (-0.30, -0.20), True),
-    ("avant-droit",   (0.30, -0.20), False),
+# SW index -> (name, body position (x, y), rear?)
+CORNERS = (   # body 62.5 x 46 cm with the bumper bars (metrox 25/08 22h)
+    ("avant-gauche",  (0.31,  0.23), False),
+    ("arriere-gauche", (-0.31, 0.23), True),
+    ("arriere-droit", (-0.31, -0.23), True),
+    ("avant-droit",   (0.31, -0.23), False),
 )
-SONAR_XY = (0.30, 0.0)          # centre du pare-chocs avant (a confirmer si demonte)
-SONAR_MAX_TRUSTED = 0.55        # regle du monde 17 (66 cm mesures, marge)
+SONAR_MAX_TRUSTED = 0.55        # regle du monde 17 (66 cm measured, margin)
 SONAR_MEDIAN = 3
 SONAR_SPREAD_MAX = 0.10
 CONTACT_COOLDOWN_S = 1.0
-PATCH_HALF_W = 0.10
-PATCH_Z = (0.15, 0.30, 0.45, 0.60)
+SONAR_PUBLISH_PERIOD_S = 0.2    # <= 5 Hz on sonar_range
+SONAR_CLEAR_AFTER_S = 1.0       # nothing believable for this long = the way is clear
+SONAR_CLEAR_PERIOD_S = 1.0      # heartbeat rate while clear
+SONAR_CLEAR_M = 9.9             # "clear" value: past every brake threshold
 
 
 def parse_line(line: str):
@@ -90,23 +98,48 @@ class SonarFilter:
         return sorted(self._readings)[SONAR_MEDIAN // 2]
 
 
-class EspSensors(Module):
-    """Ins: odom (world placement). Outs: bump, bump_rear, lidar (patches)."""
+def sonar_publication(median: float | None, clear_for_s: float,
+                      since_publish_s: float) -> float | None:
+    """What to publish on ``sonar_range`` right now, in metres, or None.
 
-    odom: In[PoseStamped]
+    Two cases, and nothing in between:
+
+    * a fresh filtered median (something is within the trust cap) -> that
+      distance, at most one publication per SONAR_PUBLISH_PERIOD_S (5 Hz);
+    * no believable echo for SONAR_CLEAR_AFTER_S (the sonar reported no echo,
+      or every echo was past the trust cap) -> SONAR_CLEAR_M once per
+      SONAR_CLEAR_PERIOD_S. That heartbeat is what releases the brake in
+      adapter.brake_forward; without it the brake would simply age out.
+
+    A close but noisy burst (spread gate rejects it) publishes nothing: the
+    brake keeps its last value until it ages out. Pure — cold-testable.
+    """
+    if median is not None:
+        return float(median) if since_publish_s >= SONAR_PUBLISH_PERIOD_S else None
+    if clear_for_s >= SONAR_CLEAR_AFTER_S and since_publish_s >= SONAR_CLEAR_PERIOD_S:
+        return SONAR_CLEAR_M
+    return None
+
+
+class EspSensors(Module):
+    """Outs: bump, bump_rear (safety reflexes), sonar_range (proximity brake).
+
+    No map-writing Out by design — see the module docstring.
+    """
+
     bump: Out[Bool]
     bump_rear: Out[Bool]
-    lidar: Out[PointCloud2]
+    sonar_range: Out[Float32]
 
     def __init__(self, port: str = ESP_PORT, enabled: bool = True,
-                 world_frame: str = "world", **kwargs: Any) -> None:
+                 **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self.port, self.enabled, self.world_frame = port, enabled, world_frame
-        self._pose = (0.0, 0.0, 0.0)
+        self.port, self.enabled = port, enabled
         self._sw = (0, 0, 0, 0)
         self._last_contact = 0.0
         self._sonar = SonarFilter()
-        self._last_sonar_patch = 0.0
+        self._last_sonar_publish = 0.0
+        self._clear_since: float | None = None
         self._running = False
         self.contacts = 0
 
@@ -125,25 +158,20 @@ class EspSensors(Module):
         self._running = False
         super().stop()
 
-    async def handle_odom(self, msg: PoseStamped) -> None:
-        q = msg.orientation
-        yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
-        self._pose = (float(msg.position.x), float(msg.position.y), yaw)
-
     # ---- serial -------------------------------------------------------------
     def _serial_loop(self) -> None:
         import serial
         while self._running:
             try:
                 ser = serial.Serial(self.port, ESP_BAUD, timeout=2.0)
-                logger.info("esp_sensors: liaison ESP ouverte (%s)", self.port)
+                _log(f"ESP link open ({self.port})")
                 while self._running:
                     line = ser.readline().decode(errors="replace")
                     if not line:
                         continue
                     self._handle_line(line)
-            except Exception as e:  # noqa: BLE001 - l'ESP peut etre debranche
-                logger.warning("esp_sensors: liaison perdue (%s), retry dans 2 s", e)
+            except Exception as e:  # noqa: BLE001 - the ESP can be unplugged
+                _log(f"ESP link LOST ({e}), retrying in 2 s")
                 time.sleep(2.0)
 
     def _handle_line(self, line: str) -> None:
@@ -155,35 +183,30 @@ class EspSensors(Module):
             prev, self._sw = self._sw, value
             for i in range(4):
                 if value[i] and not prev[i]:
-                    name, xy, rear = CORNERS[i]
-                    self._contact(name, xy, rear)
+                    name, _xy, rear = CORNERS[i]
+                    self._contact(name, rear)
+            return
+        now = time.monotonic()
+        median = self._sonar.feed(value)
+        # "clear" = no echo at all, or an echo past the trust cap
+        if value <= 0 or value > SONAR_MAX_TRUSTED:
+            if self._clear_since is None:
+                self._clear_since = now
         else:
-            med = self._sonar.feed(value)
-            if med is not None and time.monotonic() - self._last_sonar_patch > 0.5:
-                self._last_sonar_patch = time.monotonic()
-                self._publish_patch((SONAR_XY[0] + med, SONAR_XY[1]))
+            self._clear_since = None
+        clear_for = 0.0 if self._clear_since is None else now - self._clear_since
+        out = sonar_publication(median, clear_for, now - self._last_sonar_publish)
+        if out is not None:
+            self._last_sonar_publish = now
+            self.sonar_range.publish(Float32(data=out))
 
     # ---- contacts -----------------------------------------------------------
-    def _contact(self, name: str, body_xy: tuple[float, float], rear: bool) -> None:
+    def _contact(self, name: str, rear: bool) -> None:
         now = time.monotonic()
         if now - self._last_contact < CONTACT_COOLDOWN_S:
             return
         self._last_contact = now
         self.contacts += 1
-        self._publish_patch(body_xy)
         (self.bump_rear if rear else self.bump).publish(Bool(data=True))
-        logger.warning("BUMP #%d: %s (%s) -> stop, degage, replanifie",
-                       self.contacts, name, "arriere" if rear else "avant")
-
-    def _publish_patch(self, body_xy: tuple[float, float]) -> None:
-        x, y, yaw = self._pose
-        c, s = math.cos(yaw), math.sin(yaw)
-        wx = x + c * body_xy[0] - s * body_xy[1]
-        wy = y + s * body_xy[0] + c * body_xy[1]
-        px, py = -s, c
-        pts = [(wx + t * px, wy + t * py, z)
-               for t in np.linspace(-PATCH_HALF_W, PATCH_HALF_W, 5) for z in PATCH_Z]
-        cloud = PointCloud2.from_numpy(np.asarray(pts, dtype=np.float32),
-                                       frame_id=self.world_frame, timestamp=time.time())
-        for _ in range(3):
-            self.lidar.publish(cloud)
+        _log(f"BUMP #{self.contacts}: {name} ({'rear' if rear else 'front'}) "
+             "-> stop, back off, replan")

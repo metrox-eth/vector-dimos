@@ -54,7 +54,8 @@ def guard_scenario(wheel_speed: float, lidar_speed: float, seconds: float = 2.5)
 
 def test_guard_trips_fast_and_publishes_slip() -> None:
     trips, slips, t = guard_scenario(0.20, 0.0)
-    assert trips >= 1 and slips == trips and t is not None and t < 1.5, (trips, slips, t)
+    # detection needs one full comparison window: bound = WINDOW_S + a scheduler margin
+    assert trips >= 1 and slips == trips and t is not None and t < 2.0, (trips, slips, t)
     print(f"  wheels 0.20 m/s, lidar still -> slip published after {t:.1f} s")
     assert guard_scenario(0.20, 0.19)[0] == 0
     assert guard_scenario(0.03, 0.01)[0] == 0

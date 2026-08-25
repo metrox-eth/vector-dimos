@@ -50,6 +50,14 @@ Two things a partial bus failure deliberately does NOT do:
     the healthy axle should be zeroed instead is a chassis decision, not
     a default - tests/test_adapter_bus_faults.py pins today's behaviour.
 
+This is also the last thing the twist passes through before it becomes wheel
+RPM, which is why the sonar proximity brake lives here (see brake_forward and
+the SONAR_* constants): the ESP32 sonar is a brake, not a mapper. It clamps
+the FORWARD component only - reverse and rotation are never touched, because
+the sonar looks forward and backing away from what it sees must always be
+allowed. No reading, or a reading older than SONAR_MAX_AGE_S, means no brake
+at all: the sonar is an aid, and losing it must not immobilise the rover.
+
 SERIAL_TIMEOUT_S is what a silent drive costs: pymodbus 2.5 waits the whole
 response timeout before handing back its ModbusIOException, so one silent
 controller adds that much to every read and every write of a control tick.
@@ -100,8 +108,75 @@ FEEDBACK_MOVING_RPM = 0.5    # |feedback| below this reads as "not turning"
 # tick loop talks to the bus far more often than this, so it never trips.
 COMM_OFFLINE_MS = 1000
 
+# Sonar proximity brake (vector_dimos.esp_sensors publishes `sonar_range` in
+# metres; blueprints.VectorControlCoordinator forwards it to note_sonar_range).
+SONAR_STOP_M = 0.30          # under this, no forward motion at all
+SONAR_SLOW_M = 0.55          # under this, forward motion creeps (the sonar's trust cap)
+SONAR_CREEP_MPS = 0.05       # what "slow" means: enough to close on a target, not to ram it
+SONAR_RELEASE_MARGIN_M = 0.05  # a level releases 5 cm further out than it engaged (no chatter)
+SONAR_MAX_AGE_S = 1.5        # older than this = no data = no brake
+
 _TRUTHY = {"1", "true", "yes", "on"}
 _LOGGER = None
+
+
+class SonarBrake:
+    """The brake's latch: which clamp is currently engaged.
+
+    Three levels (FREE / CREEP / STOP). A level engages at its threshold and
+    releases SONAR_RELEASE_MARGIN_M further out, so a reading sitting on a
+    threshold does not toggle the clamp on every 5 Hz sample.
+    """
+
+    FREE, CREEP, STOP = 0, 1, 2
+
+    def __init__(self) -> None:
+        self.level = self.FREE
+
+    def update(self, sonar_m: float | None, age_s: float) -> int:
+        """New level for this reading. Stale or missing data releases."""
+        if sonar_m is None or age_s > SONAR_MAX_AGE_S:
+            self.level = self.FREE
+            return self.level
+        margin = SONAR_RELEASE_MARGIN_M
+        stop_at = SONAR_STOP_M + (margin if self.level == self.STOP else 0.0)
+        slow_at = SONAR_SLOW_M + (margin if self.level >= self.CREEP else 0.0)
+        if sonar_m < stop_at:
+            self.level = self.STOP
+        elif sonar_m < slow_at:
+            self.level = self.CREEP
+        else:
+            self.level = self.FREE
+        return self.level
+
+
+_BRAKE = SonarBrake()
+
+
+def brake_forward(vx: float, sonar_m: float | None, age_s: float,
+                  brake: SonarBrake | None = None) -> float:
+    """Forward speed the sonar allows, in m/s. Pure apart from the latch.
+
+    Args:
+        vx: commanded body-forward speed (m/s). Negative = reverse.
+        sonar_m: last front distance in metres, or None if nothing was ever
+            received. esp_sensors publishes 9.9 as its "clear" heartbeat.
+        age_s: age of that reading in seconds.
+        brake: the latch to use (hysteresis state). Defaults to the module
+            one, which is what the cold bench exercises.
+
+    No reading, or a reading older than SONAR_MAX_AGE_S, returns vx unchanged.
+    That is a deliberate choice: the sonar is an aid, not a dependency, and a
+    dead ESP32 must not be able to immobilise the rover - the contact switches
+    and the lidar are still there. Reverse and rotation are never clamped: the
+    sonar looks forward, and backing out of a corner must always work.
+    """
+    level = (_BRAKE if brake is None else brake).update(sonar_m, age_s)
+    if vx <= 0.0 or level == SonarBrake.FREE:
+        return vx
+    if level == SonarBrake.STOP:
+        return 0.0
+    return min(vx, SONAR_CREEP_MPS)
 
 
 def _log():
@@ -187,6 +262,10 @@ class VectorBaseAdapter:
         # odometry integration state
         self._pose = [0.0, 0.0, 0.0]
         self._last_t: float | None = None
+        # sonar proximity brake: last reading (m), when it arrived, and the latch
+        self._sonar_m: float | None = None
+        self._sonar_t: float | None = None
+        self._brake = SonarBrake()
 
     # ── introspection ──────────────────────────────────────────────────
     @property
@@ -203,6 +282,35 @@ class VectorBaseAdapter:
     def read_failure_count(self) -> int:
         """Consecutive failed wheel-feedback reads (0 = healthy)."""
         return self._read_failures
+
+    # ── sonar proximity brake ──────────────────────────────────────────
+    def note_sonar_range(self, distance_m: float) -> None:
+        """Feed the front sonar distance (metres) to the forward brake.
+
+        Called from the coordinator's `sonar_range` handler (blueprints.py),
+        which runs in this process. Anything at or past SONAR_SLOW_M - the
+        9.9 m "clear" heartbeat included - simply releases the brake.
+        """
+        with self._lock:
+            self._sonar_m = float(distance_m)
+            self._sonar_t = time.monotonic()
+
+    def _brake_vx(self, vx: float) -> float:
+        """Apply the sonar brake to the forward component and log the changes.
+
+        One line per clamp state CHANGE, never per tick: the brake engages for
+        as long as the sofa is there, and a per-tick line would bury the log.
+        """
+        age = (SONAR_MAX_AGE_S + 1.0 if self._sonar_t is None
+               else time.monotonic() - self._sonar_t)
+        before = self._brake.level
+        out = brake_forward(vx, self._sonar_m, age, self._brake)
+        if self._brake.level != before:
+            if self._brake.level == SonarBrake.FREE:
+                _log().info("sonar brake: released")
+            else:
+                _log().info(f"sonar brake: engaged at {self._sonar_m:.2f} m")
+        return out
 
     # ── connection ─────────────────────────────────────────────────────
     def connect(self) -> bool:
@@ -402,12 +510,17 @@ class VectorBaseAdapter:
         Both controllers are written independently: a failure on one does
         not hold back the other, so a one-sided bus outage leaves the
         healthy axle following commands. See the module docstring.
+
+        The forward component passes the sonar brake first: this is the last
+        place a twist can still be slowed before it is wheel RPM, so nothing
+        upstream can drive into the sofa by ignoring it.
         """
         try:
             with self._lock:
                 if self._front is None or self._back is None:
                     return False
                 vx, vy, wz = velocities
+                vx = self._brake_vx(vx)
                 w_fl, w_fr, w_bl, w_br = inverse(vx, vy, wz, self._geometry)
                 # left ports inverted (v1 convention: negative = forward)
                 raw = (round(-rads_to_rpm(w_fl)), round(rads_to_rpm(w_fr)),
