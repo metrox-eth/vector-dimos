@@ -117,6 +117,61 @@ powered) that says whether a driver is talking on the port at all.
 What that run does and does not do yet on the robot itself is recorded in
 [docs/jetson_orin_nano.md](docs/jetson_orin_nano.md).
 
+## The map as a persistent asset
+
+Until 2026-08-26 every restart of the stack birthed an amnesiac map with a
+fresh arbitrary origin. Three things followed: hand-carrying the rover
+corrupted the map (the new room scan-matched against a stale memory, and the
+walls came out offset), keep-out zones could not exist because there was no
+stable frame to draw them in, and every session rebuilt the flat from nothing.
+
+Now the map is a file the rover comes back to.
+
+```
+~/.local/state/vector/persistent_map.npz          the flat
+~/.local/state/vector/persistent_map.<stamp>.npz  the 5 previous generations
+~/.local/state/vector/keepout.json                the zones drawn on it
+```
+
+At boot, `lidar_odometry` matches its first revolutions against that map
+(`vector_dimos/relocalize2d.py`: multi-resolution correlative scan matching in
+numpy — dimOS's own relocalization brick is FPFH+RANSAC on 3D clouds and needs
+50 000 points with real normals, which a 400-point planar scan cannot give).
+On acceptance it sets the odometry origin, so the continued map shares the
+saved frame; on rejection the run starts fresh exactly as before, with the
+score numbers in the log. Nothing is written to the map while the search runs.
+The same search re-runs when the body is moved without the wheels.
+
+Measured on two runs of the flat (`tools/reloc_proof.py`): a scan whose answer
+is known lands 3.0 cm and 0.16 deg off, score 0.985, walls overlapping to
+0.0 cm; a scan of a room the map has never seen is refused at score 0.473.
+
+### Zones
+
+```console
+$ python tools/keepout.py list
+$ python tools/keepout.py add toilettes 0.55 -9.95 2.65 -6.65
+$ python tools/keepout.py add rampe -3.0 -8.2 -1.95 -7.75 --type no_slip_reflex
+$ python tools/keepout.py rm toilettes
+```
+
+Coordinates are metres in the persistent frame — read them off the Rerun map by
+hovering it. `forbidden` cells become occupied AFTER every costmap layer, so no
+lidar ray, no camera floor sample and no `body_clear` can erase them.
+`no_slip_reflex` marks a place where the wheels are MEANT to slip (a ramp): the
+rover may go there, but `stuck_guard` and `ImuSlipDetector` stay quiet inside
+it instead of cutting the torque mid-climb. Zones apply only to a run that
+relocalized into the persistent frame, and the log says so when they do not.
+An edit is picked up within about half a minute — no restart.
+
+`PERSISTENT_MAP=0` turns the whole thing off: no relocalization, no saved map,
+no zones. `PERSISTENT_MAP_REBASE=1` lets a run that did NOT relocalize replace
+the saved flat (off by default: it would move the flat under the zones).
+
+```console
+$ python tests/test_relocalization_cold.py   # 73 checks: known pose in, known pose out
+```
+
 ## Layout
 
 ```
@@ -130,6 +185,15 @@ vector_dimos/
   wheel_odom.py    # optional standalone Odometry stream — no blueprint deploys it
                    # (the base blueprint already gets odometry from the adapter)
   mock.py          # mock MODBUS client for the cold benches
+  lidar_odometry.py  # kiss-icp scan-to-map + the frame the map lives in (relocalization)
+  costmap2d.py       # the 2D map that learns and unlearns, checkpoints, keep-out cells
+  relocalize2d.py    # global 2D relocalization: a scan back onto a saved map (numpy only)
+  persistent_map.py  # the saved map, its generations, and the zone file
+  stuck_guard.py     # wheels turn, world does not -> slip (quiet inside a no_slip_reflex zone)
+  imu_slip.py        # the body as witness: slip in 0.2-0.5 s (same zone rule)
+tools/
+  keepout.py       # declare the zones, in metres, in the persistent frame
+  reloc_proof.py   # prove the relocalizer on recorded runs, in centimetres
 docs/
   hardware.md            # what VECTOR is made of
   localization.md        # the localization doctrine
