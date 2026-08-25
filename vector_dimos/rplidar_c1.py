@@ -111,10 +111,14 @@ def scan_to_points(scan: list[tuple[float, float, float]],
     0) and the mast's own reflection (inside ``mask`` and closer than
     ``mask_range_m``) are dropped.
     """
-    return [(*polar_to_xy(angle, distance), 0.0)
-            for (quality, angle, distance) in scan
-            if quality >= min_quality and distance > MIN_RANGE_M * 1000.0
-            and not _in_mask(angle, distance / 1000.0, mask, mask_range_m)]
+    pts = [(*polar_to_xy(angle, distance), 0.0)
+           for (quality, angle, distance) in scan
+           if quality >= min_quality and distance > MIN_RANGE_M * 1000.0
+           and not _in_mask(angle, distance / 1000.0, mask, mask_range_m)]
+    # Anything landing INSIDE the body rectangle is the rover itself (the mast
+    # foot survived the +-12 deg mask by 2 cells at boot, 26/08). Geometric,
+    # angle-free: body 0.625 x 0.46 m + 2 cm margin around the lidar centre.
+    return [p for p in pts if abs(p[0]) > 0.33 or abs(p[1]) > 0.25]
 
 
 class RPLidarC1(Module):
