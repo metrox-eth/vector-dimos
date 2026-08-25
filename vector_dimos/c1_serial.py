@@ -37,6 +37,27 @@ class C1Scanner:
         self._ser = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
         self._ser.dtr = False
         self.stop()
+        self._wake()
+
+    def _wake(self) -> None:
+        """Le C1 reste parfois engourdi apres un debranchement a chaud : sa
+        liaison ne repond plus jusqu'a recevoir un deluge de requetes
+        (constate et resolu le 25/08). On sonde GET_INFO ; si silence, on
+        martele A5 50 jusqu'a 6 s puis on re-sonde."""
+        try:
+            self.info()
+            return
+        except Exception:  # noqa: BLE001 - engourdi, on le reveille
+            pass
+        deadline = time.monotonic() + 6.0
+        while time.monotonic() < deadline:
+            self._ser.write(bytes([0xA5, 0x50]) * 50)
+            time.sleep(0.1)
+        self._ser.reset_input_buffer()
+        try:
+            self.info()
+        except Exception:  # noqa: BLE001
+            raise RuntimeError("lidar muet meme apres le reveil-rafale")
 
     def close(self) -> None:
         if self._ser is not None:

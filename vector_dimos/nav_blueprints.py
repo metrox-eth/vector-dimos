@@ -71,7 +71,7 @@ def _explore_blueprint():
     from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
     from vector_dimos.fast_explorer import VectorExplorer
-    from vector_dimos.bumper import BumperSonar
+    from vector_dimos.esp_sensors import EspSensors
     from vector_dimos.imu_slip import ImuSlipDetector
     from vector_dimos.memory import VectorMemory
     from dimos.navigation.movement_manager.movement_manager import MovementManager
@@ -112,7 +112,7 @@ def _explore_blueprint():
                                             max_explored_distance=12.0, goal_timeout=15.0),
         StuckGuard.blueprint(),
         ImuSlipDetector.blueprint(),   # the body as witness: slip in 0.2-0.5 s, wheels in the air included
-        BumperSonar.blueprint(),       # the muzzle: 4 switches (contact = learned + back off) + sonar (map ahead, stop under 15 cm); degrades to no-op without GPIO
+        EspSensors.blueprint(),       # contact corners + sonar via the ESP32 USB bridge (front bump = back off, rear bump = move forward, sonar patches < 0.55 m)
         VectorMemory.blueprint(),    # every run recorded (dimOS memory): replay, draw, tune planners without the robot
         # 512MB replay history instead of the 25% default: on the 8 GB Jetson
         # that default let the Rerun bridge grow to 2.7 GB (measured 24/08).
