@@ -916,11 +916,24 @@ def run_v2(world: World, start: tuple[float, float], heading: float) -> Run:
 
         if target is None:
             sim.run.end_reason = "next_target returned None: no reachable frontier left"
-            # Audit: was that true? Re-decide from a blank memory - no
-            # exclusions, no revisit fade - and see whether a FRONTIER target
-            # existed after all. A wait or a back-off is not one: those are
-            # states the loop was already in and had already acted on.
-            audit = ExploreState(heading=state.heading)
+            # Audit: was that true? Re-decide with the run's TIMERS and
+            # preferences erased - no failed-goal exclusions, no goals-issued
+            # memory, so no revisit fade and no spent viewpoints - and see
+            # whether a FRONTIER target existed after all. A wait or a back-off
+            # is not one: those are states the loop was already in and had
+            # already acted on.
+            #
+            # What is NOT erased is `observed`: where the rover physically
+            # stood and took a full lidar revolution. That is geometry, and the
+            # contract this harness scores says in as many words that a run may
+            # end on it ("only frontiers the rover has already stood at and
+            # looked from"). Erasing it would ask a different question - would
+            # an amnesiac rover teleported here have somewhere to look - whose
+            # answer is yes for as long as one unknown cell remains anywhere.
+            # Note the direction: keeping it can only ever find FEWER targets,
+            # so no run's score improves by this and none of the numbers taken
+            # before it changes.
+            audit = ExploreState(heading=state.heading, observed=list(state.observed))
             second = next_target(costmap, pose, audit, now=sim.t)
             if second is not None and getattr(second, "directive", "") == "frontier":
                 sim.run.false_extinctions += 1
@@ -944,6 +957,7 @@ def run_v2(world: World, start: tuple[float, float], heading: float) -> Run:
 
         goal = (float(target.position.x), float(target.position.y))
         sim.run.goals_published += 1
+        gap_at_issue = math.hypot(goal[0] - sim.x, goal[1] - sim.y)
         outcome = sim.drive(goal)
         if outcome == "blocked":
             sim.run.goals_no_path += 1
@@ -955,6 +969,12 @@ def run_v2(world: World, start: tuple[float, float], heading: float) -> Run:
             sim.run.goals_reached += 1
         else:
             sim.run.goals_timed_out += 1
+            # Explorer2._run_exploration_loop, GOAL_PROGRESS_M: a drive that
+            # timed out without closing the gap is excluded (§7.1), one that is
+            # still closing it is simply re-decided. The loop is what this
+            # harness replays, so it replays this too.
+            if gap_at_issue - math.hypot(goal[0] - sim.x, goal[1] - sim.y) < ARRIVE_M:
+                state.note_failed(goal[0], goal[1], sim.t)
     sim.run.sim_s = sim.t
     sim.run.coverage_curve.append((sim.run.path_m, sim.area_m2))
     return sim.run

@@ -328,6 +328,196 @@ check("a real unknown pocket inside the room IS a frontier -> a target",
 
 
 # ===========================================================================
+print("H. fresh ground beats ground already worked (ticket 1, run B goal 10)")
+
+# Two mirror-image doors. Test B has already shown that, facing east, the east
+# door wins. Now the rover has already been sent to the east door once - and
+# has been somewhere else since - so the east door is a REVISIT.
+g = door(door(room(), "east", 70, 24), "west", 70, 24)
+cm = Grid(g)
+centre = w_of(70)
+
+plain = next_target(cm, pose(centre, centre, 0.0), ExploreState(), now=100.0)
+assert plain is not None
+east_goal = (plain.position.x, plain.position.y)
+check("(setup) facing east with no memory, the east door is the pick",
+      east_goal[0] > centre, f"x = {east_goal[0]:.2f}")
+
+faded = next_target(cm, pose(centre, centre, 0.0),
+                    ExploreState(visited=[east_goal, (-9.0, -9.0)]), now=100.0)
+check("a door already published, with a goal since, loses to the fresh one",
+      faded is not None and faded.position.x < centre,
+      f"x = {faded.position.x:.2f}" if faded else "None")
+
+# ... but the goal it was driving to when it last stopped is not a revisit:
+# that one is unfinished business and must not be dropped.
+current = next_target(cm, pose(centre, centre, 0.0),
+                      ExploreState(visited=[(-9.0, -9.0), east_goal]), now=100.0)
+check("the goal just attempted keeps its score: no fade on unfinished business",
+      current is not None and current.position.x > centre,
+      f"x = {current.position.x:.2f}" if current else "None")
+
+# The fade is the SQUARE of the distance: at half the revisit radius a cluster
+# keeps a quarter of its score, not a half. One door, so the same cluster comes
+# back either way and only the fade differs.
+one_door = Grid(door(room(), "east", 70, 24))
+clean = next_target(one_door, pose(centre, centre, 0.0), ExploreState(), now=100.0)
+assert clean is not None
+half = (clean.position.x - DEFAULT_TUNING.revisit_radius_m / 2, clean.position.y)
+faded_half = next_target(one_door, pose(centre, centre, 0.0),
+                         ExploreState(visited=[half, (-9.0, -9.0)]), now=100.0)
+ratio = (faded_half.score / clean.score) if faded_half is not None else None
+check("a cluster half a revisit radius from an older goal keeps a QUARTER of its score",
+      ratio is not None and abs(ratio - 0.25) < 1e-9, f"ratio {ratio}")
+
+
+# ===========================================================================
+print("H2. the gain is what the viewpoint can SEE, not unknown behind the wall")
+
+# Same room, two doors. Behind the east door, a cupboard: 0.35 m of unknown
+# closed by walls. Behind the west door, open unknown. The two frontiers have
+# the same cell count and the same distance, and the rover faces EAST, so a
+# gain that counts unknown through a wall picks the cupboard.
+g = door(door(room(), "east", 70, 24), "west", 70, 24)
+g[57:83, 117] = OCCUPIED           # cupboard back wall, 0.35 m beyond the door
+g[57, 110:118] = OCCUPIED          # and its two sides
+g[82, 110:118] = OCCUPIED
+cm = Grid(g)
+seen = next_target(cm, pose(centre, centre, 0.0), ExploreState(), now=100.0)
+check("facing the cupboard, the rover still takes the door with a room behind it",
+      seen is not None and seen.position.x < centre,
+      f"x = {seen.position.x:.2f}" if seen else "None")
+check("and the gain it reports is a fraction of a disc, not a cell count",
+      seen is not None and 0.0 <= seen.info_gain <= 1.0, f"{seen.info_gain}" if seen else "")
+
+
+# ===========================================================================
+print("I. shut in is not finished (ticket 2, run B at 6 min 33)")
+
+# A room the body cannot leave: its only opening is 0.50 m wide, and the body
+# needs 0.60 m of clearance to pass. Beyond it, a corridor and real unknown.
+def pinched_map():
+    g = np.full((160, 160), OCCUPIED, dtype=np.int8)
+    g[30:110, 30:110] = FREE                  # the room the rover is in
+    g[65:75, 110:140] = FREE                  # a 0.50 m x 1.50 m throat, floor seen
+    g[30:110, 140:155] = UNKNOWN              # the room beyond, never seen
+    return g
+
+g = pinched_map()
+cm = Grid(g)
+st = ExploreState()
+shut_in = next_target(cm, pose(centre, centre, 0.0), st, now=100.0)
+check("a rover shut in with frontiers left on the map does NOT report completion",
+      shut_in is not None, str(shut_in))
+assert shut_in is not None
+check("it gets one back-off, the reflex that freed it by hand",
+      shut_in.directive == DIRECTIVE_BACK_OFF, shut_in.directive)
+check("and it says how many clusters the map still holds",
+      getattr(shut_in, "n_on_the_map", 0) >= 1, f"{getattr(shut_in, 'n_on_the_map', 0)}")
+# NOT the born-cornered case: the 4 x 4 m room, minus the 0.30 m the body
+# cannot use along each wall, is a 3.50 x 3.50 m square = 12.25 m2, plus the
+# six cells at the mouth of the throat where the wall opens out and the
+# clearance rises back over 0.30 m: 12.265 m2, twenty-four times the 0.5 m2
+# that means "born cornered".
+check("this is NOT the born-cornered case: 12.265 m2 of floor under it",
+      abs(getattr(shut_in, "reachable_free_m2", 0.0) - 12.265) < 1e-9,
+      f"{getattr(shut_in, 'reachable_free_m2', float('nan')):.4f} m2")
+again = next_target(cm, pose(centre, centre, 0.0), st, now=101.0)
+check("one back-off per pocket and no more: then the run ends", again is None, str(again))
+
+
+# ===========================================================================
+print("I2. a frontier the body cannot walk to is looked at from where it can stand")
+
+# The same throat, but the unknown starts right at its mouth: the frontier is
+# 0.55 m from floor the body can stand on. That is the run B geometry - eleven
+# clusters like it were on the map when the run declared itself finished.
+g = np.full((160, 160), OCCUPIED, dtype=np.int8)
+g[30:110, 30:110] = FREE
+g[65:75, 110:116] = FREE                      # 0.50 m throat, 0.30 m of seen floor
+g[62:78, 116:150] = UNKNOWN                   # the unmapped room, opening out
+cm = Grid(g)
+st = ExploreState()
+peek = next_target(cm, pose(centre, centre, 0.0), st, now=100.0)
+check("a target comes back rather than None", peek is not None, str(peek))
+assert peek is not None
+check("it is a frontier goal", peek.directive == DIRECTIVE_FRONTIER, peek.directive)
+gy, gx = cell(peek.position.x, peek.position.y)
+check("the rover is told to stand on floor it can reach, not in the unknown",
+      g[gy, gx] == FREE and not peek.on_frontier, f"grid {g[gy, gx]}")
+nearest_wall = min(math.hypot(peek.position.x - w_of(cx), peek.position.y - w_of(cy))
+                   for cy, cx in zip(*np.nonzero(g == OCCUPIED)))
+check("and it stands a body radius clear of the walls",
+      nearest_wall >= DEFAULT_TUNING.lethal_clearance_m,
+      f"{nearest_wall:.2f} m")
+check("the look-at point is the unknown behind the throat",
+      peek.look_at_xy[0] > w_of(110), f"{peek.look_at_xy}")
+
+
+# ===========================================================================
+print("I3. a frontier is retired by being SEEN, not by a viewpoint being used")
+
+# One door, one cluster. The rover drives to the target and decides from there;
+# the map does not change (the shadow the 2D scan plane never enters). Standing
+# in plain view of it and learning nothing is the end of that frontier - this
+# is the 300-goals-and-184-m protection, and it must still hold.
+g = door(room(), "east", 70, 24)
+cm = Grid(g)
+st = ExploreState()
+first = next_target(cm, pose(centre, centre, 0.0), st, now=100.0)
+assert first is not None
+arrived = next_target(cm, pose(first.position.x, first.position.y, 0.0), st, now=101.0)
+check("looked straight at it from close up and nothing changed: that cluster is done",
+      arrived is None, str(arrived))
+
+# Same distance, same everything, one wall of difference. A closed room with
+# one unknown pocket in the middle of its floor, and a spot the rover has
+# already decided from, 0.70 m from that pocket.
+def pocket_room(partition: bool):
+    g = np.full((140, 140), OCCUPIED, dtype=np.int8)
+    g[30:110, 30:110] = FREE
+    g[66:74, 66:74] = UNKNOWN            # 0.40 x 0.40 m of unknown floor
+    if partition:
+        g[60:80, 80] = OCCUPIED          # a screen between the spot and the pocket
+    return g
+
+stood_at = (w_of(84), w_of(70))          # 0.50 m east of the pocket's edge
+in_view = next_target(Grid(pocket_room(False)), pose(*stood_at, 0.0),
+                      ExploreState(observed=[stood_at]), now=100.0)
+check("a pocket in plain view of a spot already decided from is retired",
+      in_view is None, str(in_view))
+hidden = next_target(Grid(pocket_room(True)), pose(*stood_at, 0.0),
+                     ExploreState(observed=[stood_at]), now=100.0)
+check("the same pocket behind a screen is NOT retired: it was never seen",
+      hidden is not None and hidden.directive == DIRECTIVE_FRONTIER,
+      (hidden.directive if hidden else "None"))
+if hidden is not None:
+    check("and the viewpoint it is given is on the pocket's side of the screen",
+          hidden.position.x < w_of(80), f"x = {hidden.position.x:.2f} m")
+
+
+# ===========================================================================
+print("I4. and it always terminates: no map, however awkward, spins for ever")
+
+for label, grid_in in (("one door", door(room(), "east", 70, 24)),
+                       ("three doors", door(door(door(room(), "east", 70, 24),
+                                                 "west", 70, 24), "north", 70, 24)),
+                       ("shut in", pinched_map())):
+    st = ExploreState()
+    here = pose(centre, centre, 0.0)
+    calls = 0
+    for i in range(60):
+        calls += 1
+        t = next_target(Grid(grid_in), here, st, now=100.0 + i)
+        if t is None:
+            break
+        if t.directive == DIRECTIVE_FRONTIER:
+            here = pose(t.position.x, t.position.y, 0.0)   # the rover arrives
+    check(f"{label}: the map runs out and the function says so ({calls} calls)",
+          t is None and calls < 60, f"{calls} calls, last {t}")
+
+
+# ===========================================================================
 print("G. purity: nothing but the state's own fields changes")
 
 g = door(room(), "east", 70, 24)
