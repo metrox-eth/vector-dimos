@@ -128,7 +128,8 @@ def check_esp() -> None:
         if sonar:
             verdict(min(sonar) >= 0.30, "sonar voit de l'espace devant",
                     f"{min(sonar):.2f} m" + ("" if min(sonar) >= 0.30 else
-                    " -> LE FREIN BLOQUERA TOUTE AVANCE (cable/objet devant le museau, ou sonar deregle)"))
+                    " -> LE COUSSINET DU BUMPER S'EST RELEVE DEVANT LE SONAR: le remettre"
+                    " (cause du 26/08 - le sonar est desactive dans la stack mais ce check veille)"))
     except Exception as exc:  # noqa: BLE001
         verdict(False, "ESP32", str(exc))
 
