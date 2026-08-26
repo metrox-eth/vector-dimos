@@ -383,7 +383,11 @@ def _nav_blueprint():
                                base_transform=CAMERA_MOUNT),   # their 2nd (motion) pipeline fails on the RSUSB build: "No device connected"
         RPLidarC1.blueprint(),
         ReSpeakerMic.blueprint(stt_language="fr"),   # auto-detect mangles short utterances
-        LidarOdometry.blueprint(use_gyro_prior=False),
+        # gyro prior ON: probed alive 26/08 21h55 (20/20 frames, direct
+        # pyrealsense2) - the 25/08 'No device connected' note was stale. If
+        # the stack's motion pipeline still delivers nothing, _gyro_seen stays
+        # False and the prior falls back to constant-velocity on its own.
+        LidarOdometry.blueprint(),
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
         VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
         vis_module(viewer_backend=global_config.viewer, rerun_config=RERUN_CONFIG),
@@ -450,7 +454,11 @@ def _explore_blueprint():
                                base_transform=CAMERA_MOUNT),
         RPLidarC1.blueprint(),
         ReSpeakerMic.blueprint(stt_language="fr"),   # auto-detect mangles short utterances
-        LidarOdometry.blueprint(use_gyro_prior=False),
+        # gyro prior ON: probed alive 26/08 21h55 (20/20 frames, direct
+        # pyrealsense2) - the 25/08 'No device connected' note was stale. If
+        # the stack's motion pipeline still delivers nothing, _gyro_seen stays
+        # False and the prior falls back to constant-velocity on its own.
+        LidarOdometry.blueprint(),
         # carve_columns=False: this voxel map is the Rerun visual only (navigation runs on costmap2d). True ('latest
         # observation wins') erased the camera's table tops on every lidar hit in the same column and the map lost its detail
         # (metrox, 23/08 22:30). Cost of False: a passer-by leaves a ghost trail, until a health-based mapper replaces this one.

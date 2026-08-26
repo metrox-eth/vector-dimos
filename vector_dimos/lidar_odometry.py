@@ -102,7 +102,12 @@ OBSTACLE_MAX_M = 1.8            # 25/08 23h42: camera low-obstacle layer RE-ENAB
 # and the odometry origin is set so the CONTINUED map shares the saved frame.
 RELOC_REVS = 8                 # revolutions accumulated per attempt (~0.8 s at 10 Hz)
 RELOC_RETRY_S = 5.0            # between two attempts
-BOOT_GRACE_S = 120.0           # after a refused boot attempt, keep trying this long WHILE exploring
+BOOT_GRACE_S = 600.0           # after a refused boot attempt, keep trying this long WHILE exploring.
+                               # Was 120 s; the 26/08 21h05 run drove 25 clean metres, gave up at 2 min
+                               # and spent 8 more in its own frame - grid unaligned, keep-out zones
+                               # INACTIVE (owner 21h49: the run must understand where it is and lay its
+                               # limits down, every time). The late-swap path in costmap2d absorbs a
+                               # success at any point in the grace.
                                # (see the class docstring: a standing rover has one viewpoint)
 CARRY_RESIDUAL_M = 0.35        # the body outran the wheels by this much in CARRY_WINDOW_S: it was carried
 CARRY_WINDOW_S = 1.0
@@ -430,8 +435,9 @@ class LidarOdometry(Module):
         if self._reloc_state == "retrying" and time.monotonic() > self._boot_deadline:
             self._reloc_state = "idle"
             self._reloc_pts = []
-            logger.warning(f"relocalization: gave up after {BOOT_GRACE_S:.0f} s of trying - this run "
-                           "keeps its own fresh frame, and the keep-out zones do NOT apply to it")
+            logger.warning(f"relocalization: gave up after {BOOT_GRACE_S / 60:.0f} min of trying - this run "
+                           "keeps its own fresh frame, and the keep-out zones do NOT apply to it "
+                           "(fly.sh refuses to keep exploring in that state)")
             return
         if time.monotonic() < self._reloc_next:
             self._reloc_pts = self._reloc_pts[-RELOC_REVS:]
