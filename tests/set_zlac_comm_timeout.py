@@ -14,13 +14,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pymodbus.client.sync import ModbusSerialClient
 
-from vector_dimos.adapter import BACK_ID, BAUDRATE, FRONT_ID, SERIAL_TIMEOUT_S
+from vector_dimos.adapter import DEFAULT_PORT, BACK_ID, BAUDRATE, FRONT_ID, SERIAL_TIMEOUT_S
 from vector_dimos.zlac8015d import Controller
 
 COMM_OFFLINE_TIME = 0x2000
 
 value = int(sys.argv[1])
-port = sys.argv[2] if len(sys.argv) > 2 else "/dev/ttyTHS1"
+port = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_PORT
 client = ModbusSerialClient(method="rtu", port=port, baudrate=BAUDRATE,
                             timeout=SERIAL_TIMEOUT_S)
 if not client.connect():
