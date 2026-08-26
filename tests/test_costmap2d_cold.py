@@ -141,6 +141,73 @@ def test_checkpoint_roundtrip(tmp_path=None) -> None:
     print(f"  checkpoint saved ({size / 1024:.0f} kB for a {g.n}x{g.n} grid) and reloaded identical")
 
 
+def test_ghost_dies_when_the_camera_sees_through_it() -> None:
+    """metrox 26/08 20h20: the map must correct itself every time the
+    RealSense passes over it. A ghost low cell at 2.0 m, no longer confirmed,
+    dies as soon as the camera looks through that spot at low height."""
+    g = fresh()
+    t0 = 100.0
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)   # second viewpoint
+    assert g.value_at(2.0, 0.0) == 100, "the ghost starts as a real-looking obstacle"
+    later = t0 + LOW_HIT_PROTECT_S + 1.0
+    # the camera now sees a box at 3 m, 0.30 m tall: its ray crosses the ghost
+    # cell at z = 0.56 + (0.30 - 0.56) * 2/3 = 0.39 m - inside the carve band
+    g.camera_rays(np.array([[3.0, 0.0, 0.30]]), (0.0, 0.0), now=later)
+    assert g.value_at(2.0, 0.0) == 0, "one look through the ghost at low height kills it"
+    print("  ghost at 2.0 m, no longer confirmed -> erased by one ray seen through it")
+
+
+def test_high_ray_never_erases_a_low_box() -> None:
+    g = fresh()
+    t0 = 100.0
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
+    later = t0 + LOW_HIT_PROTECT_S + 1.0
+    # a shelf edge at 3 m, 1.25 m up: its ray crosses the box cell at
+    # z = 0.56 + (1.25 - 0.56) * 2/3 = 1.02 m - flying OVER the box
+    g.camera_rays(np.array([[3.0, 0.0, 1.25]]), (0.0, 0.0), now=later)
+    assert g.value_at(2.0, 0.0) == 100, "a ray at 1 m height says nothing about a low box"
+    print("  ray over the box (1.0 m up at the cell) -> box untouched")
+
+
+def test_fresh_hits_are_protected_from_carving() -> None:
+    g = fresh()
+    t0 = 100.0
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
+    # 1 s later (inside LOW_HIT_PROTECT_S): a real thing is re-hit every
+    # frame, so a stray ray through its cell must not erase it
+    g.camera_rays(np.array([[3.0, 0.0, 0.30]]), (0.0, 0.0), now=t0 + 1.0)
+    assert g.value_at(2.0, 0.0) == 100, "a cell the camera just confirmed is immune to carving"
+    print("  ray through a just-confirmed cell -> protected, obstacle stays")
+
+
+def test_floor_ray_carves_the_low_corridor() -> None:
+    """A floor point at 3 m proves the whole low corridor before it: the ray
+    descends from 0.56 m at the camera to 0 at the floor, crossing the carve
+    band between 0.59 m and 2.46 m of range."""
+    g = fresh()
+    t0 = 100.0
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
+    later = t0 + LOW_HIT_PROTECT_S + 1.0
+    g.camera_rays(np.array([[3.0, 0.0, 0.0]]), (0.0, 0.0), now=later)
+    assert g.value_at(2.0, 0.0) == 0, "bare floor seen at 3 m erases the stale cell at 2 m"
+    assert g.value_at(3.0, 0.0) == -1, "the ray stops short of its own endpoint"
+    print("  floor at 3 m -> stale cell at 2 m erased; endpoint untouched")
+
+
+def test_camera_rays_never_touch_the_lidar_layer() -> None:
+    g = fresh()
+    g.lidar_revolution(np.array([[2.0, 0.0]]), (0.0, 0.0))
+    g.lidar_revolution(np.array([[2.0, 0.0]]), (0.0, 0.15))    # a real lidar wall
+    assert g.value_at(2.0, 0.0) == 100
+    g.camera_rays(np.array([[3.0, 0.0, 0.30]]), (0.0, 0.0), now=200.0)
+    assert g.value_at(2.0, 0.0) == 100, "only a lidar ray may retract a lidar claim"
+    print("  camera ray through a lidar wall -> wall stays (layer doctrine)")
+
+
 def test_revolution_cost() -> None:
     import time
     g = fresh()
@@ -160,6 +227,9 @@ if __name__ == "__main__":
     for t in (test_leg_needs_two_viewpoints_and_ray_is_free, test_ramp_hit_from_one_spot_never_becomes_a_wall,
               test_chair_moved_is_forgotten_by_lidar_rays, test_low_object_only_the_camera_can_forget,
               test_thin_leg_survives_the_floor_sampled_beside_it,
-              test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip, test_revolution_cost):
+              test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip,
+              test_ghost_dies_when_the_camera_sees_through_it, test_high_ray_never_erases_a_low_box,
+              test_fresh_hits_are_protected_from_carving, test_floor_ray_carves_the_low_corridor,
+              test_camera_rays_never_touch_the_lidar_layer, test_revolution_cost):
         print(t.__name__); t()
     print("TEST PASSED")
