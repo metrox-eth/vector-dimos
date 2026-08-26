@@ -24,7 +24,11 @@ except ImportError:
 PORT = 8900
 SOC_V_EMPTY = 20.0
 SOC_V_FULL = 28.0
-LIDAR_ID_HINT = "7271bbd88d71f011af43029f1045c30f"  # lidar's CP2102N: never probe it
+# The ONE port the PZEM lives on. The old code scanned every by-id port with
+# MODBUS frames (motor bus, ESP, even the new lidar stick - its exclusion
+# hint named the DEAD CP2102N): bus contention sprayed on every /metrics
+# poll, all day on 26/08. Fixed port, never scan.
+PZEM_PORT = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
 
 _prev_cpu = None  # (idle, total)
 _pzem_port_cache = None
@@ -156,29 +160,22 @@ def _pzem_read(port):
 
 
 def battery():
-    global _pzem_port_cache
     if serial is None:
         return {"available": False, "reason": "pyserial missing in this venv"}
-    ports = [p for p in glob.glob("/dev/serial/by-id/*") if LIDAR_ID_HINT not in p]
-    if _pzem_port_cache in ports:
-        ports = [_pzem_port_cache] + [p for p in ports if p != _pzem_port_cache]
-    if not ports:
-        return {"available": False, "reason": "RS-485 dongle not plugged in"}
-    for port in ports:
-        try:
-            voltage, current, power = _pzem_read(port)
-        except Exception:
-            continue
-        _pzem_port_cache = port
-        soc = (voltage - SOC_V_EMPTY) / (SOC_V_FULL - SOC_V_EMPTY) * 100.0
-        return {
-            "available": True,
-            "voltage_v": round(voltage, 2),
-            "percent": round(max(0.0, min(100.0, soc)), 0),
-            "current_a": round(current, 2),
-            "power_w": round(power, 1),
-        }
-    return {"available": False, "reason": "dongle seen but PZEM not answering"}
+    if not os.path.exists(PZEM_PORT):
+        return {"available": False, "reason": "PZEM dongle not plugged in"}
+    try:
+        voltage, current, power = _pzem_read(PZEM_PORT)
+    except Exception as e:
+        return {"available": False, "reason": f"PZEM not answering: {e}"}
+    soc = (voltage - SOC_V_EMPTY) / (SOC_V_FULL - SOC_V_EMPTY) * 100.0
+    return {
+        "available": True,
+        "voltage_v": round(voltage, 2),
+        "percent": round(max(0.0, min(100.0, soc)), 0),
+        "current_a": round(current, 2),
+        "power_w": round(power, 1),
+    }
 
 
 def collect():
@@ -198,17 +195,140 @@ def collect():
     }
 
 
+# --- sensor liveness (owner, 26/08: "une UI qui me montre TOUT sur le robot") ---
+#
+# PASSIVE only: we listen to the LCM bus and read /proc & /dev - never a
+# serial port (the day taught what contention costs). When no stack runs the
+# topics fall silent and the panel says so honestly.
+
+_seen = {}          # family -> last wall time
+_counts = {}        # family -> msgs in the current window
+_FAMILIES = (("lidar_scan", ("pointcloud",)),
+             ("odometry", ("/odom",)),
+             ("camera", ("color_image", "depth_image")),
+             ("costmap", ("global_costmap",)),
+             ("drive", ("cmd_vel",)),
+             ("switches", ("bump",)),
+             ("sonar", ("sonar_range",)))
+
+
+def _family_of(channel):
+    for fam, needles in _FAMILIES:
+        if any(n in channel for n in needles):
+            return fam
+    return None
+
+
+def _lcm_listener():
+    try:
+        import lcm as lcmlib
+    except ImportError:
+        return
+    def cb(channel, _data):
+        fam = _family_of(channel)
+        if fam:
+            _seen[fam] = time.time()
+            _counts[fam] = _counts.get(fam, 0) + 1
+    while True:
+        try:
+            lc = lcmlib.LCM()
+            lc.subscribe(".*", cb)
+            while True:
+                lc.handle_timeout(1000)
+        except Exception:
+            time.sleep(3.0)
+
+
+def _stack_running():
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit():
+            continue
+        try:
+            with open(f"/proc/{pid}/cmdline", "rb") as f:
+                if b"bin/dimos" in f.read():
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def sensors():
+    now = time.time()
+    out = {"stack_running": _stack_running(),
+           "ports_plugged": sorted(os.path.basename(p) for p in glob.glob("/dev/serial/by-id/*")),
+           "sonar_note": "DISABLED in the stack (owner vote 26/08: bumper cushion incident)"}
+    home = os.path.expanduser("~")
+    pm = os.path.join(home, ".local/state/vector/persistent_map.npz")
+    ko = os.path.join(home, ".local/state/vector/keepout.json")
+    if os.path.exists(pm):
+        out["persistent_map_saved"] = time.strftime("%H:%M:%S", time.localtime(os.path.getmtime(pm)))
+    if os.path.exists(ko):
+        try:
+            out["zones"] = len(json.load(open(ko)).get("zones", []))
+        except Exception:
+            pass
+    for fam, _needles in _FAMILIES:
+        last = _seen.get(fam)
+        out[fam] = {"alive": last is not None and now - last < 5.0,
+                    "age_s": None if last is None else round(now - last, 1),
+                    "msgs": _counts.get(fam, 0)}
+    return out
+
+
+_PANEL = """<meta http-equiv="refresh" content="2"><body style="background:#101014;color:#e8e8e2;
+font-family:system-ui;padding:4vw"><h2 style="margin:0 0 3vh">VECTOR — organes</h2>
+<table style="font-size:2.6vh;border-spacing:0 1vh">%s</table>
+<div style="color:#777;font-size:2vh;margin-top:3vh">%s &middot; ports: %s</div></body>"""
+
+
+def _panel_html():
+    d = sensors()
+    b = battery()
+    rows = []
+    def dot(ok, warn=False):
+        return f'<td style="font-size:3vh;padding-right:1.5vw">{"&#128994;" if ok else ("&#128992;" if warn else "&#128308;")}</td>'
+    rows.append(f"<tr>{dot(d['stack_running'])}<td>stack dimOS</td><td>{'en vol' if d['stack_running'] else 'arretee'}</td></tr>")
+    labels = {"lidar_scan": "lidar C1", "odometry": "odometrie", "camera": "RealSense",
+              "costmap": "carte", "drive": "commandes roues", "switches": "switchs (contacts)"}
+    for fam, label in labels.items():
+        st = d[fam]
+        detail = ("jamais vu" if st["age_s"] is None else f"il y a {st['age_s']} s &middot; {st['msgs']} msgs")
+        if fam == "switches" and st["age_s"] is None:
+            detail = "aucun contact (normal)"
+            rows.append(f"<tr>{dot(True, warn=True)}<td>{label}</td><td>{detail}</td></tr>")
+            continue
+        rows.append(f"<tr>{dot(st['alive'])}<td>{label}</td><td>{detail}</td></tr>")
+    rows.append(f"<tr>{dot(False, warn=True)}<td>sonar</td><td>{d['sonar_note']}</td></tr>")
+    if b.get("available"):
+        ok = b["voltage_v"] > 24.0
+        rows.append(f"<tr>{dot(ok)}<td>batterie</td><td>{b['voltage_v']} V &middot; {b['current_a']} A &middot; {b['percent']:.0f}%</td></tr>")
+    else:
+        rows.append(f"<tr>{dot(False)}<td>batterie</td><td>{b.get('reason','?')}</td></tr>")
+    extra = f"carte sauvee {d.get('persistent_map_saved','?')} &middot; {d.get('zones','?')} zones"
+    return _PANEL % ("".join(rows), extra, ", ".join(d["ports_plugged"]))
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path not in ("/metrics", "/"):
+        if self.path in ("/panel", "/"):
+            try:
+                body = _panel_html().encode()
+            except Exception as e:
+                body = f"<pre>panel error: {e}</pre>".encode()
+            ctype = "text/html"
+        elif self.path == "/metrics":
+            try:
+                data = collect()
+                data["sensors"] = sensors()
+                body = json.dumps(data).encode()
+            except Exception as e:  # never die on a probe error
+                body = json.dumps({"error": str(e)}).encode()
+            ctype = "application/json"
+        else:
             self.send_error(404)
             return
-        try:
-            body = json.dumps(collect()).encode()
-        except Exception as e:  # never die on a probe error
-            body = json.dumps({"error": str(e)}).encode()
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -218,5 +338,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    print(f"VECTOR stats server on 0.0.0.0:{PORT}", flush=True)
+    import threading
+    threading.Thread(target=_lcm_listener, daemon=True).start()
+    print(f"VECTOR stats server on 0.0.0.0:{PORT} (/panel = organes, /metrics = JSON)", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
