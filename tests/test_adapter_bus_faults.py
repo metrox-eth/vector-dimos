@@ -129,9 +129,9 @@ check(a.is_connected() is False, "adapter stays disconnected")
 check(bus_a.closed is True, "client was closed before giving up")
 check(len(bus_a.reads) >= 1 and bus_a.reads[0][1] == L_FB_RPM,
       f"probe was read-only on the feedback register {bus_a.reads[:1]}")
+from vector_dimos.adapter import DEFAULT_PORT
 errors = LOG.since(mark, "error")
-check(errors == ["ZLAC8015D id 2 (front) did not answer on "
-                 "/dev/ttyTHS1 @115200"],
+check(errors == [f"ZLAC8015D id 2 (front) did not answer on {DEFAULT_PORT} @115200"],
       f"error names the drive, the port and the baudrate: {errors}")
 
 # the real thing: pymodbus 2.5 RETURNS a ModbusIOException object on a
@@ -314,7 +314,9 @@ m.write_velocities([0.0, 0.0, 0.0])
 cmd_lines = [line for line in LOG.since(mark) if "MOCK: twist" in line]
 check(len(cmd_lines) == 2,
       f"3 writes, 2 distinct commands -> 2 log lines ({len(cmd_lines)})")
-check("FL=+33 FR=+51 BL=-15 BR=+98" in cmd_lines[0],
+# values recomputed for the 24/08 body flip + the 0.085 m wheel (the old
+# literal predated BODY_FLIPPED and had been red since then)
+check("FL=-96 FR=+13 BL=-49 BR=-34" in cmd_lines[0],
       f"the logged RPM is the commanded RPM: {cmd_lines[0]}")
 
 m.write_velocities([VX, VY, WZ])

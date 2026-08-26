@@ -18,8 +18,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vector_dimos import rplidar_c1 as rp
-from vector_dimos.rplidar_c1 import (DEFAULT_BAUDRATE, RPLidarC1, polar_to_xy,
-                                     scan_to_points)
+from vector_dimos.rplidar_c1 import (DEFAULT_BAUDRATE, DEFAULT_PORT, RPLidarC1,
+                                     polar_to_xy, scan_to_points)
 
 ok = True
 
@@ -59,33 +59,40 @@ class LogSpy:
 
 
 # --- A. polar -> xyz, known values ----------------------------------------
-# The lib yields (quality, angle_deg in [0,360), distance_mm); we map with
-# x = d*cos(theta), y = d*sin(theta), so 0 deg -> +X and 90 deg -> +Y.
+# The lib yields (quality, angle_deg in [0,360), distance_mm). Convention as
+# measured 25/08 (commit c2cb562: the 24/08 flip term was stale, layers align
+# with NO flip): theta = angle + 2.75 (velcro), x = d*cos(theta),
+# y = -d*sin(theta) (SLAMTEC heading grows clockwise, robot frame is CCW).
+# The bench angles subtract the 2.75 so the expectations stay round numbers.
 print("A. polar_to_xy / scan_to_points (no lib, no sensor)")
 
-x, y = polar_to_xy(90.0, 2000.0)
-check(close(x, 0.0) and close(y, 2.0),   # body flipped 24/08: raw 90 deg (old right) = the NEW left
-      f"90 deg (clockwise), 2000 mm -> (0.0, 2.0) m, the robot's right  (got ({x:.9f}, {y:.9f}))")
-x, y = polar_to_xy(0.0, 1500.0)
-check(close(x, -1.5) and close(y, 0.0), "0 deg raw, 1500 mm -> (-1.5, 0.0) m, the NEW tail")
-x, y = polar_to_xy(180.0, 1000.0)
-check(close(x, 1.0) and close(y, 0.0), "180 deg raw, 1000 mm -> (+1.0, 0.0) m, the bumper")
-x, y = polar_to_xy(270.0, 500.0)
-check(close(x, 0.0) and close(y, -0.5), "270 deg raw, 500 mm -> (0.0, -0.5) m, the NEW right")
-x, y = polar_to_xy(45.0, 1414.213562)
-check(close(x, -1.0) and close(y, 1.0), "45 deg raw, 1414.2136 mm -> (-1.0, +1.0) m")
-x, y = polar_to_xy(30.0, 4000.0)
-check(close(x, -3.464101615) and close(y, 2.0),
-      "30 deg raw, 4000 mm -> (-3.4641016, +2.0) m")
+x, y = polar_to_xy(87.25, 2000.0)
+check(close(x, 0.0) and close(y, -2.0),
+      f"87.25 deg raw (theta 90), 2000 mm -> (0.0, -2.0) m  (got ({x:.9f}, {y:.9f}))")
+x, y = polar_to_xy(357.25, 1500.0)
+check(close(x, 1.5) and close(y, 0.0), "357.25 deg raw (theta 360), 1500 mm -> (+1.5, 0.0) m")
+x, y = polar_to_xy(177.25, 1000.0)
+check(close(x, -1.0) and close(y, 0.0), "177.25 deg raw (theta 180), 1000 mm -> (-1.0, 0.0) m")
+x, y = polar_to_xy(267.25, 500.0)
+check(close(x, 0.0) and close(y, 0.5), "267.25 deg raw (theta 270), 500 mm -> (0.0, +0.5) m")
+x, y = polar_to_xy(42.25, 1414.213562)
+check(close(x, 1.0) and close(y, -1.0), "42.25 deg raw (theta 45), 1414.2136 mm -> (+1.0, -1.0) m")
+x, y = polar_to_xy(27.25, 4000.0)
+check(close(x, 3.464101615) and close(y, -2.0),
+      "27.25 deg raw (theta 30), 4000 mm -> (+3.4641016, -2.0) m")
+x, y = polar_to_xy(0.0, 1000.0)
+check(close(x, 0.998848, 1e-5) and close(y, -0.047978, 1e-5),
+      "raw 0 deg carries the 2.75 deg velcro offset: (0.99885, -0.04798) m")
 
 # One canned revolution: 3 keepers, one weak return, one invalid (distance 0).
-SCAN = [(15, 0.0, 1000.0),      # kept  -> ( 1.0,  0.0)
-        (15, 90.0, 2000.0),     # kept  -> ( 0.0,  2.0)
-        (5, 180.0, 3000.0),     # dropped: quality 5 < 10
-        (20, 270.0, 500.0),     # kept  -> ( 0.0, -0.5)
-        (18, 45.0, 0.0)]        # dropped: distance 0 = invalid measure
-EXPECTED = [(-1.0, 0.0, 0.0), (0.0, 2.0, 0.0), (0.0, -0.5, 0.0)]   # body flipped 24/08: raw 0 deg = new tail
-EXPECTED_ALL = [(-1.0, 0.0, 0.0), (0.0, 2.0, 0.0), (3.0, 0.0, 0.0), (0.0, -0.5, 0.0)]   # body FLIPPED 24/08: raw 0 deg = new tail   # + the weak (quality 5) return at 180 deg, kept by the default
+# Angles subtract the 2.75 velcro term so the metres stay round.
+SCAN = [(15, 357.25, 1000.0),   # kept  -> (+1.0,  0.0) (in the mask BEARING but at 1.0 m: the mask only bites under 0.30 m)
+        (15, 87.25, 2000.0),    # kept  -> ( 0.0, -2.0)
+        (5, 177.25, 3000.0),    # dropped: quality 5 < 10
+        (20, 267.25, 500.0),    # kept  -> ( 0.0, +0.5)
+        (18, 42.25, 0.0)]       # dropped: distance 0 = invalid measure
+EXPECTED = [(1.0, 0.0, 0.0), (0.0, -2.0, 0.0), (0.0, 0.5, 0.0)]
+EXPECTED_ALL = [(1.0, 0.0, 0.0), (0.0, -2.0, 0.0), (-3.0, 0.0, 0.0), (0.0, 0.5, 0.0)]   # + the weak (quality 5) return, kept by the module default
 
 points = scan_to_points(SCAN, min_quality=10)
 check(len(points) == 3, f"min_quality=10 keeps 3 of 5 measures (got {len(points)})")
@@ -100,18 +107,19 @@ check(len(scan_to_points(SCAN, min_quality=16)) == 1,
 check(scan_to_points([], 10) == [], "an empty scan yields no points")
 
 
-# --- A2. the mast mask (measured 2026-08-23: 0.21 m over 350-10 deg) --------
-from vector_dimos.rplidar_c1 import scan_to_points, MAST_MASK_DEG, MASK_RANGE_M
-scan = [(40, 0.0, 210.0), (40, 355.0, 220.0),                        # the mast bar (0.225 m, +-6 deg): dropped
-        (40, 37.0, 380.0),                                           # 37 deg, 0.38 m: under MIN_RANGE_M: dropped
-        (40, 20.0, 450.0),                                           # 20 deg, 0.45 m: outside the bar, real: kept (the old +-45 deg wedge ate it)
-        (40, 0.0, 1200.0), (40, 5.0, 800.0),                         # same wedge, far: kept
-        (40, 90.0, 210.0), (40, 180.0, 350.0),                       # outside the wedge but on the rover (< 0.40 m): dropped
-        (40, 90.0, 450.0), (40, 180.0, 600.0),                       # outside the wedge, real: kept
+# --- A2. the masks: mast bar (directional), sensor floor, body rectangle -----
+from vector_dimos.rplidar_c1 import scan_to_points, MAST_MASK_DEG, MASK_RANGE_M, MIN_RANGE_M
+scan = [(40, 0.0, 210.0), (40, 355.0, 220.0),                        # the bar (348-12 deg, < 0.30 m): dropped
+        (40, 37.0, 120.0),                                           # 0.12 m: under the 0.15 sensor floor: dropped
+        (40, 20.0, 450.0),                                           # 0.45 m, outside the bar: kept
+        (40, 0.0, 1200.0), (40, 5.0, 800.0),                         # bar BEARING but far: kept
+        (40, 90.0, 240.0), (40, 180.0, 300.0),                       # land INSIDE the body rectangle: dropped
+        (40, 90.0, 450.0), (40, 180.0, 600.0),                       # same bearings, real: kept
         (3, 60.0, 500.0), (40, 60.0, 0.0)]                           # weak / invalid: dropped
 pts = scan_to_points(scan, min_quality=10)
-check(len(pts) == 5, f"mast bar under {MASK_RANGE_M} m and anything under 0.40 m dropped, 5 real points kept ({len(pts)})")
-check(any(close(x, -1.2) and close(y, 0.0) for x, y, _ in pts), "a far point inside the bar's bearing survives at 1.2 m toward the NEW tail")
+check(len(pts) == 5, f"bar under {MASK_RANGE_M} m, floor under {MIN_RANGE_M} m and body-rectangle returns dropped, 5 real points kept ({len(pts)})")
+check(any(close(x, 1.19862, 1e-3) and close(y, -0.05758, 1e-3) for x, y, _ in pts),
+      "a far point inside the bar's bearing survives at 1.2 m")
 
 # --- B. retry loop on a fake rplidar lib ----------------------------------
 print("\nB. retry loop (fake lib, no sensor)")
@@ -168,8 +176,8 @@ real_logger, rp.logger = rp.logger, spy
 lidar_module = RPLidarC1(retry_period_s=0.5)
 clouds = []
 lidar_module.pointcloud.subscribe(clouds.append)
-check(lidar_module.port == "/dev/ttyUSB0" and lidar_module.baudrate == 460800,
-      "defaults: /dev/ttyUSB0 (CP2102 dongle) at 460800 baud")
+check(lidar_module.port == DEFAULT_PORT and lidar_module.baudrate == 460800,
+      f"defaults: {DEFAULT_PORT} at 460800 baud")
 check(DEFAULT_BAUDRATE == 460800, "DEFAULT_BAUDRATE is the C1 line rate")
 lidar_module.start()
 
@@ -180,14 +188,14 @@ check(spy.count("RPLIDAR C1 unavailable") == 1,
       "the failure is logged ONCE, not once per retry")
 check(lidar_module._thread.is_alive() and not clouds,
       "loop alive, nothing published while the sensor is missing")
-check(all(open_args == ("/dev/ttyUSB0", 460800) for open_args in bench.opens),
+check(all(open_args == (DEFAULT_PORT, 460800) for open_args in bench.opens),
       "every attempt opens the port at 460800 baud")
 
 # 2. sensor appears: one flat cloud per revolution, known points.
 bench.present = True
 check(wait_for(lambda: len(clouds) >= 2, 4.0),
       f"sensor plugged in -> publishes clouds ({len(clouds)} so far)")
-check(spy.count("RPLIDAR C1 up on /dev/ttyUSB0 @ 460800 baud") == 1,
+check(spy.count(f"RPLIDAR C1 up on {DEFAULT_PORT} @ 460800 baud") == 1,
       "logs the sensor coming up, with its port and baud rate")
 xyz = clouds[0].as_numpy()[0]
 # the module's default is min_quality=0 since 2026-08-23: every measure with a
