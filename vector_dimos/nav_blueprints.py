@@ -146,35 +146,106 @@ def camera_frustum_view(camera_info):
 # mapped flat, against ~4k obstacle cells) and is the one to hide first if the
 # Jetson complains.
 #
-# `keepout` is drawn as flat solid rectangles, one per zone, not as cells: the
-# owner's zones ARE rectangles, and with the 26/08 fences around the house they
-# cover ~95k cells of a mapped crop - two megabytes of points, 1-2 times a
-# second, to say what five labelled boxes say better.
+# `keepout` is drawn as flat solid slabs, not as one point per cell: with the
+# 26/08 fences around the house the zones cover ~95k cells of a mapped crop -
+# two megabytes of points, 1-2 times a second, to say what a few labelled boxes
+# say better. A rectangle is one slab. A polygon (the owner draws his tilted
+# house with the mouse now) is one slab per horizontal run of its rasterised
+# mask - a few hundred for a room-sized zone, and stair-stepped at 5 cm on the
+# diagonals, which is exactly the shape the rover obeys.
 COSTMAP_Z = -0.01              # a hair under the floor: never fights the voxel cloud
 COSTMAP_OCCUPIED = (220, 30, 30)    # lethal: the planner will not enter
 COSTMAP_KEEPOUT = (255, 140, 0)     # lethal because the OWNER drew a zone there
 COSTMAP_UNKNOWN = (70, 70, 70)      # never observed - not free, not an obstacle
 
 _FORBIDDEN_ZONES: dict = {"mtime": None, "zones": []}
+# The rasterised zones for one published crop: recomputing a polygon mask over a
+# 400 x 400 crop 1-2 times a second is cheap but pointless - nothing about it
+# moves until the file or the crop does.
+_ZONE_RASTER: dict = {"key": None, "items": []}
+
+
+def _erode1(mask):
+    """Drop the one-cell border of a mask (no scipy on the Jetson build)."""
+    import numpy as np
+
+    out = np.zeros_like(mask)
+    out[1:-1, 1:-1] = (mask[1:-1, 1:-1] & mask[:-2, 1:-1] & mask[2:, 1:-1]
+                       & mask[1:-1, :-2] & mask[1:-1, 2:])
+    return out
+
+
+def _mask_runs(mask, res: float, ox: float, oy: float):
+    """A cell mask as flat boxes: one per horizontal run of cells."""
+    import numpy as np
+
+    boxes = []
+    for row in np.nonzero(mask.any(axis=1))[0]:
+        cols = np.nonzero(mask[row])[0]
+        for seg in np.split(cols, np.nonzero(np.diff(cols) > 1)[0] + 1):
+            c0, c1 = int(seg[0]), int(seg[-1])
+            boxes.append(((ox + (c0 + c1 + 1) * res / 2,
+                           oy + (2 * int(row) + 1) * res / 2, COSTMAP_Z),
+                          ((c1 - c0 + 1) * res / 2, res / 2, 0.001)))
+    return boxes
+
+
+def _raster_zones(zones, shape, res: float, ox: float, oy: float):
+    """Each zone as (cell mask, interior mask, boxes, label), on this crop.
+
+    The interior mask is the zone minus its one-cell border: the map floors a
+    zone against its OWN origin and this floors it against the published crop's,
+    and the two disagree by a cell on an edge often enough to matter (measured
+    26/08 on the live map: 627 border cells out of 95k). The interior is the
+    honest place to ask whether the zone is in force.
+    """
+    import numpy as np
+
+    from vector_dimos import persistent_map
+
+    h, w = shape
+    items = []
+    for z in zones:
+        pts = persistent_map.zone_points(z)
+        label = str(z.get("label", "forbidden"))
+        if pts is None:
+            # same arithmetic as persistent_map.keepout_mask, on the published crop
+            x0, x1 = int((z["x0"] - ox) // res), int((z["x1"] - ox) // res)
+            y0, y1 = int((z["y0"] - oy) // res), int((z["y1"] - oy) // res)
+            if x1 < 0 or y1 < 0 or x0 > w - 1 or y0 > h - 1:
+                continue                   # this zone falls outside the crop
+            x0, x1 = max(0, x0), min(w - 1, x1)
+            y0, y1 = max(0, y0), min(h - 1, y1)
+            mask = np.zeros((h, w), dtype=bool)
+            mask[y0:y1 + 1, x0:x1 + 1] = True
+            core = np.zeros((h, w), dtype=bool)
+            tx0, tx1 = (x0 + 1, x1 - 1) if x1 - x0 >= 2 else (x0, x1)
+            ty0, ty1 = (y0 + 1, y1 - 1) if y1 - y0 >= 2 else (y0, y1)
+            core[ty0:ty1 + 1, tx0:tx1 + 1] = True
+            boxes = [((ox + (x0 + x1 + 1) * res / 2, oy + (y0 + y1 + 1) * res / 2, COSTMAP_Z),
+                      ((x1 - x0 + 1) * res / 2, (y1 - y0 + 1) * res / 2, 0.001))]
+        else:
+            mask = persistent_map.polygon_mask(pts, res, ox, oy, (h, w))
+            if not mask.any():
+                continue                   # this zone falls outside the crop
+            core = _erode1(mask)
+            if not core.any():             # a zone one cell thin: it is all border
+                core = mask
+            boxes = _mask_runs(mask, res, ox, oy)
+        items.append((mask, core, boxes, label))
+    return items
 
 
 def _forbidden_zones(cells, res: float, ox: float, oy: float):
-    """The owner's keep-out rectangles as (cell mask, boxes), or (None, None).
+    """The owner's keep-out zones as (cell mask, boxes), or (None, None).
 
     The published grid cannot say which cells were forced - they are 100 like
     any obstacle - and it does not carry the run's frame either, while the
     zones only apply to a run that relocalized into the persistent frame
     (costmap2d._decide). The map answers that itself: ScoredGrid.occupancy()
-    forces EVERY cell of a forbidden rectangle to 100, so a rectangle that is
-    not solid 100 is a rectangle that was never applied - and this returns None
+    forces EVERY cell of a forbidden zone to 100, so a zone whose interior is
+    not solid 100 is a zone that was never applied - and this returns None
     rather than paint an orange rule the rover is not actually obeying.
-
-    Tested one cell in from the edges. The map floors the rectangle against its
-    OWN origin and this floors it against the published crop's, and the two
-    disagree by a cell on an edge often enough to matter (measured 26/08 on the
-    live map: 627 border cells out of 95k). The interior is the honest test,
-    and the rectangles are clipped to the crop, so the overlay never claims
-    ground the published map does not cover.
     """
     import numpy as np
 
@@ -189,32 +260,27 @@ def _forbidden_zones(cells, res: float, ox: float, oy: float):
             _FORBIDDEN_ZONES["zones"] = persistent_map.zones_of(
                 persistent_map.load_keepouts(), persistent_map.FORBIDDEN)
             _FORBIDDEN_ZONES["mtime"] = mtime
+        zones = _FORBIDDEN_ZONES["zones"]
+        if not zones:
+            return None, None
+        key = (mtime, res, ox, oy, cells.shape)
+        if _ZONE_RASTER["key"] != key:
+            _ZONE_RASTER["items"] = _raster_zones(zones, cells.shape, res, ox, oy)
+            _ZONE_RASTER["key"] = key
     except Exception:  # noqa: BLE001 - a display layer never takes the bridge down
         return None, None
 
-    zones = _FORBIDDEN_ZONES["zones"]
-    if not zones:
-        return None, None
-    h, w = cells.shape
-    mask = np.zeros((h, w), dtype=bool)
+    mask = np.zeros(cells.shape, dtype=bool)
     centers, half_sizes, labels = [], [], []
-    for z in zones:
-        # same arithmetic as persistent_map.keepout_mask, on the published crop
-        x0, x1 = int((z["x0"] - ox) // res), int((z["x1"] - ox) // res)
-        y0, y1 = int((z["y0"] - oy) // res), int((z["y1"] - oy) // res)
-        if x1 < 0 or y1 < 0 or x0 > w - 1 or y0 > h - 1:
-            continue                       # this zone falls outside the crop
-        x0, x1 = max(0, x0), min(w - 1, x1)
-        y0, y1 = max(0, y0), min(h - 1, y1)
-        tx0, tx1 = (x0 + 1, x1 - 1) if x1 - x0 >= 2 else (x0, x1)
-        ty0, ty1 = (y0 + 1, y1 - 1) if y1 - y0 >= 2 else (y0, y1)
-        if not bool((cells[ty0:ty1 + 1, tx0:tx1 + 1] == 100).all()):
+    for zmask, core, boxes, label in _ZONE_RASTER["items"]:
+        if not bool((cells[core] == 100).all()):
             return None, None              # not in force in this run
-        mask[y0:y1 + 1, x0:x1 + 1] = True
-        centers.append((ox + (x0 + x1 + 1) * res / 2,
-                        oy + (y0 + y1 + 1) * res / 2, COSTMAP_Z))
-        half_sizes.append(((x1 - x0 + 1) * res / 2, (y1 - y0 + 1) * res / 2, 0.001))
-        labels.append(str(z.get("label", "forbidden")))
+        mask |= zmask
+        widest = max(range(len(boxes)), key=lambda i: boxes[i][1][0] * boxes[i][1][1])
+        for i, (centre, half) in enumerate(boxes):
+            centers.append(centre)
+            half_sizes.append(half)
+            labels.append(label if i == widest else "")
     if not centers:
         return None, None
     return mask, (centers, half_sizes, labels)
@@ -238,7 +304,8 @@ def _cell_points(mask, res: float, ox: float, oy: float, color):
 
 
 def _zone_boxes(boxes):
-    """The keep-out rectangles as flat solid slabs. Empty clears the layer."""
+    """The keep-out zones as flat solid slabs (one per rectangle, one per
+    horizontal run of a polygon). Empty clears the layer."""
     import rerun as rr
 
     if boxes is None:

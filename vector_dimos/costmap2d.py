@@ -102,6 +102,13 @@ class ScoredGrid:
         cannot certify a cell it should never have stood on), not a slip
         rollback. The only way out is the keep-out file.
 
+        Rectangle or polygon, the answer is one bool mask: the rasterising
+        lives in `persistent_map.keepout_mask` (even-odd ray casting on the
+        cell centres plus the outline, numpy only), so the CLI, the simulator
+        and this grid all forbid exactly the same cells. A polygon matters
+        because the house is 5.75 deg off the map axes: an enclosing rectangle
+        either eats the corridor or leaks the corner.
+
         The other zone type, `no_slip_reflex`, is not a map fact at all - it
         is read by the two slip guards, and this grid ignores it.
         """

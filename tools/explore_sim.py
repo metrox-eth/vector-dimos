@@ -681,10 +681,9 @@ class Sim:
     # --- bookkeeping -------------------------------------------------------
     def _record(self) -> None:
         self.run.poses.append((self.t, self.x, self.y, self.yaw))
-        for zone in persistent_map.zones_of(self.world.zones, persistent_map.FORBIDDEN):
-            if zone["x0"] <= self.x <= zone["x1"] and zone["y0"] <= self.y <= zone["y1"]:
-                self.run.forbidden_entries += 1
-                break
+        if persistent_map.zone_at(self.world.zones, self.x, self.y,
+                                  persistent_map.FORBIDDEN) is not None:
+            self.run.forbidden_entries += 1
 
     def rescan(self) -> None:
         scan(self.world, self.discovered, self.x, self.y)
