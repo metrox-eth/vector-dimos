@@ -33,4 +33,7 @@ echo "viewer up - the map is visible"
 
 echo "== 5/5 exploration =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py start'
-echo "IN FLIGHT. Stop: ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop' (then tests/estop_rs485.py)"
+echo "IN FLIGHT. Stop: E-STOP FIRST, then the stack:"
+echo "  ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py && .venv/bin/dimos stop'"
+echo "  (dimos stop can escalate to SIGKILL: killed asymmetrically, one axle keeps its last"
+echo "   command for up to 1 s - the 26/08 17h50 quarter-turn. Wheels dead first, always.)"
