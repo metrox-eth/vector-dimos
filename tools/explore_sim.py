@@ -78,13 +78,15 @@ from bench_run import count_reversals  # noqa: E402  (same scorer as the real ru
 
 try:  # the package __init__ pulls dimOS; off the Jetson, load the modules directly
     from vector_dimos.explorer2 import (
-        DIRECTIVE_BACK_OFF, DIRECTIVE_WAIT, ExploreState, PoseStamped, next_target,
+        DEFAULT_TUNING, DIRECTIVE_BACK_OFF, DIRECTIVE_WAIT, ExploreState, PoseStamped,
+        next_target, unknown_signature,
     )
     from vector_dimos import persistent_map
 except ImportError:  # pragma: no cover - the laptop path
     import persistent_map  # type: ignore[no-redef]
     from explorer2 import (  # type: ignore[no-redef]
-        DIRECTIVE_BACK_OFF, DIRECTIVE_WAIT, ExploreState, PoseStamped, next_target,
+        DEFAULT_TUNING, DIRECTIVE_BACK_OFF, DIRECTIVE_WAIT, ExploreState, PoseStamped,
+        next_target, unknown_signature,
     )
 
 
@@ -941,7 +943,7 @@ def run_v2(world: World, start: tuple[float, float], heading: float) -> Run:
         directive = getattr(target, "directive", "frontier")
         if directive == DIRECTIVE_WAIT:
             sim.run.waits += 1
-            sim.t += max(0.1, min(float(target.wait_s), 1.0))   # the module's WAIT_POLL_S
+            sim.t += 1.0   # the module's WAIT_POLL_S: exclusions reopen on triggers, not clocks
             sim._record()
             sim.rescan()
             continue
@@ -960,7 +962,7 @@ def run_v2(world: World, start: tuple[float, float], heading: float) -> Run:
         outcome = sim.drive(goal)
         if outcome == "blocked":
             sim.run.goals_no_path += 1
-            state.note_failed(goal[0], goal[1], sim.t)
+            state.note_failed(goal[0], goal[1], (sim.x, sim.y), costmap)
             sim.t += FAIL_BREATH_S
             sim._record()
             continue
@@ -973,7 +975,7 @@ def run_v2(world: World, start: tuple[float, float], heading: float) -> Run:
             # still closing it is simply re-decided. The loop is what this
             # harness replays, so it replays this too.
             if gap_at_issue - math.hypot(goal[0] - sim.x, goal[1] - sim.y) < ARRIVE_M:
-                state.note_failed(goal[0], goal[1], sim.t)
+                state.note_failed(goal[0], goal[1], (sim.x, sim.y), costmap)
     sim.run.sim_s = sim.t
     sim.run.coverage_curve.append((sim.run.path_m, sim.area_m2))
     return sim.run
@@ -1157,13 +1159,20 @@ def extinction_demo() -> int:
         old.note_failed(ox + cx * res, oy + cy * res, 0.0)
         old.explored_goals.append((ox + cx * res, oy + cy * res))
 
-    state = ExploreState(failed=[(f[0], f[1], 0.0) for f in old.failed_goals])
     cm = _SimGrid(g, res, ox, oy, 0.0)
+    # v2 exclusions carry their reopening triggers: where the rover stood when
+    # it failed, and the unknown signature around the goal at that moment.
+    state = ExploreState(failed=[
+        (f[0], f[1], here_x, here_y, unknown_signature(cm, f[0], f[1], DEFAULT_TUNING.failed_goal_radius_m))
+        for f in old.failed_goals])
 
     print(f"{'t':>6}  {'old (as shipped)':<44}  {'explorer2'}")
     print("-" * 96)
     old_dead_at = v2_dead_at = None
     v2_first_target_at = None
+    NUDGE_AT_S = 40.0     # the world event that reopens v2's exclusions: the
+    NUDGE_M = 1.2         # rover finds itself a viewpoint 1.2 m away (a back-off,
+    v2_x = here_x         # a human nudge, a drive elsewhere - anything that moves it)
     for step in range(40):
         t = 2.0 * step                        # the old loop's "Retrying in 2 seconds"
         if old_dead_at is None:
@@ -1181,12 +1190,15 @@ def extinction_demo() -> int:
         else:
             old_line = "(stopped)"
 
-        target = next_target(cm, _pose(here_x, here_y, 0.0), state, now=t)
+        if t >= NUDGE_AT_S and v2_x == here_x:
+            v2_x = here_x + NUDGE_M
+            print(f"{t:6.0f}  (the rover now stands {NUDGE_M} m away - the viewpoint trigger fires)")
+        target = next_target(cm, _pose(v2_x, here_y, 0.0), state, now=t)
         if target is None:
             v2_line = "None - would stop"
             v2_dead_at = v2_dead_at or t
         elif target.directive == DIRECTIVE_WAIT:
-            v2_line = f"wait {target.wait_s:.0f} s ({target.n_excluded} of {target.n_clusters} excluded)"
+            v2_line = f"wait for a trigger ({target.n_excluded} of {target.n_clusters} excluded)"
         else:
             v2_line = f"goal ({target.position.x:.2f}, {target.position.y:.2f})"
             v2_first_target_at = v2_first_target_at or t
@@ -1199,7 +1211,8 @@ def extinction_demo() -> int:
     print(f"old: declared complete at t = {old_dead_at:.0f} s with {len(clusters)} clusters on the map "
           f"and {OLD_FAILED_HOLD_S - old_dead_at:.0f} s still to run on the exclusions"
           if old_dead_at is not None else "old: did not stop")
-    print(f"v2 : waited, then took a goal at t = {v2_first_target_at:.0f} s"
+    print(f"v2 : waited, then took a goal at t = {v2_first_target_at:.0f} s "
+          "(reopened by the viewpoint trigger, not by a clock)"
           if v2_first_target_at is not None else "v2 : never took a goal")
     print(f"v2 never returned None: {v2_dead_at is None}")
     return 0 if (old_dead_at is not None and v2_first_target_at is not None

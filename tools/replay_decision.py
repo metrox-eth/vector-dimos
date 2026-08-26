@@ -51,7 +51,7 @@ sys.path.insert(0, ROOT)
 from vector_dimos.explorer2 import (  # noqa: E402
     DEFAULT_TUNING, DIRECTIVE_FRONTIER, Cluster, ExploreState, Tuning,
     _REVISIT_FADE_POWER, _cells_of, _clusters, _count_clusters, _decided_from, _frontier_mask, _path_cost,
-    _survey, next_target,
+    _survey, next_target, unknown_signature,
 )
 
 FREE, UNKNOWN, OCCUPIED = 0, -1, 100
@@ -251,6 +251,13 @@ def explain(costmap, pose, state: ExploreState, now: float,
              if survey.seed is not None else None)
 
     radius2 = tuning.failed_goal_radius_m ** 2
+    # mirror next_target's trigger pruning: an exclusion holds only while the
+    # rover is still near where it failed AND the map around the goal has not
+    # changed (26/08: triggers replaced the 60 s clock)
+    moved2 = tuning.failed_goal_moved_m ** 2
+    held_failed = [f for f in state.failed
+                   if (rx - f[2]) ** 2 + (ry - f[3]) ** 2 < moved2
+                   and unknown_signature(costmap, f[0], f[1], tuning.failed_goal_radius_m) == f[4]]
     out: list[Scored] = []
     for cluster in clusters:
         gx, gy = cluster.goal_xy
@@ -259,8 +266,7 @@ def explain(costmap, pose, state: ExploreState, now: float,
             s.reason = "already-seen-from"
             out.append(s)
             continue
-        if any((gx - f[0]) ** 2 + (gy - f[1]) ** 2 < radius2 for f in state.failed
-               if now - f[2] < tuning.failed_goal_hold_s):
+        if any((gx - f[0]) ** 2 + (gy - f[1]) ** 2 < radius2 for f in held_failed):
             s.reason = "recently-failed"
             out.append(s)
             continue
