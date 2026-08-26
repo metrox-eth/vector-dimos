@@ -86,8 +86,11 @@ of its decisions through this function):
 
 Field additions, all measured on VECTOR (spec §7):
 
-  §7.1  failed-target memory (0.6 m, 60 s) that NEVER causes extinction. When
-        every cluster is temporarily excluded the function returns a WAIT
+  §7.1  failed-target memory (0.6 m) that NEVER causes extinction and holds
+        no clock: a failed spot stays excluded until the WORLD reopens it -
+        the map around the goal changed, or the rover looks from a viewpoint
+        a metre from where it failed (owner, 26/08: triggers, never arbitrary
+        timers). When every cluster is excluded the function returns a WAIT
         directive, not None.
   §7.3  born-cornered detection: no reachable frontier AND a reachable free
         area under 0.5 m2 -> one back-off directive, before anything else. The
@@ -261,9 +264,13 @@ class Tuning:
     # looked at from; what retires the cluster itself is stated in _clusters.
     observed_radius_m: float = 0.30   # the follower's arrival tolerance (0.25 m) + a cell
 
-    # §7.1 failed-target memory. 0.6 m / 60 s as shipped in fast_explorer.py.
+    # §7.1 failed-target memory. Radius as shipped in fast_explorer.py. The
+    # 60 s hold that came with it was an arbitrary clock (owner, 26/08): an
+    # exclusion now lifts on a TRIGGER instead - the unknown-cell signature
+    # around the goal changed, or the rover stands this far from where it
+    # failed (a new viewpoint on the same spot).
     failed_goal_radius_m: float = 0.6
-    failed_goal_hold_s: float = 60.0
+    failed_goal_moved_m: float = 1.0
 
     # The body is physically where it is: the cells under it are passable even
     # when the inflation says otherwise, or a rover that has driven into a pinch
@@ -290,7 +297,8 @@ class ExploreState:
       observed         appended with the pose it was called from (deduplicated);
                        every entry is a place the rover really stood, and only
                        these retire a frontier
-      failed           expired entries pruned (the loop appends new ones)
+      failed           entries whose reopening trigger fired are pruned (the
+                       loop appends new ones)
       heading          refreshed from the pose it was given
       back_off_issued  set when a back-off goes out, cleared when a frontier does
       last_directive   what it just returned ("" if None)
@@ -303,20 +311,49 @@ class ExploreState:
     # each. Appended by next_target itself from the pose it is given, so it stays
     # true without the loop having to report anything.
     observed: list[tuple[float, float]] = field(default_factory=list)
-    # (x, y, t) with t on the same clock as `now`
-    failed: list[tuple[float, float, float]] = field(default_factory=list)
+    # (goal_x, goal_y, robot_x_at_failure, robot_y_at_failure, unknown_sig)
+    failed: list[tuple[float, float, float, float, int]] = field(default_factory=list)
     heading: float = 0.0
     back_off_issued: bool = False
     last_directive: str = ""
     targets_issued: int = 0
 
-    def note_failed(self, x: float, y: float, now: float) -> None:
-        """The planner gave up on this goal. Called by the loop, not by next_target."""
-        self.failed.append((float(x), float(y), float(now)))
+    def note_failed(self, x: float, y: float, robot_xy: tuple[float, float],
+                    costmap: Any, radius_m: float = DEFAULT_TUNING.failed_goal_radius_m) -> None:
+        """The planner gave up on this goal. Called by the loop, not by next_target.
+
+        Stores where the rover STOOD when it failed and the unknown-cell
+        signature around the goal: the two things whose change reopens it."""
+        self.failed.append((float(x), float(y), float(robot_xy[0]), float(robot_xy[1]),
+                            unknown_signature(costmap, x, y, radius_m)))
 
     def copy(self) -> "ExploreState":
         return replace(self, visited=list(self.visited), failed=list(self.failed),
                        observed=list(self.observed))
+
+
+def unknown_signature(costmap: Any, x: float, y: float, radius_m: float) -> int:
+    """Number of UNKNOWN cells within radius_m of (x, y) on this costmap.
+
+    The reopening trigger of a §7.1 exclusion: cells once observed stay
+    observed, so this count only moves when genuinely new information lands
+    around the failed goal - sensor noise flipping free<->occupied does not
+    touch it. Computed against world coordinates, so a moving crop origin
+    does not shift it; a goal that falls OFF the published crop reads 0,
+    which at worst reopens it early (one retry, one re-exclusion)."""
+    grid = np.asarray(costmap.grid)
+    res = float(costmap.resolution)
+    ox = float(costmap.origin.position.x)
+    oy = float(costmap.origin.position.y)
+    h, w = grid.shape
+    r = max(1, int(round(radius_m / res)))
+    cx = int(math.floor((x - ox) / res))
+    cy = int(math.floor((y - oy) / res))
+    x0, x1 = max(0, cx - r), min(w, cx + r + 1)
+    y0, y1 = max(0, cy - r), min(h, cy + r + 1)
+    if x0 >= x1 or y0 >= y1:
+        return 0
+    return int((grid[y0:y1, x0:x1] == -1).sum())
 
 
 # --- geometry helpers ------------------------------------------------------
@@ -847,8 +884,8 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
             the old loop's `simple_inflate(costmap, 0.25)` would double it.
         pose: the robot pose, `.position.x/.y` and `.orientation` (quaternion).
         state: the memory. Updated in place; see ExploreState.
-        now: the clock the failed-target timestamps live on. Defaults to
-            time.monotonic(); a replay passes its own so nothing is wall-bound.
+        now: only stamps the returned pose when the costmap carries no ts.
+            Defaults to time.monotonic(); nothing behavioural reads a clock.
 
     Returns:
         A pose carrying `.directive`:
@@ -880,9 +917,17 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
     if all((rx - ox_) ** 2 + (ry_world - oy_) ** 2 >= half * half for ox_, oy_ in state.observed):
         state.observed.append((rx, ry_world))
 
-    # Expired exclusions are gone; §7.1 exists because the old loop counted
-    # them as "no frontier" and completed while ten clusters were waiting.
-    state.failed = [f for f in state.failed if now - f[2] < tuning.failed_goal_hold_s]
+    # An exclusion whose reopening trigger fired is gone: the map around the
+    # goal changed (unknown-cell signature moved), or the rover now stands a
+    # viewpoint away from where it failed. No clock anywhere (owner, 26/08).
+    # §7.1 exists because the old loop counted exclusions as "no frontier"
+    # and completed while ten clusters were waiting.
+    moved2 = tuning.failed_goal_moved_m ** 2
+    state.failed = [
+        f for f in state.failed
+        if (rx - f[2]) ** 2 + (ry_world - f[3]) ** 2 < moved2
+        and unknown_signature(costmap, f[0], f[1], tuning.failed_goal_radius_m) == f[4]
+    ]
 
     h, w = grid.shape
     gx0 = int(np.clip(math.floor((rx - ox) / res), 0, w - 1))
@@ -898,8 +943,8 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
     # runs ended having given up on a frontier whose viewpoint the planner
     # could still reach from where the rover was standing when it stopped
     # (3 of 4 starts). What stops a goal being re-issued for ever is the loop's
-    # §7.1 exclusion on a drive that made no progress - a timer, and one that
-    # can only ever produce a WAIT.
+    # §7.1 exclusion on a drive that made no progress - trigger-reopened, and
+    # one that can only ever produce a WAIT.
     decided_from = _decided_from(state.observed, (h, w), res, (ox, oy),
                                  tuning.observed_radius_m)
     observed_yx = _cells_of(state.observed, (h, w), res, (ox, oy))
@@ -948,7 +993,7 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
     # --- §7.1 temporary exclusions -----------------------------------------
     radius2 = tuning.failed_goal_radius_m ** 2
     eligible: list[Cluster] = []
-    blocked_until: list[float] = []
+    n_blocked = 0
     n_seen_from = 0
     for cluster in clusters:
         gx, gy = cluster.goal_xy
@@ -959,30 +1004,27 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
             # then asked to look.
             n_seen_from += 1
             continue
-        expiries = [f[2] + tuning.failed_goal_hold_s for f in state.failed
-                    if (gx - f[0]) ** 2 + (gy - f[1]) ** 2 < radius2]
-        if expiries:
-            blocked_until.append(min(expiries))
+        if any((gx - f[0]) ** 2 + (gy - f[1]) ** 2 < radius2 for f in state.failed):
+            n_blocked += 1
         else:
             eligible.append(cluster)
 
-    if not eligible and not blocked_until:
+    if not eligible and not n_blocked:
         # Every cluster is one the rover has already stood at and looked from.
         # Nothing reachable is worth going to: that is the end of the run.
         state.last_directive = ""
         return None
 
     if not eligible:
-        # Every remaining cluster sits on a recently failed goal. Waiting is the answer,
-        # dying is not: the soonest expiry is the shortest wait that changes
-        # the picture (spec §7.1 says "wait out the youngest exclusion"; waiting
-        # for the LAST one would idle up to failed_goal_hold_s for nothing, and
-        # the map keeps growing while the rover stands still anyway).
-        wait_s = max(0.0, min(blocked_until) - now)
+        # Every remaining cluster sits on a failed goal whose trigger has not
+        # fired: the map around it has not changed and the rover has not found
+        # a new viewpoint. Waiting is the answer, dying is not - and there is
+        # no expiry to wait out: the loop polls, and the WORLD reopens the
+        # spot (the map keeps growing while the rover stands still anyway).
         state.last_directive = DIRECTIVE_WAIT
         return _target_pose(rx, ry_world, frame_id=frame_id, ts=ts,
-                            directive=DIRECTIVE_WAIT, wait_s=wait_s,
-                            n_clusters=len(clusters), n_excluded=len(blocked_until),
+                            directive=DIRECTIVE_WAIT, wait_s=0.0,
+                            n_clusters=len(clusters), n_excluded=n_blocked,
                             n_already_seen_from=n_seen_from, n_on_the_map=on_the_map)
 
     # --- score (spec §4B / PR #2830) ---------------------------------------
@@ -1053,7 +1095,7 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
                         centroid_xy=best.centroid_xy, look_at_xy=best.look_at_xy,
                         on_frontier=best.on_frontier, probe=best.probe,
                         in_sight=best.in_sight,
-                        n_clusters=len(clusters), n_excluded=len(blocked_until),
+                        n_clusters=len(clusters), n_excluded=n_blocked,
                         n_already_seen_from=n_seen_from, n_on_the_map=on_the_map)
 
 
@@ -1081,8 +1123,8 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
     # "still on its way", it is stuck against something, and re-publishing it
     # unchanged is how a rover spends 19 goals and 30 m in one corner
     # (measured in tools/explore_sim.py). It becomes a §7.1 exclusion, which
-    # holds it for failed_goal_hold_s and can only ever produce a WAIT - never
-    # an end of run. A goal that IS closing the gap is left alone: at the
+    # holds until the map around it changes or the rover finds a new viewpoint
+    # and can only ever produce a WAIT - never an end of run. A goal that IS closing the gap is left alone: at the
     # exploration speed cap a 7 m goal simply takes longer than goal_timeout.
     GOAL_PROGRESS_M = 0.25   # the follower's own arrival tolerance
 
@@ -1103,7 +1145,7 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
         forward_bonus: float = DEFAULT_TUNING.forward_bonus
         revisit_radius_m: float = DEFAULT_TUNING.revisit_radius_m
         failed_goal_radius_m: float = DEFAULT_TUNING.failed_goal_radius_m
-        failed_goal_hold_s: float = DEFAULT_TUNING.failed_goal_hold_s
+        failed_goal_moved_m: float = DEFAULT_TUNING.failed_goal_moved_m
         cornered_area_m2: float = DEFAULT_TUNING.cornered_area_m2
         back_off_m: float = DEFAULT_TUNING.back_off_m
 
@@ -1142,7 +1184,7 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
                 forward_bonus=self.config.forward_bonus,
                 revisit_radius_m=self.config.revisit_radius_m,
                 failed_goal_radius_m=self.config.failed_goal_radius_m,
-                failed_goal_hold_s=self.config.failed_goal_hold_s,
+                failed_goal_moved_m=self.config.failed_goal_moved_m,
                 cornered_area_m2=self.config.cornered_area_m2,
                 back_off_m=self.config.back_off_m,
             )
@@ -1177,11 +1219,11 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
                 directive = getattr(target, "directive", DIRECTIVE_FRONTIER)
 
                 if directive == DIRECTIVE_WAIT:
-                    wait_s = float(getattr(target, "wait_s", WAIT_POLL_S))
                     logger.info(f"{getattr(target, 'n_excluded', 0)} of "
                                 f"{getattr(target, 'n_clusters', 0)} clusters are on a recently "
-                                f"failed goal: waiting {wait_s:.1f} s, not stopping")
-                    self.stop_event.wait(min(wait_s, WAIT_POLL_S))
+                                "failed goal: waiting for the map or the viewpoint "
+                                "to change, not stopping")
+                    self.stop_event.wait(WAIT_POLL_S)
                     continue
 
                 if directive == DIRECTIVE_BACK_OFF:
@@ -1214,24 +1256,34 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
 
                 arrived = self.goal_reached_event.wait(timeout=self.config.goal_timeout)
                 if arrived and self._last_goal_ok is False:
-                    # The planner found no path. Hold this spot for
-                    # failed_goal_hold_s - and note that this is an exclusion,
-                    # never a reason to stop (§7.1).
-                    state.note_failed(*self._last_goal, time.monotonic())
-                    logger.info("planner gave up on that goal: excluded for "
-                                f"{self._tuning.failed_goal_hold_s:.0f} s")
+                    # The planner gave up (no path, or stuck -> goal abandoned).
+                    # An exclusion, never a reason to stop (§7.1); it reopens
+                    # when the map around it changes or the rover stands a
+                    # viewpoint away from here.
+                    self._note_failed(state)
+                    logger.info("planner gave up on that goal: excluded until "
+                                "the map or the viewpoint changes")
                 elif not arrived:
                     # Timed out mid-drive. Whether that is a failure depends on
                     # one measurement: did the gap close (see GOAL_PROGRESS_M).
                     closed = gap_at_issue - self._gap_to(self._last_goal)
                     if closed < GOAL_PROGRESS_M:
-                        state.note_failed(*self._last_goal, time.monotonic())
+                        self._note_failed(state)
                         logger.info(f"goal timeout after {self.config.goal_timeout:.0f} s having "
-                                    f"closed {closed:.2f} m of {gap_at_issue:.2f} m: excluded for "
-                                    f"{self._tuning.failed_goal_hold_s:.0f} s")
+                                    f"closed {closed:.2f} m of {gap_at_issue:.2f} m: excluded until "
+                                    "the map or the viewpoint changes")
                     else:
                         logger.info(f"goal timeout after {self.config.goal_timeout:.0f} s, "
                                     f"{closed:.2f} m closer, re-deciding")
+
+        def _note_failed(self, state: ExploreState) -> None:
+            """Exclude the goal that just failed, with its reopening triggers
+            (where the rover stood + the unknown signature around the goal)."""
+            odom = self.latest_odometry
+            robot = ((float(odom.position.x), float(odom.position.y))
+                     if odom is not None else self._last_goal)
+            state.note_failed(*self._last_goal, robot, self.latest_costmap,
+                              self._tuning.failed_goal_radius_m)
 
         def _gap_to(self, goal: tuple[float, float]) -> float:
             """Metres from where the rover is now to `goal`, or inf if unknown."""

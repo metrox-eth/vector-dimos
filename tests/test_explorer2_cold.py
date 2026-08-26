@@ -5,7 +5,9 @@ Rule #2 applies: a known input must give a known output in physical units
 
   A. frontier + goal placement  - where the target lands on a plain room
   B. prefer-forward             - two mirror-image clusters, the one ahead wins
-  C. failed-target memory       - an exclusion WAITS, it never ends the run (7.1)
+  C. failed-target memory       - an exclusion WAITS, never ends the run, and
+                                  reopens on TRIGGERS (map changed / new
+                                  viewpoint), never on a clock (7.1)
   D. born cornered              - the pocket signature gives ONE back-off (7.3)
   E. keep-out                   - a forbidden block is never targeted (7.2)
   F. the end of a run           - None exactly when there is nothing left
@@ -171,7 +173,7 @@ check("facing sideways, neither bonus applies and one is still chosen",
 
 
 # ===========================================================================
-print("C. failed-target memory: an exclusion WAITS, it never ends the run (7.1)")
+print("C. failed-target memory: an exclusion WAITS, reopens on triggers, never a clock (7.1)")
 
 g = door(room(), "east", 70, 24)
 cm = Grid(g)
@@ -181,40 +183,62 @@ probe = next_target(cm, here, ExploreState(), now=0.0)
 assert probe is not None
 gx, gy = probe.position.x, probe.position.y
 
-st = ExploreState(failed=[(gx, gy, 0.0)])
+st = ExploreState()
+st.note_failed(gx, gy, (centre, centre), cm)
 waited = next_target(cm, here, st, now=10.0)
 check("the only cluster is excluded -> NOT None", waited is not None)
 assert waited is not None
 check("directive is 'wait'", waited.directive == DIRECTIVE_WAIT, waited.directive)
-check("wait_s is what is left of the 60 s hold: 50.0 s",
-      abs(waited.wait_s - 50.0) < 1e-9, f"{waited.wait_s}")
 check("the rover is told to stay where it is",
       (waited.position.x, waited.position.y) == (here.position.x, here.position.y))
 check("the cluster is still counted as a frontier, not as absence",
       waited.n_clusters == 1 and waited.n_excluded == 1,
       f"{waited.n_clusters} clusters, {waited.n_excluded} excluded")
 
-after = next_target(cm, here, ExploreState(failed=[(gx, gy, 0.0)]), now=61.0)
-check("once the hold has expired the same cluster is targeted again",
-      after is not None and after.directive == DIRECTIVE_FRONTIER,
-      after.directive if after else "None")
+much_later = next_target(cm, here, st, now=1e9)
+check("NO clock reopens it: same map, same pose, a billion seconds later -> still wait",
+      much_later is not None and much_later.directive == DIRECTIVE_WAIT,
+      much_later.directive if much_later else "None")
 
-# two exclusions, different ages: the wait is the SOONEST expiry
+# trigger 1: the rover stands a viewpoint away from where it failed
+moved_st = ExploreState()
+moved_st.note_failed(gx, gy, (centre, centre), cm)
+moved = next_target(cm, pose(centre - 1.2, centre, 0.0), moved_st, now=10.0)
+check("the rover 1.2 m from where it failed -> the exclusion reopens (viewpoint trigger)",
+      moved is not None and moved.directive == DIRECTIVE_FRONTIER,
+      moved.directive if moved else "None")
+check("and the reopened entry is pruned from the state", moved_st.failed == [],
+      f"{moved_st.failed}")
+
+# trigger 2: the map around the goal changed (new cells observed)
+changed_st = ExploreState()
+changed_st.note_failed(gx, gy, (centre, centre), cm)
+g_changed = g.copy()
+cgx, cgy = int((gx - cm.origin.position.x) / cm.resolution), int((gy - cm.origin.position.y) / cm.resolution)
+patch = g_changed[cgy - 4:cgy + 5, cgx - 4:cgx + 5]
+patch[patch == UNKNOWN] = FREE                     # the world got observed there
+changed = next_target(Grid(g_changed), here, changed_st, now=10.0)
+check("new observations around the failed goal -> the exclusion reopens (map trigger)",
+      changed is not None and changed.directive == DIRECTIVE_FRONTIER,
+      changed.directive if changed else "None")
+
+# two exclusions: both held -> wait; one held -> the other is simply used
 g2 = door(door(room(), "east", 70, 24), "west", 70, 24)
 cm2 = Grid(g2)
 e = next_target(cm2, pose(centre, centre, 0.0), ExploreState(), now=0.0)
 wst = next_target(cm2, pose(centre, centre, math.pi), ExploreState(), now=0.0)
 assert e is not None and wst is not None
-both = ExploreState(failed=[(e.position.x, e.position.y, 0.0),
-                            (wst.position.x, wst.position.y, 40.0)])
+both = ExploreState()
+both.note_failed(e.position.x, e.position.y, (centre, centre), cm2)
+both.note_failed(wst.position.x, wst.position.y, (centre, centre), cm2)
 waited2 = next_target(cm2, pose(centre, centre, 0.0), both, now=45.0)
-check("with two exclusions the wait is the soonest expiry (60 - 45 = 15 s)",
+check("with two exclusions held -> wait, both counted",
       waited2 is not None and waited2.directive == DIRECTIVE_WAIT
-      and abs(waited2.wait_s - 15.0) < 1e-9,
-      f"{waited2.wait_s}" if waited2 else "None")
+      and waited2.n_excluded == 2,
+      f"{waited2.n_excluded if waited2 else None} excluded")
 
-# one of two excluded: the other one is simply used, no wait at all
-one = ExploreState(failed=[(e.position.x, e.position.y, 40.0)])
+one = ExploreState()
+one.note_failed(e.position.x, e.position.y, (centre, centre), cm2)
 other = next_target(cm2, pose(centre, centre, 0.0), one, now=45.0)
 check("only one of two excluded -> the other is targeted, no wait",
       other is not None and other.directive == DIRECTIVE_FRONTIER
@@ -526,14 +550,15 @@ cm = Grid(g)
 here = pose(centre, centre, 0.3)
 pose_before = (here.position.x, here.position.y, here.orientation.z, here.orientation.w)
 
-st = ExploreState(failed=[(1.0, 2.0, 50.0)], back_off_issued=False)
+st = ExploreState(back_off_issued=False)
+st.note_failed(1.0, 2.0, (here.position.x, here.position.y), cm)   # robot has not moved since
 before = st.copy()
 out = next_target(cm, here, st, now=60.0)
 
 check("the costmap is not written to", np.array_equal(g, grid_before))
 check("the pose is not written to",
       (here.position.x, here.position.y, here.orientation.z, here.orientation.w) == pose_before)
-check("failed entries still inside their hold are kept as they were",
+check("failed entries whose triggers have not fired are kept as they were",
       st.failed == before.failed, f"{st.failed}")
 check("back_off_issued untouched when nothing was cornered",
       st.back_off_issued == before.back_off_issued)
@@ -543,9 +568,11 @@ check("visited / observed / targets_issued / last_directive are the only other c
       (len(st.visited), len(st.observed), st.targets_issued, st.last_directive)
       == (1, 1, 1, DIRECTIVE_FRONTIER))
 
-expired = ExploreState(failed=[(1.0, 2.0, 0.0)])
-next_target(cm, here, expired, now=61.0)
-check("a failed entry past its 60 s hold is pruned", expired.failed == [], f"{expired.failed}")
+reopened = ExploreState()
+reopened.note_failed(1.0, 2.0, (here.position.x - 5.0, here.position.y), cm)   # failed 5 m from here
+next_target(cm, here, reopened, now=61.0)
+check("a failed entry whose rover has since moved a viewpoint away is pruned",
+      reopened.failed == [], f"{reopened.failed}")
 
 a = next_target(cm, here, ExploreState(), now=100.0)
 b = next_target(cm, here, ExploreState(), now=100.0)
@@ -560,8 +587,10 @@ check("tuning is honoured and is not global state",
       tuned is not None
       and next_target(cm, here, ExploreState(), now=100.0).score == a.score)
 
+noclock = ExploreState()
+noclock.note_failed(gx, gy, (here.position.x, here.position.y), cm)
 check("no clock is read when `now` is given: a 1970 timestamp behaves",
-      next_target(cm, here, ExploreState(failed=[(gx, gy, -1e9)]), now=0.0) is not None)
+      next_target(cm, here, noclock, now=-1e9) is not None)
 
 
 print(f"{OK} OK, {KO} KO")
