@@ -51,7 +51,6 @@ from dimos.msgs.geometry_msgs.Pose import Pose
 from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.nav_msgs.OccupancyGrid import OccupancyGrid
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
-from dimos_lcm.std_msgs import Bool
 from dimos.utils.logging_config import setup_logger
 
 from vector_dimos import persistent_map
@@ -69,11 +68,9 @@ LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar
 PUBLISH_EVERY = 5            # lidar revolutions between two costmap publications (10 Hz -> 2 Hz)
 RAY_MAX_M = 4.0              # rays are carved (misses) up to this range only: 12 m x 0.025 m steps cost 227 ms per revolution (2.3 cores at 10 Hz, 23/08 20:20)
 RAY_EVERY = 2                # carve on every other revolution; hits are taken on all
-ROLLBACK_WINDOW_S = 2.5      # writes stay undoable this long: on a slip the last ~2 s already polluted the map before the guard could fire (metrox, 24/08: 'retroactif a une ou deux secondes')
 CHECKPOINT_EVERY_S = 30.0    # metrox 23/08: 'when it crashes we lose everything - resume from a minute before'
 CHECKPOINT_KEEP = 40         # 20 minutes of history
 CHECKPOINT_DIR = persistent_map.CHECKPOINT_DIR
-SLIP_ROLLBACK_S = 2.0        # how far back a slip erases
 PROMOTE_EVERY_S = 300.0      # the persistent map is refreshed this often (and on a clean stop)
 PROMOTE_MIN_CELLS = 2000     # a run that mapped almost nothing never replaces the saved flat
 FRAME_DECISION_S = 20.0      # if no relocalization verdict arrives by then, start fresh as before
@@ -96,8 +93,6 @@ class ScoredGrid:
         # Runtime only, never saved: it protects a leg for 3 s, and a monotonic
         # clock means nothing in another process anyway.
         self._last_low_hit = np.full((self.n, self.n), -np.inf, dtype=np.float64)
-        # undo journal: (monotonic time, layer, flat indices, applied deltas, seen-was-new mask)
-        self._journal: list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
         self._keepout: np.ndarray | None = None   # cells the rover may never enter, whatever the layers say
 
     # ---- coordinates -------------------------------------------------------
@@ -114,8 +109,8 @@ class ScoredGrid:
         They are NOT a score, they are a decision - so they are applied in
         `occupancy()`, after every layer. Nothing writes them away: not a
         lidar ray seeing through the doorway, not `body_clear` (the rover
-        cannot certify a cell it should never have stood on), not a slip
-        rollback. The only way out is the keep-out file.
+        cannot certify a cell it should never have stood on). The only way
+        out is the keep-out file.
 
         Rectangle or polygon, the answer is one bool mask: the rasterising
         lives in `persistent_map.keepout_mask` (even-odd ray casting on the
@@ -124,8 +119,6 @@ class ScoredGrid:
         because the house is 5.75 deg off the map axes: an enclosing rectangle
         either eats the corridor or leaks the corner.
 
-        The other zone type, `no_slip_reflex`, is not a map fact at all - it
-        is read by the two slip guards, and this grid ignores it.
         """
         forbidden = persistent_map.zones_of(zones, persistent_map.FORBIDDEN)
         self._keepout = (persistent_map.keepout_mask(forbidden, self.res, self.ox, self.oy, self.n)
@@ -148,8 +141,6 @@ class ScoredGrid:
         # repeated from the same spot stays two misses away from gone.
         cap = np.where(moved, HIT_CAP, OCCUPIED_AT)
         new = np.minimum(cur + 1, cap).astype(np.int8)
-        self._journal.append((time.monotonic(), layer, gy * self.n + gx,
-                              (new - cur).astype(np.int8), ~self.seen[gy, gx]))
         layer[gy, gx] = new
         self._last_hit_xy[gy[moved], gx[moved]] = from_xy
         self.seen[gy, gx] = True
@@ -160,8 +151,6 @@ class ScoredGrid:
             return
         cur = layer[gy, gx].astype(np.int16)
         new = np.maximum(cur - 1, FREE_FLOOR).astype(np.int8)
-        self._journal.append((time.monotonic(), layer, gy * self.n + gx,
-                              (new - cur).astype(np.int8), ~self.seen[gy, gx]))
         layer[gy, gx] = new
         self.seen[gy, gx] = True
 
@@ -241,9 +230,7 @@ class ScoredGrid:
         """The body IS here: every cell under the body footprint (0.625 x
         0.46 m with the bumper bars - metrox 25/08 22h - exact, never wider,
         so a wall against the bumper survives)
-        is certainly free. Both layers to the floor, seen. No journal entry:
-        a slip rollback must not resurrect an obstacle under the chassis.
-        Born 25/08: the rover kept walling itself in with patches laid on
+        is certainly free. Both layers to the floor, seen. Born 25/08: the rover kept walling itself in with patches laid on
         cells it then drove over."""
         x, y, yaw = pose
         c, s = np.cos(yaw), np.sin(yaw)
@@ -256,35 +243,18 @@ class ScoredGrid:
             self.low[gy, gx] = FREE_FLOOR
             self.seen[gy, gx] = True
 
-    def prune_journal(self, now: float | None = None) -> None:
-        now = time.monotonic() if now is None else now
-        cutoff = now - ROLLBACK_WINDOW_S
-        while self._journal and self._journal[0][0] < cutoff:
-            self._journal.pop(0)
-
-    def rollback(self, seconds: float, now: float | None = None) -> int:
-        """Undo every write of the last `seconds` (metrox's retroactive freeze:
-        by the time the slip guard fires, the sliding pose has already written
-        ~1-2 s of garbage into the map). Deltas are the values actually
-        applied, so the undo is exact even across the score clamps. Returns
-        the number of batches undone."""
-        now = time.monotonic() if now is None else now
-        cutoff = now - seconds
-        undone = 0
-        while self._journal and self._journal[-1][0] >= cutoff:
-            _, layer, flat, delta, seen_was_new = self._journal.pop()
-            gy, gx = flat // self.n, flat % self.n
-            layer[gy, gx] = (layer[gy, gx].astype(np.int16) - delta).astype(np.int8)
-            self.seen[gy[seen_was_new], gx[seen_was_new]] = False
-            undone += 1
-        return undone
-
     # ---- checkpoints -------------------------------------------------------
     def save(self, path: str, pose_xy: tuple[float, float] | None = None) -> int:
-        """Full state to a compressed .npz; returns the file size in bytes."""
-        np.savez_compressed(path, lidar=self.lidar, low=self.low, seen=self.seen, last_hit_xy=self._last_hit_xy,
+        """Full state to a compressed .npz; returns the file size in bytes.
+
+        Written to a sibling tmp file then renamed: the 26/08 13h00 battery
+        death cut a checkpoint mid-write and the truncated .npz crashed every
+        later reader. os.replace is atomic on the same filesystem."""
+        tmp = path + ".tmp.npz"      # numpy appends .npz to any other suffix
+        np.savez_compressed(tmp, lidar=self.lidar, low=self.low, seen=self.seen, last_hit_xy=self._last_hit_xy,
                             res=self.res, ox=self.ox, oy=self.oy, n=self.n,
                             pose_xy=np.array(pose_xy if pose_xy else (np.nan, np.nan)), ts=time.time())
+        os.replace(tmp, path)
         return os.path.getsize(path)
 
     @classmethod
@@ -294,9 +264,8 @@ class ScoredGrid:
         g.res, g.n, g.ox, g.oy = float(z["res"]), int(z["n"]), float(z["ox"]), float(z["oy"])
         g.lidar, g.low, g.seen, g._last_hit_xy = z["lidar"], z["low"], z["seen"], z["last_hit_xy"]
         g._revs = 0
-        # a loaded map is CONTINUED now, not just inspected: it needs the undo
-        # journal and the keep-out slot __init__ would have given it.
-        g._journal = []
+        # a loaded map is CONTINUED now, not just inspected: it needs the
+        # keep-out slot __init__ would have given it.
         g._keepout = None
         g._last_low_hit = np.full((g.n, g.n), -np.inf, dtype=np.float64)
         return g
@@ -330,13 +299,9 @@ def _zone_summary(zones: list[dict], forbidden_cells: int) -> str:
     """One readable line: what is forbidden, and where the reflexes stay quiet."""
     parts = []
     forbidden = persistent_map.zones_of(zones, persistent_map.FORBIDDEN)
-    quiet = persistent_map.zones_of(zones, persistent_map.NO_SLIP_REFLEX)
     if forbidden:
         parts.append(f"{len(forbidden)} forbidden over {forbidden_cells} cells "
                      f"({', '.join(z['label'] for z in forbidden)})")
-    if quiet:
-        parts.append(f"{len(quiet)} no-slip-reflex, read by the slip guards, not by the map "
-                     f"({', '.join(z['label'] for z in quiet)})")
     return "; ".join(parts)
 
 
@@ -344,8 +309,8 @@ class VectorCostMap(Module):
     """Replaces dimOS's CostMapper on VECTOR. Ins: `lidar` (world cloud from
     lidar_odometry: lidar returns at z = 0.37, camera obstacles at other
     heights), `camera_floor` (world floor samples, z = 0), `odom` (lidar pose
-    in world), `slip` (stuck_guard). Out: `global_costmap` (the stream name
-    the planner and the explorer already listen to).
+    in world). Out: `global_costmap` (the stream name the planner and the
+    explorer already listen to).
 
     The lidar and the camera are the only writers: the sonar and the contact
     switches are reflexes, not mappers (sensor doctrine, 25/08)."""
@@ -353,7 +318,6 @@ class VectorCostMap(Module):
     lidar: In[PointCloud2]
     camera_floor: In[PointCloud2]
     odom: In[PoseStamped]
-    slip: In[Bool]                  # stuck_guard: undo the last SLIP_ROLLBACK_S of map writes
     reloc_frame: In[PoseStamped]    # lidar_odometry's verdict: which frame this run lives in, and when to freeze
     global_costmap: Out[OccupancyGrid]
 
@@ -487,11 +451,6 @@ class VectorCostMap(Module):
         except Exception:  # noqa: BLE001
             logger.exception("costmap: keep-out zones would not reload - the previous ones stay in force")
 
-    async def handle_slip(self, msg: Bool) -> None:
-        if self._grid is not None and getattr(msg, "data", False):
-            undone = self._grid.rollback(SLIP_ROLLBACK_S)
-            logger.warning(f"slip: rolled back the last {SLIP_ROLLBACK_S:.0f} s of map writes ({undone} batches)")
-
     async def handle_camera_floor(self, msg: PointCloud2) -> None:
         if self._grid is None or self._frozen:
             return
@@ -511,7 +470,6 @@ class VectorCostMap(Module):
             self._revolutions += 1
             if self._revolutions % PUBLISH_EVERY == 0:
                 self._publish()
-            self._grid.prune_journal()
             if time.monotonic() - self._last_ckpt >= CHECKPOINT_EVERY_S:
                 self._checkpoint()
         else:

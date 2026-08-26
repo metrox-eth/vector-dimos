@@ -44,9 +44,19 @@ assert len(found2) == 1, len(found2)
 print("  robot in unknown space -> starts from the nearest free cell, same U-shaped frontier")
 
 cks = sorted(glob.glob(os.path.expanduser("~/.local/state/vector/checkpoints/*/*.npz")), key=os.path.getmtime)
-if cks:
-    from vector_dimos.costmap2d import ScoredGrid
-    g = ScoredGrid.load(cks[-1]); z = np.load(cks[-1]); pose = z["pose_xy"]
+# newest first, skipping any checkpoint a power cut truncated before save()
+# became atomic (26/08: the 13h00 battery death left a corrupt newest .npz)
+g = z = None
+for ck in reversed(cks):
+    try:
+        from vector_dimos.costmap2d import ScoredGrid
+        g = ScoredGrid.load(ck); z = np.load(ck)
+        break
+    except Exception as exc:  # noqa: BLE001
+        print(f"  (skipping corrupt checkpoint {os.path.basename(ck)}: {exc})")
+if g is not None:
+    cks = [ck]
+    pose = z["pose_xy"]
     occ, ox, oy = g.cropped()
     sx, sy = int((pose[0] - ox) / RES), int((pose[1] - oy) / RES)
     t0 = time.perf_counter(); f = find_frontiers(occ, (sx, sy), 99, 6); dt = time.perf_counter() - t0
