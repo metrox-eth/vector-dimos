@@ -96,8 +96,39 @@ if [ "$DRY" = "1" ]; then
   exit 0
 fi
 
-echo "== 7/7 exploration =="
+echo "== 7/8 exploration =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py start'
+
+echo "== 8/8 the rover must understand WHERE IT IS (GATE) =="
+# Owner (26/08 21h49): as soon as it maps, it must understand where it is and
+# lay its limits down - every run. Relocalizing into the persistent frame is
+# what brings BOTH the grid alignment and the keep-out zones (bathroom!). The
+# 21h05 run explored 10 min in its own frame with the zones INACTIVE - never
+# again: no persistent frame within the grace -> the flight stops itself.
+# ALLOW_FRESH=1 skips this gate (bootstrapping the very first map only).
+if [ "${ALLOW_FRESH:-0}" = "1" ]; then
+  echo "ALLOW_FRESH=1: fresh-frame flight allowed (first-map bootstrap) - NO keep-out zones"
+else
+  RELOC_OK=""
+  for i in $(seq 1 46); do    # ~11.5 min: 10 min of grace + margin
+    sleep 15
+    V=$(timeout 15 ssh $ROVER "d=\$(ls -td ~/.local/state/dimos/logs/*-vector-dimos-explore/ | head -1); grep -oE 'CONTINUING the persistent map|relocalized late - dropping|resumed in the persistent frame|relocalization: gave up' \"\$d/main.jsonl\" | tail -1")
+    case "$V" in
+      "CONTINUING the persistent map"|"relocalized late - dropping"|"resumed in the persistent frame")
+        RELOC_OK=1; echo "relocalized (${i}x15 s) - grid aligned, keep-out zones ACTIVE"; break ;;
+      "relocalization: gave up")
+        break ;;
+      *) [ $((i % 4)) -eq 0 ] && echo "  still finding itself... ($((i * 15)) s)" ;;
+    esac
+  done
+  if [ -z "$RELOC_OK" ]; then
+    echo "THE ROVER NEVER UNDERSTOOD WHERE IT IS - zones inactive, stopping the flight"
+    ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py stop'
+    ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py; .venv/bin/dimos stop; sleep 2; .venv/bin/python tests/estop_rs485.py'
+    exit 1
+  fi
+fi
+
 echo "IN FLIGHT. Stop: E-STOP FIRST, then the stack:"
 echo "  ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py && .venv/bin/dimos stop'"
 echo "  (dimos stop can escalate to SIGKILL: killed asymmetrically, one axle keeps its last"
