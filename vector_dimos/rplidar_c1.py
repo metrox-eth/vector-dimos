@@ -28,7 +28,12 @@ from dimos.utils.logging_config import setup_logger
 logger = setup_logger()
 
 # The C1 comes with a CP2102 USB-UART dongle -> /dev/ttyUSB0 on the Jetson.
-DEFAULT_PORT = "/dev/serial/by-id/usb-FIREPHX_USB_SER_FX2348N-if00"
+# CP2102 Silicon Labs, swapped in 26/08 17h12. Its predecessor (FIREPHX
+# USB-TTL, bought 25/08) died the same day: answered exactly once after each
+# VBUS cut, then mute forever - a full software-elimination ledger sits in
+# the palace note vector-hardware-ops. The owner's multimeter cleared the
+# wiring; the stick was the fault.
+DEFAULT_PORT = "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0"
 # 460800 is the C1's line rate. The reader is our own (c1_serial.py, plain
 # pyserial): rplidar-roboticia 0.9.5 answered "Descriptor length mismatch" on
 # this unit (2026-08-23) while the raw SLAMTEC protocol worked first try.
