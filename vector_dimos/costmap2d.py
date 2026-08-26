@@ -80,6 +80,8 @@ CHECKPOINT_DIR = persistent_map.CHECKPOINT_DIR
 PROMOTE_EVERY_S = 300.0      # the persistent map is refreshed this often (and on a clean stop)
 PROMOTE_MIN_CELLS = 2000     # a run that mapped almost nothing never replaces the saved flat
 FRAME_DECISION_S = 20.0      # if no relocalization verdict arrives by then, start fresh as before
+WALLED_IN_MIN_M2 = 3.0       # below this reachable free area the map is a prison, not a flat
+                             # (explorer2's WALLED-IN threshold) - such a map is never promoted
 
 
 class ScoredGrid:
@@ -281,6 +283,33 @@ class ScoredGrid:
             return None
         flat = np.unique(gy * self.n + gx)
         return flat % self.n, flat // self.n
+
+    def reachable_free_m2(self, pose_xy: tuple[float, float]) -> float | None:
+        """Free area (m2) connected to the rover's position - None if unknowable.
+
+        Born 26/08 evening: a run that starts walled in by ghost cells must
+        never hand its prison over as the persistent map. Same 8-connected
+        flood as explorer2's survey, computed here on the occupancy so the
+        promotion gate needs no cross-module plumbing."""
+        try:
+            from scipy import ndimage
+        except Exception:  # noqa: BLE001
+            return None
+        gx, gy = self.cell(np.array([pose_xy[0]]), np.array([pose_xy[1]]))
+        if len(gx) == 0:
+            return None
+        labels, _ = ndimage.label(self.occupancy() == 0, structure=np.ones((3, 3), dtype=bool))
+        lab = labels[gy[0], gx[0]]
+        if lab == 0:
+            # the rover's own cell is not free (fresh grid, or it stands on a
+            # ghost): take the biggest free patch in a 30 cm window around it
+            w = 6
+            window = labels[max(0, gy[0] - w):gy[0] + w + 1, max(0, gx[0] - w):gx[0] + w + 1]
+            vals = window[window > 0]
+            if len(vals) == 0:
+                return 0.0
+            lab = int(np.bincount(vals).argmax())
+        return float((labels == lab).sum()) * self.res ** 2
 
     def body_clear(self, pose: tuple) -> None:
         """The body IS here: every cell under the body footprint (0.625 x
@@ -576,6 +605,13 @@ class VectorCostMap(Module):
         seen = int(self._grid.seen.sum())
         if seen < PROMOTE_MIN_CELLS:
             return                       # a run that saw almost nothing is not a flat
+        if self._pose_xy is not None:
+            free = self._grid.reachable_free_m2(self._pose_xy)
+            if free is not None and free < WALLED_IN_MIN_M2:
+                logger.warning(f"costmap: NOT promoting - the rover believes itself walled in "
+                               f"({free:.1f} m2 reachable, needs {WALLED_IN_MIN_M2:.0f}). A map that "
+                               "imprisons the rover must never become the flat (26/08 evening).")
+                return
         if self._frame != "persistent" and persistent_map.map_exists() and not persistent_map.rebase_allowed():
             if not self._promote_refused:
                 self._promote_refused = True
