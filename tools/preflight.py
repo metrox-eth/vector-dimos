@@ -118,6 +118,17 @@ def check_esp() -> None:
         ser.close()
         alive = [ln for ln in lines if ln]
         verdict(bool(alive), "ESP32 emet", alive[0] if alive else "silence en 7,5 s")
+        # the evening of 26/08: the sonar read 0.08 m for two hours, the
+        # adapter brake clamped every forward command to zero, and the check
+        # PRINTED the number without judging it. A resting rover with a wall
+        # at less than 0.30 m cannot drive: say it loud.
+        import re as _re
+        sonar = [float(m.group(1)) for ln in lines
+                 for m in [_re.search(r"SONAR ([0-9.]+)", ln)] if m]
+        if sonar:
+            verdict(min(sonar) >= 0.30, "sonar voit de l'espace devant",
+                    f"{min(sonar):.2f} m" + ("" if min(sonar) >= 0.30 else
+                    " -> LE FREIN BLOQUERA TOUTE AVANCE (cable/objet devant le museau, ou sonar deregle)"))
     except Exception as exc:  # noqa: BLE001
         verdict(False, "ESP32", str(exc))
 
