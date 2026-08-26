@@ -175,16 +175,15 @@ class RecoveringGlobalPlanner(GlobalPlanner):
     escape_speed_mps: float = ESCAPE_SPEED_MPS
     escape_timeout_s: float = ESCAPE_TIMEOUT_S
 
-    # dimOS PController enforces a 0.2 m/s floor (_min_linear_velocity) that
-    # silently overrides any NERF_SPEED cap below 0.2: the 0.149 m/s
-    # exploration cap came out as 0.2 on the wheels (seen 25/08 21:06).
-    # VECTOR drives cleanly at 0.10 m/s on hard floor (adherence matrix
-    # 101-111%, 25/08), so lower the floor and keep the cap real.
+    # The 26/08-morning session lowered the controller floors to 0.10 so the
+    # 0.149 m/s exploration cap would be real. The evening run showed the cost:
+    # wz flip-flopped at exactly the 0.10 floor, rotations never completed and
+    # every goal died (11 issued, 7 abandoned). The 23-25/08 runs, on dimOS's
+    # stock 0.2 floors, drove and reached goals - so the floors stay stock.
+    # The cap being overridden below 0.2 is the price, measured and accepted.
     def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(*args, **kwargs)
         self._escape_abort = threading.Event()
-        self._local_planner._controller._min_linear_velocity = 0.10
-        self._local_planner._controller._min_angular_velocity = 0.10
 
     def _find_wide_path(self, goal: Vector3, robot_pos: Vector3) -> Path | None:
         """Plan on the clearance cost field instead of dimOS's fixed 1.1x

@@ -91,7 +91,11 @@ Field additions, all measured on VECTOR (spec §7):
         the map around the goal changed, or the rover looks from a viewpoint
         a metre from where it failed (owner, 26/08: triggers, never arbitrary
         timers). When every cluster is excluded the function returns a WAIT
-        directive, not None.
+        directive, not None. Starvation escape (lived 26/08 17h40: rover
+        motionless, 9/11 excluded, nothing left to change the world): after
+        WAIT_REOPEN_POLLS consecutive WAIT answers the OLDEST failed entry is
+        reopened - the world stayed silent, so the oldest question is asked
+        again. A count of asks, not a wall clock.
   §7.3  born-cornered detection: no reachable frontier AND a reachable free
         area under 0.5 m2 -> one back-off directive, before anything else. The
         same one back-off answers the other way a rover can be shut in: no
@@ -285,6 +289,11 @@ class Tuning:
 
 DEFAULT_TUNING = Tuning()
 
+# Starvation escape: consecutive WAIT answers before the oldest failed entry is
+# reopened. Counts ASKS (the loop polls once per WAIT_POLL_S), not wall time -
+# a replay driving next_target by hand starves and recovers identically.
+WAIT_REOPEN_POLLS = 12
+
 
 # --- state -----------------------------------------------------------------
 
@@ -317,6 +326,7 @@ class ExploreState:
     back_off_issued: bool = False
     last_directive: str = ""
     targets_issued: int = 0
+    wait_streak: int = 0        # consecutive WAITs; WAIT_REOPEN_POLLS triggers the starvation escape
 
     def note_failed(self, x: float, y: float, robot_xy: tuple[float, float],
                     costmap: Any, radius_m: float = DEFAULT_TUNING.failed_goal_radius_m) -> None:
@@ -1020,10 +1030,18 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
         # fired: the map around it has not changed and the rover has not found
         # a new viewpoint. Waiting is the answer, dying is not - and there is
         # no expiry to wait out: the loop polls, and the WORLD reopens the
-        # spot (the map keeps growing while the rover stands still anyway).
+        # spot. But a motionless rover cannot change the world (lived 26/08:
+        # 9/11 excluded, infinite wait), so after WAIT_REOPEN_POLLS silent
+        # asks the OLDEST failed entry is reopened and asked again.
+        state.wait_streak += 1
+        reopened = None
+        if state.failed and state.wait_streak >= WAIT_REOPEN_POLLS:
+            reopened = state.failed.pop(0)[:2]
+            state.wait_streak = 0
         state.last_directive = DIRECTIVE_WAIT
         return _target_pose(rx, ry_world, frame_id=frame_id, ts=ts,
                             directive=DIRECTIVE_WAIT, wait_s=0.0,
+                            reopened_xy=reopened,
                             n_clusters=len(clusters), n_excluded=n_blocked,
                             n_already_seen_from=n_seen_from, n_on_the_map=on_the_map)
 
@@ -1087,6 +1105,7 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
 
     state.visited.append(best.goal_xy)
     state.targets_issued += 1
+    state.wait_streak = 0
     state.back_off_issued = False        # a new pocket later gets its own back-off
     state.last_directive = DIRECTIVE_FRONTIER
     return _target_pose(best.goal_xy[0], best.goal_xy[1], frame_id=frame_id, ts=ts,
@@ -1219,10 +1238,16 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
                 directive = getattr(target, "directive", DIRECTIVE_FRONTIER)
 
                 if directive == DIRECTIVE_WAIT:
-                    logger.info(f"{getattr(target, 'n_excluded', 0)} of "
-                                f"{getattr(target, 'n_clusters', 0)} clusters are on a recently "
-                                "failed goal: waiting for the map or the viewpoint "
-                                "to change, not stopping")
+                    reopened = getattr(target, "reopened_xy", None)
+                    if reopened:
+                        logger.warning(f"starvation escape: the world stayed silent for "
+                                       f"{WAIT_REOPEN_POLLS} asks - reopening the oldest failed "
+                                       f"goal at ({reopened[0]:.2f}, {reopened[1]:.2f})")
+                    else:
+                        logger.info(f"{getattr(target, 'n_excluded', 0)} of "
+                                    f"{getattr(target, 'n_clusters', 0)} clusters are on a recently "
+                                    "failed goal: waiting for the map or the viewpoint "
+                                    "to change, not stopping")
                     self.stop_event.wait(WAIT_POLL_S)
                     continue
 

@@ -200,6 +200,19 @@ check("NO clock reopens it: same map, same pose, a billion seconds later -> stil
       much_later is not None and much_later.directive == DIRECTIVE_WAIT,
       much_later.directive if much_later else "None")
 
+# starvation escape: after WAIT_REOPEN_POLLS silent asks the oldest entry reopens
+from vector_dimos.explorer2 import WAIT_REOPEN_POLLS
+starved = ExploreState()
+starved.note_failed(gx, gy, (centre, centre), cm)
+out = None
+for _ in range(WAIT_REOPEN_POLLS + 2):
+    out = next_target(cm, here, starved, now=10.0)
+    if out is not None and out.directive == DIRECTIVE_FRONTIER:
+        break
+check(f"starved {WAIT_REOPEN_POLLS} asks -> the oldest failed goal reopens and is targeted",
+      out is not None and out.directive == DIRECTIVE_FRONTIER and starved.failed == [],
+      out.directive if out else "None")
+
 # trigger 1: the rover stands a viewpoint away from where it failed
 moved_st = ExploreState()
 moved_st.note_failed(gx, gy, (centre, centre), cm)
