@@ -25,7 +25,7 @@ Sonar: front centre of the bumper, usable range measured by metrox = 66 cm
 
 from __future__ import annotations
 
-import logging
+import sys
 import threading
 import time
 from typing import Any
@@ -34,14 +34,26 @@ from dimos.core.core import rpc
 from dimos.core.module import Module
 from dimos.core.stream import Out
 from dimos.msgs.std_msgs.Float32 import Float32
+from dimos.utils.logging_config import setup_logger
 from dimos_lcm.std_msgs import Bool
 
-logger = logging.getLogger(__name__)
+logger = setup_logger()
 
 
 def _log(msg: str) -> None:
-    """Worker INFO logs are swallowed: print to stderr (lesson from respeaker)."""
-    import sys
+    """One line on BOTH channels, because neither alone is enough.
+
+    stderr is only captured while the launcher is still in the foreground: it
+    stops at "All modules started", and everything a worker prints during the
+    run itself goes nowhere (measured 26/08 on run B - the launch log ends at
+    03:15:18, the run ended at 03:23:33). The dimOS structured logger is the
+    channel that keeps writing into the run's main.jsonl for the whole run,
+    and this module was the only one in the package not using it: it held a
+    bare `logging.getLogger(__name__)`, which no worker configures. So every
+    BUMP after start-up was published to LCM and logged to a black hole, and
+    the switches looked dead while they were working.
+    """
+    logger.info(f"[esp_sensors] {msg}")
     print(f"[esp_sensors] {msg}", file=sys.stderr, flush=True)
 
 ESP_PORT = "/dev/serial/by-id/usb-Espressif_Systems_Espressif_Device_80b54ee325280000-if00"
@@ -135,6 +147,12 @@ class EspSensors(Module):
                  **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.port, self.enabled = port, enabled
+        self._reset_state()
+
+    def _reset_state(self) -> None:
+        """The reader's whole state in one place: the cold bench builds a
+        module without dimOS's Module machinery and has to start exactly
+        where the constructor does."""
         self._sw = (0, 0, 0, 0)
         self._last_contact = 0.0
         self._sonar = SonarFilter()
@@ -160,19 +178,35 @@ class EspSensors(Module):
 
     # ---- serial -------------------------------------------------------------
     def _serial_loop(self) -> None:
+        """Read the ESP forever. This thread is not allowed to die quietly:
+        anything it swallows is a sensor the robot no longer has."""
         import serial
         while self._running:
+            ser = None
             try:
                 ser = serial.Serial(self.port, ESP_BAUD, timeout=2.0)
                 _log(f"ESP link open ({self.port})")
                 while self._running:
-                    line = ser.readline().decode(errors="replace")
-                    if not line:
+                    raw = ser.readline()
+                    if not raw:
                         continue
-                    self._handle_line(line)
+                    try:
+                        self._handle_line(raw.decode(errors="replace"))
+                    except Exception as e:  # noqa: BLE001
+                        # One bad line (or one refused publish) used to tear the
+                        # link down for 2 s and take the sonar brake with it.
+                        _log(f"line dropped ({type(e).__name__}: {e}): {raw!r}")
+                        logger.exception("esp_sensors: handling a serial line failed")
             except Exception as e:  # noqa: BLE001 - the ESP can be unplugged
-                _log(f"ESP link LOST ({e}), retrying in 2 s")
+                _log(f"ESP link LOST ({type(e).__name__}: {e}), retrying in 2 s")
+                logger.exception("esp_sensors: serial link lost")
                 time.sleep(2.0)
+            finally:
+                if ser is not None:
+                    try:
+                        ser.close()          # reconnecting used to leak the fd
+                    except Exception:        # noqa: BLE001
+                        pass
 
     def _handle_line(self, line: str) -> None:
         parsed = parse_line(line)
@@ -181,6 +215,11 @@ class EspSensors(Module):
         kind, value = parsed
         if kind == "sw":
             prev, self._sw = self._sw, value
+            if any(value):
+                # Permanent instrumentation: a heartbeat with a bit set is the
+                # only proof the switches are talking. ~2 lines/s while a
+                # corner is held, nothing at all the rest of the time.
+                _log("SW rx: " + " ".join(str(v) for v in value))
             for i in range(4):
                 if value[i] and not prev[i]:
                     name, _xy, rear = CORNERS[i]
@@ -207,6 +246,13 @@ class EspSensors(Module):
             return
         self._last_contact = now
         self.contacts += 1
-        (self.bump_rear if rear else self.bump).publish(Bool(data=True))
+        # Log first, publish second: a contact we saw must be on the record even
+        # if the stream refuses it, and a refused stream must not cost the link.
         _log(f"BUMP #{self.contacts}: {name} ({'rear' if rear else 'front'}) "
              "-> stop, back off, replan")
+        out = self.bump_rear if rear else self.bump
+        try:
+            out.publish(Bool(data=True))
+        except Exception as e:  # noqa: BLE001
+            _log(f"BUMP #{self.contacts} NOT published on "
+                 f"{'bump_rear' if rear else 'bump'} ({type(e).__name__}: {e})")
