@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VECTOR - zones interdites</title>
+<title>VECTOR - keep-out zones</title>
 <style>
   :root {
     --bg: #1b1c20; --panel: #f4f4f2; --ink: #1d1d1f; --muted: #6b6b70;
@@ -62,61 +62,58 @@
 <div id="app">
   <aside id="side">
     <div>
-      <h1>Zones du rover</h1>
-      <div class="sub" id="mapinfo">chargement de la carte...</div>
+      <h1>Rover zones</h1>
+      <div class="sub" id="mapinfo">loading the map...</div>
     </div>
 
     <div id="msg"></div>
 
     <div>
-      <h2>Dessiner</h2>
+      <h2>Draw</h2>
       <div class="row">
-        <button id="b-draw" class="primary">Dessiner une zone</button>
-        <button id="b-close" disabled>Fermer</button>
+        <button id="b-draw" class="primary">Draw a zone</button>
+        <button id="b-close" disabled>Close</button>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="b-undo" disabled>Retirer le dernier point</button>
-        <button id="b-cancel" disabled>Annuler</button>
+        <button id="b-undo" disabled>Undo last point</button>
+        <button id="b-cancel" disabled>Cancel</button>
       </div>
-      <div class="sub" id="drawinfo" style="margin-top:8px">Molette = zoom, glisser = deplacer la carte.</div>
+      <div class="sub" id="drawinfo" style="margin-top:8px">Wheel = zoom, drag = pan the map.</div>
     </div>
 
     <div id="form" style="display:none">
-      <h2>Nouvelle zone</h2>
-      <label class="f" for="f-name">Nom</label>
+      <h2>New zone</h2>
+      <label class="f" for="f-name">Name</label>
       <input type="text" id="f-name" autocomplete="off">
       <label class="f">Type</label>
       <label class="radio"><input type="radio" name="ftype" value="forbidden" checked>
-        <span class="dot forbidden"></span>Interdit <span class="sub">- le rover n'y entre jamais</span></label>
-      <label class="radio"><input type="radio" name="ftype" value="no_slip_reflex">
-        <span class="dot no_slip_reflex"></span>Rampe sans reflexe
-        <span class="sub">- autorise, mais les reflexes anti-glissade se taisent</span></label>
-      <label class="f" for="f-note">Note (facultatif)</label>
+        <span class="dot forbidden"></span>Forbidden <span class="sub">- the rover never enters</span></label>
+      <label class="f" for="f-note">Note (optional)</label>
       <input type="text" id="f-note" autocomplete="off">
       <div class="row" style="margin-top:10px">
-        <button id="b-save" class="primary">Enregistrer</button>
-        <button id="b-discard">Jeter</button>
+        <button id="b-save" class="primary">Save</button>
+        <button id="b-discard">Discard</button>
       </div>
     </div>
 
     <div>
-      <h2>Zones enregistrees (<span id="count">0</span>)</h2>
+      <h2>Saved zones (<span id="count">0</span>)</h2>
       <ul id="zones"></ul>
       <div class="row" style="margin-top:10px">
-        <button id="b-del" class="danger" disabled>Supprimer</button>
-        <button id="b-reload">Recharger</button>
+        <button id="b-del" class="danger" disabled>Delete</button>
+        <button id="b-reload">Reload</button>
       </div>
     </div>
 
     <div class="help">
-      <h2>Mode d'emploi</h2>
+      <h2>How to use</h2>
       <ol>
-        <li><b>Dessiner</b> : clique sur « Dessiner une zone », puis clique un coin apres l'autre sur la carte.</li>
-        <li><b>Fermer</b> : double-clic sur le dernier point, ou le bouton « Fermer ».</li>
-        <li><b>Nommer</b> : un nom, « interdit » ou « rampe sans reflexe », puis « Enregistrer ».</li>
-        <li><b>Supprimer</b> : clique la zone dans la liste (ou sur la carte), puis « Supprimer ».</li>
+        <li><b>Draw</b>: click "Draw a zone", then click one corner after another on the map.</li>
+        <li><b>Close</b>: double-click the last point, or the "Close" button.</li>
+        <li><b>Name</b>: a name, then "Save".</li>
+        <li><b>Delete</b>: click the zone in the list (or on the map), then "Delete".</li>
       </ol>
-      <p style="margin:8px 0 0">Le rover relit le fichier tout seul dans la demi-minute : rien a redemarrer.</p>
+      <p style="margin:8px 0 0">The rover re-reads the file by itself within half a minute: nothing to restart.</p>
     </div>
   </aside>
 
@@ -125,11 +122,10 @@
     <div id="hint"></div>
     <div id="hud">x&nbsp;<span id="hx">-</span>&nbsp;m &nbsp; y&nbsp;<span id="hy">-</span>&nbsp;m</div>
     <div id="legend">
-      <div><span class="dot" style="background:#d92d2d"></span>obstacle vu</div>
-      <div><span class="dot" style="background:#dedeDa"></span>sol libre</div>
-      <div><span class="dot" style="background:#222226"></span>jamais vu</div>
-      <div><span class="dot forbidden"></span>zone interdite</div>
-      <div><span class="dot no_slip_reflex"></span>rampe sans reflexe</div>
+      <div><span class="dot" style="background:#d92d2d"></span>seen obstacle</div>
+      <div><span class="dot" style="background:#dedeDa"></span>free floor</div>
+      <div><span class="dot" style="background:#222226"></span>never seen</div>
+      <div><span class="dot forbidden"></span>forbidden zone</div>
     </div>
   </div>
 </div>
@@ -299,13 +295,13 @@ function loadMeta() {
     if (m.error) throw new Error(m.error);
     meta = m;
     document.getElementById("mapinfo").textContent =
-      "Carte : " + m.width + " x " + m.height + " cases de " + m.res + " m, "
-      + "x " + m.x_min.toFixed(1) + " a " + m.x_max.toFixed(1) + " m, "
-      + "y " + m.y_min.toFixed(1) + " a " + m.y_max.toFixed(1) + " m (" + m.saved + ")";
+      "Map: " + m.width + " x " + m.height + " cells of " + m.res + " m, "
+      + "x " + m.x_min.toFixed(1) + " to " + m.x_max.toFixed(1) + " m, "
+      + "y " + m.y_min.toFixed(1) + " to " + m.y_max.toFixed(1) + " m (" + m.saved + ")";
     return new Promise(function (ok, ko) {
       var img = new Image();
       img.onload = function () { mapImg = img; ok(); };
-      img.onerror = function () { ko(new Error("image de la carte illisible")); };
+      img.onerror = function () { ko(new Error("map image unreadable")); };
       img.src = "/map.png?t=" + m.map_mtime;
     });
   });
@@ -329,12 +325,12 @@ function postZones(next, done) {
   }).then(function (r) {
     return r.json().then(function (d) { return { ok: r.ok, d: d }; });
   }).then(function (res) {
-    if (!res.ok) { say(res.d.error || "refuse par le rover", true); return; }
+    if (!res.ok) { say(res.d.error || "refused by the rover", true); return; }
     zones = res.d.zones || [];
     selected = -1;
     renderList();
     draw();
-    say("Enregistre. Le rover relira le fichier dans la demi-minute.", false);
+    say("Saved. The rover will re-read the file within half a minute.", false);
     if (done) done();
   }).catch(function (e) { say("Echec de l'enregistrement : " + e.message, true); });
 }
@@ -349,7 +345,7 @@ function renderList() {
     var pts = zonePoints(z);
     var li = document.createElement("li");
     if (i === selected) li.className = "sel";
-    var kind = z.type === "no_slip_reflex" ? "rampe sans reflexe" : "interdit";
+    var kind = z.type === "no_slip_reflex" ? "no-slip (legacy)" : "forbidden";
     var shape = z.points ? (z.points.length + " points") : "rectangle";
     var nm = document.createElement("div");
     nm.className = "nm";
@@ -380,7 +376,7 @@ function setMode(m) {
   var hint = document.getElementById("hint");
   if (drawing) {
     hint.style.display = "block";
-    hint.textContent = "Clique chaque coin de la zone. Double-clic (ou « Fermer ») pour fermer.";
+    hint.textContent = "Click each corner of the zone. Double-click (or \"Close\") to close it.";
   } else {
     hint.style.display = "none";
   }
@@ -508,9 +504,9 @@ window.addEventListener("keydown", function (e) {
 function save() {
   if (!draft || !draft.closed) return;
   var name = document.getElementById("f-name").value.trim();
-  if (!name) { say("Donne un nom a la zone.", true); return; }
+  if (!name) { say("Give the zone a name.", true); return; }
   for (var i = 0; i < zones.length; i++) {
-    if (zones[i].label === name) { say("Une zone s'appelle deja « " + name + " ».", true); return; }
+    if (zones[i].label === name) { say("A zone is already named \"" + name + "\".", true); return; }
   }
   var type = document.querySelector('input[name=ftype]:checked').value;
   var zone = { label: name, type: type,
@@ -534,7 +530,7 @@ document.getElementById("b-reload").onclick = function () {
 document.getElementById("b-del").onclick = function () {
   if (selected < 0) return;
   var z = zones[selected];
-  if (!window.confirm("Supprimer la zone « " + z.label + " » ?")) return;
+  if (!window.confirm("Delete zone \"" + z.label + "\"?")) return;
   postZones(zones.filter(function (_, i) { return i !== selected; }));
 };
 

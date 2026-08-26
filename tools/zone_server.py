@@ -152,61 +152,61 @@ def map_png() -> tuple[bytes, dict]:
 
 # --- what the page is allowed to save ---------------------------------------
 
-TYPE_FR = {persistent_map.FORBIDDEN: "interdit"}
+TYPE_LABELS = {persistent_map.FORBIDDEN: "forbidden"}
 
 
 class Refused(ValueError):
-    """A zone the server will not write, with the reason in French."""
+    """A zone the server will not write, with the reason in plain words."""
 
 
 def _finite(v, what: str) -> float:
     try:
         f = float(v)
     except (TypeError, ValueError):
-        raise Refused(f"{what} : ce n'est pas un nombre.") from None
+        raise Refused(f"{what}: not a number.") from None
     if not math.isfinite(f):
-        raise Refused(f"{what} : ce n'est pas un nombre fini.")
+        raise Refused(f"{what}: not a finite number.")
     return f
 
 
 def validate_zones(doc, bounds: tuple[float, float, float, float] | None = None) -> list[dict]:
-    """The posted document into zones ready to save, or a Refused in French.
+    """The posted document into zones ready to save, or a Refused.
 
     Deliberately strict: this file makes cells lethal and silences the slip
     reflexes, and the only thing standing between it and a typo is right here.
     """
     zones = doc.get("zones") if isinstance(doc, dict) else doc
     if not isinstance(zones, list):
-        raise Refused("Le message ne contient pas de liste de zones.")
+        raise Refused("The message carries no zone list.")
     if len(zones) > MAX_ZONES:
-        raise Refused(f"Trop de zones ({len(zones)}, maximum {MAX_ZONES}).")
+        raise Refused(f"Too many zones ({len(zones)}, maximum {MAX_ZONES}).")
     out: list[dict] = []
     seen_labels: set[str] = set()
     for raw in zones:
         if not isinstance(raw, dict):
-            raise Refused("Une zone n'est pas un objet.")
+            raise Refused("A zone is not an object.")
         label = str(raw.get("label", "")).strip()
         if not label:
-            raise Refused("Une zone n'a pas de nom.")
+            raise Refused("A zone has no name.")
         if len(label) > MAX_LABEL:
-            raise Refused(f"Le nom {label[:20]!r}... est trop long (maximum {MAX_LABEL} caracteres).")
+            raise Refused(f"Name {label[:20]!r}... is too long (maximum {MAX_LABEL} characters).")
         if label in seen_labels:
-            raise Refused(f"Deux zones portent le nom {label!r}.")
+            raise Refused(f"Two zones share the name {label!r}.")
         seen_labels.add(label)
         kind = str(raw.get("type", persistent_map.FORBIDDEN))
         if kind not in persistent_map.ZONE_TYPES:
-            raise Refused(f"Zone {label!r} : type inconnu {kind!r} "
-                          f"(attendu : {' ou '.join(persistent_map.ZONE_TYPES)}).")
+            raise Refused(f"Zone {label!r}: unknown type {kind!r} "
+                          f"(expected: {' or '.join(persistent_map.ZONE_TYPES)}).")
         note = str(raw.get("note", ""))[:MAX_NOTE]
         pts_raw = raw.get("points")
         if pts_raw is not None:
             if not isinstance(pts_raw, list):
-                raise Refused(f"Zone {label!r} : 'points' doit etre une liste [[x, y], ...].")
+                raise Refused(f"Zone {label!r}: 'points' must be a list [[x, y], ...].")
             if len(pts_raw) < 3:
-                raise Refused(f"Zone {label!r} : un polygone demande au moins 3 points "
-                              f"(il en a {len(pts_raw)}).")
+                raise Refused(f"Zone {label!r}: a polygon needs at least 3 points "
+                              f"(it has {len(pts_raw)}).")
             if len(pts_raw) > MAX_POINTS:
-                raise Refused(f"Zone {label!r} : trop de points ({len(pts_raw)}).")
+                raise Refused(f"Zone {label!r}: too many points ({len(pts_raw)}).")
             pts = []
             for i, p in enumerate(pts_raw):
                 if not isinstance(p, (list, tuple)) or len(p) != 2:
@@ -224,7 +224,7 @@ def validate_zones(doc, bounds: tuple[float, float, float, float] | None = None)
             bx0, by0, bx1, by1 = bounds
             if (x0 < bx0 - OUT_OF_MAP_M or x1 > bx1 + OUT_OF_MAP_M
                     or y0 < by0 - OUT_OF_MAP_M or y1 > by1 + OUT_OF_MAP_M):
-                raise Refused(f"Zone {label!r} : elle est loin hors de la carte "
+                raise Refused(f"Zone {label!r}: it lies far outside the map "
                               f"(x {x0:+.1f} .. {x1:+.1f}, y {y0:+.1f} .. {y1:+.1f} m).")
         out.append(zone)
     return out
@@ -239,7 +239,7 @@ def zones_doc() -> dict:
         "zones": persistent_map.load_keepouts(),
         "mtime": os.path.getmtime(path) if os.path.isfile(path) else None,
         "types": list(persistent_map.ZONE_TYPES),
-        "type_labels": TYPE_FR,
+        "type_labels": TYPE_LABELS,
     }
 
 
@@ -284,10 +284,10 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/zones":
                 self._json(200, zones_doc())
             else:
-                self._json(404, {"error": f"rien a cette adresse : {path}"})
+                self._json(404, {"error": f"nothing at this address: {path}"})
         except FileNotFoundError as exc:
-            self._json(503, {"error": f"carte introuvable : {exc}. Le rover n'a pas encore "
-                                      "sauvegarde de carte persistante."})
+            self._json(503, {"error": f"map not found: {exc}. The rover has not saved "
+                                      "a persistent map yet."})
         except Exception as exc:  # noqa: BLE001 - a browser reload must never kill the server
             self.log_error("GET %s failed: %r", path, exc)
             self._json(500, {"error": f"{type(exc).__name__}: {exc}"})
@@ -297,12 +297,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
         if path != "/zones":
-            self._json(404, {"error": f"rien a cette adresse : {path}"})
+            self._json(404, {"error": f"nothing at this address: {path}"})
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             if length <= 0 or length > MAX_BODY:
-                raise Refused(f"Message vide ou trop gros ({length} octets).")
+                raise Refused(f"Empty or oversized message ({length} bytes).")
             doc = json.loads(self.rfile.read(length).decode("utf-8"))
             bounds = None
             try:
