@@ -40,7 +40,7 @@ def check_ports() -> None:
     from vector_dimos.esp_sensors import ESP_PORT
     from vector_dimos.rplidar_c1 import DEFAULT_PORT as LIDAR_PORT
     for label, path in (("moteurs (FTDI/Waveshare)", MOTOR_PORT),
-                        ("lidar C1 (FIREPHX)", LIDAR_PORT),
+                        ("lidar C1 (CP2102)", LIDAR_PORT),
                         ("ESP32 contacts+sonar", ESP_PORT),
                         ("shunt PZEM (CH340)", "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0")):
         verdict(Path(path).exists(), f"{label} enumere", path.rsplit('/', 1)[-1])
