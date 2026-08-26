@@ -205,6 +205,7 @@ _seen = {}          # family -> last wall time
 _counts = {}        # family -> msgs in the current window
 _FAMILIES = (("lidar_scan", ("pointcloud",)),
              ("odometry", ("/odom",)),
+             ("imu", ("imu",)),          # the rotation prior since 26/08 - an organ now (owner 21h55)
              ("camera", ("color_image", "depth_image")),
              ("costmap", ("global_costmap",)),
              ("drive", ("cmd_vel",)),
@@ -288,7 +289,7 @@ def _panel_html():
     def dot(ok, warn=False):
         return f'<td style="font-size:3vh;padding-right:1.5vw">{"&#128994;" if ok else ("&#128992;" if warn else "&#128308;")}</td>'
     rows.append(f"<tr>{dot(d['stack_running'])}<td>stack dimOS</td><td>{'en vol' if d['stack_running'] else 'arretee'}</td></tr>")
-    labels = {"lidar_scan": "lidar C1", "odometry": "odometrie", "camera": "RealSense",
+    labels = {"lidar_scan": "lidar C1", "odometry": "odometrie", "imu": "IMU (gyro)", "camera": "RealSense",
               "costmap": "carte", "drive": "commandes roues", "switches": "switchs (contacts)"}
     for fam, label in labels.items():
         st = d[fam]
@@ -313,6 +314,11 @@ def _panel_html():
 # iframes"). The iframe sources resolve in the BROWSER on the rig: the
 # cockpit through its 127.0.0.1:7780 tunnel, the rest straight over the LAN.
 # Rerun (the 3D map) stays its own native window - fly.sh opens it.
+#
+# OPEN THIS PAGE AS http://127.0.0.1:8900/vol (through the SSH tunnel), never
+# by the LAN address: WebTransport in the cockpit iframe requires a SECURE
+# CONTEXT, and an iframe is only secure if every ANCESTOR is - localhost
+# qualifies, 192.168.0.56 does not ("Not a secure context", owner 21h55).
 _VOL = """<!doctype html><html><head><meta charset="utf-8"><title>VECTOR - vol</title>
 <style>
  body{margin:0;background:#111;color:#ddd;font:13px sans-serif;height:100vh;display:flex;flex-direction:column}
