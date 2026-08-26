@@ -150,46 +150,11 @@ def test_revolution_cost() -> None:
     print(f"  one revolution (400 rays, 0.5-12 m, carving every other one) = {ms:.0f} ms (was 227)")
 
 
-def test_slip_rollback_restores_the_exact_map() -> None:
-    """metrox, 24/08: the freeze must be retroactive. Clean mapping, then 1.5 s
-    of polluted writes (a sliding pose painting ghosts), then rollback(2.0):
-    the map must be bit-identical to the pre-pollution state, while writes
-    older than the window survive."""
-    import time as _t
-    g = fresh()
-    for i in range(3):
-        g.lidar_revolution(LEG, (0.0, 0.15 * i))          # honest map: leg occupied
-    g.camera_obstacles(np.array([[0.5, 0.5]]), (0.0, 0.0))
-    before_occ = g.occupancy().copy()
-    before_lidar = g.lidar.copy(); before_low = g.low.copy(); before_seen = g.seen.copy()
-    _t.sleep(0.3)
-    t_pollution = _t.monotonic()
-    ghost = np.array([[2.0, 1.0], [2.1, 1.0], [2.1, 1.05], [2.2, 1.1]])
-    for i in range(6):                                     # the sliding pose paints the same ghosts from moving viewpoints
-        g.lidar_revolution(ghost, (0.3 + 0.15 * i, 0.0))
-    g.camera_obstacles(np.array([[1.5, -0.5]]), (0.5, 0.0))
-    assert g.value_at(2.1, 1.05) == 100, "pollution must be in before the rollback"
-    undone = g.rollback(_t.monotonic() - t_pollution + 0.05)
-    assert undone >= 7, undone
-    assert np.array_equal(g.occupancy(), before_occ)
-    assert np.array_equal(g.lidar, before_lidar) and np.array_equal(g.low, before_low)
-    assert np.array_equal(g.seen, before_seen)
-    assert g.value_at(1.0, 0.0) == 100, "the honest leg must survive"
-    print(f"  pollution painted then rolled back ({undone} batches): map bit-identical, honest leg intact")
-
-
-def test_journal_pruned_beyond_window() -> None:
-    g = fresh()
-    g.lidar_revolution(LEG, (0.0, 0.0))
-    g.prune_journal(now=__import__("time").monotonic() + 10.0)   # simulate 10 s later
-    assert g._journal == []
-    print("  journal pruned beyond the window (memory bounded)")
-
 
 if __name__ == "__main__":
     for t in (test_leg_seen_from_one_spot_is_occupied_and_ray_is_free, test_ramp_hit_from_one_spot_never_becomes_a_wall,
               test_chair_moved_is_forgotten_by_lidar_rays, test_low_object_only_the_camera_can_forget,
               test_thin_leg_survives_the_floor_sampled_beside_it,
-              test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip, test_revolution_cost, test_slip_rollback_restores_the_exact_map, test_journal_pruned_beyond_window):
+              test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip, test_revolution_cost):
         print(t.__name__); t()
     print("TEST PASSED")

@@ -1,13 +1,22 @@
-"""ReplanningAStarPlanner that backs up before replanning when stuck.
+"""ReplanningAStarPlanner that abandons a goal instead of fighting for it.
 
-VECTOR has no bumpers yet. When it drives into something the costmap missed
-(a table leg, the sofa skirt), dimOS's planner notices it is not moving and
-replans — from a position glued to the obstacle. The new path starts inside
-the thing it hit, so it fails or pushes again. Backing up first along the
-way it came (known free, it just drove through it) gives the planner room.
+Doctrine (metrox, 26/08/2026, after the guard-layer autopsy): the detectors
+tell the truth, the REFLEXES were the bug. The old blind 20 cm back-off on
+every stuck/slip walked the rover backwards across the flat in 20 cm steps
+until the rear wall (run 12h54: 38 blind reverses, 14 rear bumper hits, dead
+on the wall). A recovery manoeuvre that creates the crash is worse than none.
 
-Field request (metrox, 23/08/2026): "il faudrait qu'il revienne 20-40 cm en
-arrière s'il ne sait pas ce qu'il y a derrière lui".
+What is left, and it is all of it:
+  * stuck or slip -> STOP, abandon the goal (``cancel_goal`` publishes
+    goal_reached=False; the explorer excludes that spot for 60 s and picks
+    another frontier — the pivot toward it is the only motion that follows).
+    No scripted motion of any kind.
+  * a CONTACT (bumper switch, or the explorer's born-cornered back-off) is
+    the one thing still allowed a scripted move: away from the contact,
+    0.20 m, once. A second contact during that escape aborts it dead —
+    contact has priority over everything, it is never ignored again
+    (run 12h54: every rear bump during a slip reverse was dropped,
+    ``acted=False``, and the rover kept grinding the wall).
 """
 
 import threading
@@ -31,10 +40,10 @@ from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
 
-BACKUP_DISTANCE_M = 0.20   # metrox: 'just enough to turn'
-BACKUP_SPEED_MPS = 0.10
-BACKUP_TIMEOUT_S = 5.0
-BACKUP_PERIOD_S = 0.05  # base watchdog is 0.2 s; 10 Hz left gaps that stopped the wheels
+ESCAPE_DISTANCE_M = 0.20   # metrox: 'just enough to turn'
+ESCAPE_SPEED_MPS = 0.10
+ESCAPE_TIMEOUT_S = 5.0
+ESCAPE_PERIOD_S = 0.05  # base watchdog is 0.2 s; 10 Hz left gaps that stopped the wheels
 
 # --- obstacle cost gradient -------------------------------------------------
 #
@@ -160,11 +169,11 @@ def clearance_cost_map(
 
 
 class RecoveringGlobalPlanner(GlobalPlanner):
-    """Stuck → reverse BACKUP_DISTANCE_M (odometry-measured) → replan."""
+    """Stuck → stop, abandon the goal. Contact → one escape move, then abandon."""
 
-    backup_distance_m: float = BACKUP_DISTANCE_M
-    backup_speed_mps: float = BACKUP_SPEED_MPS
-    backup_timeout_s: float = BACKUP_TIMEOUT_S
+    escape_distance_m: float = ESCAPE_DISTANCE_M
+    escape_speed_mps: float = ESCAPE_SPEED_MPS
+    escape_timeout_s: float = ESCAPE_TIMEOUT_S
 
     # dimOS PController enforces a 0.2 m/s floor (_min_linear_velocity) that
     # silently overrides any NERF_SPEED cap below 0.2: the 0.149 m/s
@@ -173,6 +182,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
     # 101-111%, 25/08), so lower the floor and keep the cap real.
     def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(*args, **kwargs)
+        self._escape_abort = threading.Event()
         self._local_planner._controller._min_linear_velocity = 0.10
         self._local_planner._controller._min_angular_velocity = 0.10
 
@@ -196,12 +206,12 @@ class RecoveringGlobalPlanner(GlobalPlanner):
 
     def _replan_path(self) -> None:
         # Runs in the planner's monitoring thread. Upstream asserts a goal
-        # exists; the goal can vanish (explorer cancels on "no path") while we
-        # spend 3 s backing up, and an assert there kills the thread for the
-        # rest of the run (seen 23/08: no "Arrived"/"stuck" handled after it).
+        # exists; the goal can vanish (explorer cancels on "no path") while an
+        # escape runs, and an assert there kills the thread for the rest of
+        # the run (seen 23/08: no "Arrived"/"stuck" handled after it).
         try:
-            if self._recovering:
-                return                     # the slip reflex owns the wheels right now
+            if self._escaping:
+                return                     # a contact escape owns the wheels right now
             # The stuck detector reads position only: while the follower turns in
             # place (initial/final rotation) the position does not change and a
             # 2.5 s window reads "stuck" -> replan -> new rotation -> "stuck"...
@@ -209,32 +219,26 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             if not self._in_stop_message and self._local_planner_state() in ("initial_rotation", "final_rotation", "idle"):
                 # "idle" added 26/08: while explorer2 WAITS out an exclusion the
                 # follower commands nothing - stillness without intent is not
-                # "stuck", and backing off an un-stuck robot bumped the rear wall
-                # in a loop (owner: "un pas en avant, un pas en arriere")
+                # "stuck".
                 return
             with self._lock:
                 has_goal = self._current_goal is not None and self._current_odom is not None
             if not has_goal:
                 logger.info("Replan requested without a goal; ignoring.")
                 return
-            # Back up only if we were actually driving a path for a while: a
-            # fresh goal with "no path" also reads as "stuck" (the tracker's
-            # window is already still) and that made the rover reverse every
-            # 15 s in a dead end (seen 23/08 17:00, metrox: "il va a reculons").
+            # Stuck counts only if we were actually driving a path for a while:
+            # a fresh goal with "no path" also reads as "stuck" (the tracker's
+            # window is already still) - seen 23/08 17:00.
             driving_for = time.perf_counter() - self._path_started_at
             if self._position_tracker.is_stuck() and driving_for >= self._stuck_time_window:
-                self._back_up(trigger="stuck_detector")
-                with self._lock:
-                    has_goal = self._current_goal is not None
-                if not has_goal:
-                    logger.info("Goal cancelled during back-up; not replanning.")
-                    return
+                self.abandon_goal(trigger="stuck_detector")
+                return
             super()._replan_path()
         except Exception:  # noqa: BLE001 - never let the monitor thread die
             logger.exception("Replan failed; planner monitor keeps running")
 
     _path_started_at: float = float("inf")
-    _recovering: bool = False
+    _escaping: bool = False
     _in_stop_message: bool = False
 
     def _local_planner_state(self) -> str:
@@ -249,41 +253,81 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         finally:
             self._in_stop_message = False
 
-    def slip(self, direction: float = -1.0, trigger: str = "slip") -> bool:
-        """Slip reflex (stuck_guard saw the wheels turn while the lidar pose
-        stood still, within 1 s): stop, back off BACKUP_DISTANCE_M in our own
-        thread, then ask the monitor for a replan. While the wheels push, the
-        odometry slides with them and smears the map (23/08 18:45: 25 s of
-        pushing, map lost) - the only cure is to stop within the second.
+    def abandon_goal(self, trigger: str) -> None:
+        """Stop, give the goal up, no recovery motion of any kind.
 
-        `trigger` says who asked (slip / bump / bump_rear) and is carried all
-        the way into the back-off log line: until 26/08 a back-off looked the
-        same in the run log whether a switch, the slip detector or the stuck
-        detector caused it, and that alone made the contact switches look dead.
+        ``cancel_goal`` publishes goal_reached=False; the explorer notes the
+        failed spot (60 s exclusion) and picks another frontier. The blind
+        20 cm reverse that used to live here is what walked the rover into
+        the rear wall 38 times on 26/08 - it is gone on purpose."""
+        logger.warning("Goal abandoned, no recovery motion", trigger=trigger)
+        self._path_started_at = float("inf")
+        self.cancel_goal()
 
-        Returns False if a recovery is already running."""
-        if self._recovering:
+    def escape(self, direction: float, trigger: str) -> bool:
+        """Contact escape: the ONE scripted move left. Away from the contact,
+        escape_distance_m, once, then the goal is abandoned.
+
+        A second contact while an escape runs means both ends have touched
+        something: abort the motion and stop dead rather than script another
+        move (run 12h54: rear bumps during a reflex were dropped with
+        acted=False and the rover kept grinding the wall).
+
+        Returns False if this contact aborted a running escape instead."""
+        if self._escaping:
+            self._escape_abort.set()
+            logger.warning("Contact during an escape: stopping dead", trigger=trigger)
             return False
-        self._recovering = True
-        threading.Thread(target=self._slip_recovery, args=(direction, trigger),
+        self._escaping = True
+        self._escape_abort.clear()
+        threading.Thread(target=self._escape_run, args=(direction, trigger),
                          daemon=True).start()
         return True
 
-    def _slip_recovery(self, direction: float = -1.0, trigger: str = "slip") -> None:
+    _escape_abort: threading.Event
+
+    def _escape_run(self, direction: float, trigger: str) -> None:
         try:
-            self._back_up(direction, trigger)
+            self._local_planner.stop_planning()
             with self._lock:
-                has_goal = self._current_goal is not None
-            if has_goal:
-                self._on_stopped_navigating("obstacle_found")
+                start = self._current_odom
+            if start is None:
+                return
+            twist = Twist(linear=Vector3(direction * self.escape_speed_mps, 0.0, 0.0))
+            t0 = time.perf_counter()
+            travelled = 0.0
+            while time.perf_counter() - t0 < self.escape_timeout_s:
+                if self._escape_abort.is_set():
+                    break
+                with self._lock:
+                    odom = self._current_odom
+                travelled = odom.position.distance(start.position)
+                if travelled >= self.escape_distance_m:
+                    break
+                self._local_planner.cmd_vel.on_next(twist)
+                time.sleep(ESCAPE_PERIOD_S)
+            self._local_planner.cmd_vel.on_next(Twist())
+            self._position_tracker.reset_data()
+            self._path_started_at = float("inf")
+            logger.warning(
+                "Contact escape",
+                trigger=trigger,
+                direction="forward" if direction > 0 else "reverse",
+                travelled_m=round(travelled, 3),
+                seconds=round(time.perf_counter() - t0, 1),
+                aborted=self._escape_abort.is_set(),
+            )
+            self.cancel_goal()
         except Exception:  # noqa: BLE001
-            logger.exception("Slip recovery failed")
+            logger.exception("Contact escape failed")
         finally:
-            self._recovering = False
+            self._escaping = False
+
     # dimOS's default is 8 s / 0.4 m. "Stuck for eight seconds is already dead
     # for a robot doing 0.3 m/s" (metrox, 23/08): 2.5 s, same 5 cm/s floor.
     _stuck_time_window: float = 2.5
     _stuck_threshold: float = 0.12
+
     def _plan_path(self) -> None:
         super()._plan_path()
         if self._local_planner.get_state() != NavigationState.IDLE:
@@ -291,75 +335,31 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         else:
             self._path_started_at = float("inf")
 
-    def _back_up(self, direction: float = -1.0, trigger: str = "stuck_detector") -> float:
-        """Reverse until odometry says we moved backup_distance_m, or time out.
-
-        Runs in the planner's monitoring thread; the local path follower is
-        stopped first so it cannot fight the reverse command on cmd_vel.
-        Returns the distance actually travelled (m).
-        """
-        self._local_planner.stop_planning()
-        with self._lock:
-            start = self._current_odom
-        if start is None:
-            return 0.0
-
-        reverse = Twist(linear=Vector3(direction * self.backup_speed_mps, 0.0, 0.0))
-        t0 = time.perf_counter()
-        travelled = 0.0
-        while time.perf_counter() - t0 < self.backup_timeout_s:
-            with self._lock:
-                odom = self._current_odom
-            travelled = odom.position.distance(start.position)
-            if travelled >= self.backup_distance_m:
-                break
-            self._local_planner.cmd_vel.on_next(reverse)
-            time.sleep(BACKUP_PERIOD_S)
-        self._local_planner.cmd_vel.on_next(Twist())
-        self._position_tracker.reset_data()
-        self._path_started_at = float("inf")
-        logger.info(
-            "Stuck: backed up before replanning",
-            trigger=trigger,
-            direction="forward" if direction > 0 else "reverse",
-            travelled_m=round(travelled, 3),
-            seconds=round(time.perf_counter() - t0, 1),
-        )
-        return travelled
-
 
 class RecoveringPlanner(ReplanningAStarPlanner):
-    """Drop-in for ReplanningAStarPlanner with the back-up recovery, the slip
-    reflex (``slip`` In: stuck_guard + imu_slip - the map also rolls back) and
-    the bump reflex (``bump`` In: the physical bumper/sonar - same stop and
-    20 cm back-off, no rollback: the map was honest, the world was invisible)."""
+    """Drop-in for ReplanningAStarPlanner where stuck = goal abandoned (no
+    motion) and a contact (``bump``/``bump_rear`` In: the physical switches,
+    plus the explorer's born-cornered back-off on ``bump``) triggers the one
+    scripted escape move away from the contact. The slip detectors and their
+    reflex are gone (metrox, 26/08: 'on a des switchs maintenant')."""
 
-    slip: In[Bool]
     bump: In[Bool]
-
     bump_rear: In[Bool]
+
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         self._planner = RecoveringGlobalPlanner(self._planner._global_config)
 
-    async def handle_slip(self, msg: Bool) -> None:
-        if getattr(msg, "data", False):
-            self._planner.slip(trigger="slip")
-
     async def handle_bump(self, msg: Bool) -> None:
-        """Front contact: stop, back off 0.20 m, replan.
-
-        The arrival is logged here, in the planner's own worker, whatever the
-        reflex then decides: a bump that lands while a recovery is already
-        running (acted=False) used to leave no trace at all on either side."""
+        """Front contact: stop, escape 0.20 m in reverse, abandon the goal."""
         if getattr(msg, "data", False):
-            acted = self._planner.slip(trigger="bump")
-            logger.warning("BUMP received: front contact", reflex="back off 0.20 m",
+            acted = self._planner.escape(direction=-1.0, trigger="bump")
+            logger.warning("BUMP received: front contact", reflex="escape reverse 0.20 m",
                            acted=acted)
 
     async def handle_bump_rear(self, msg: Bool) -> None:
-        """Rear contact: stop, move FORWARD 0.20 m, replan."""
+        """Rear contact: stop, escape 0.20 m FORWARD, abandon the goal."""
         if getattr(msg, "data", False):
-            acted = self._planner.slip(direction=+1.0, trigger="bump_rear")
-            logger.warning("BUMP received: rear contact", reflex="forward 0.20 m",
+            acted = self._planner.escape(direction=+1.0, trigger="bump_rear")
+            logger.warning("BUMP received: rear contact", reflex="escape forward 0.20 m",
                            acted=acted)
