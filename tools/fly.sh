@@ -12,6 +12,8 @@ ROVER=metrox@192.168.0.56
 VIEWER=/home/openclaw/miniconda3/envs/lerobot052/bin/dimos-viewer
 
 echo "== 0/5 no stack already flying =="
+ssh $ROVER 'for p in $(pgrep -f "[s]onar_live"); do kill "$p"; done' 2>/dev/null   # the readout UI holds the ESP port
+
 # A forgotten running stack holds the motor bus and the hardware preflight
 # collides with its feedback polling: both drives read "mute" (26/08 19h00,
 # one hour lost on a stack launched at 18h22 for map viewing and never stopped).

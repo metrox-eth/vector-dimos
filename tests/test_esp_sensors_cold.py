@@ -109,6 +109,8 @@ check("3-arg form, clear -> 0.20 m/s", brake_forward(0.2, SONAR_CLEAR_M, 0.0) ==
 print("D''. sonar_publication (what reaches the sonar_range stream)")
 p = sonar_publication(0.42, 0.0, 0.25)
 check("fresh median, 0.25 s since last -> publish 0.42 m", p == 0.42, f"{p}")
+from vector_dimos.esp_sensors import SONAR_ENABLED
+check("le sonar est DESACTIVE dans la stack (vote metrox 26/08: coussinet)", SONAR_ENABLED is False)
 p = sonar_publication(0.42, 0.0, 0.10)
 check("same median 0.10 s later -> None (5 Hz cap)", p is None, f"{p}")
 p = sonar_publication(None, 1.2, 1.0)

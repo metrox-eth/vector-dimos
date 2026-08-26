@@ -71,6 +71,14 @@ SONAR_MEDIAN = 3
 SONAR_SPREAD_MAX = 0.10
 CONTACT_COOLDOWN_S = 1.0
 SONAR_PUBLISH_PERIOD_S = 0.2    # <= 5 Hz on sonar_range
+# Owner's vote, 26/08 19h45, after the bumper cushion lifted a few millimetres
+# and sat in front of the sonar for two hours (0.08 m readings, every drive
+# clamped before the brake itself was ripped out): NO sonar at all - "on
+# eteint les capteurs qui nous posent probleme jusqu'a ce qu'on sache s'en
+# servir". The switches stay: they are the safety. The preflight still reads
+# the raw ESP stream and fails loudly under 0.30 m ("coussinet ?"), so a
+# blocked sonar is caught at every flight even while nothing consumes it.
+SONAR_ENABLED = False
 SONAR_CLEAR_AFTER_S = 1.0       # nothing believable for this long = the way is clear
 SONAR_CLEAR_PERIOD_S = 1.0      # heartbeat rate while clear
 SONAR_CLEAR_M = 9.9             # "clear" value: past every brake threshold
@@ -234,6 +242,8 @@ class EspSensors(Module):
         else:
             self._clear_since = None
         clear_for = 0.0 if self._clear_since is None else now - self._clear_since
+        if not SONAR_ENABLED:
+            return
         out = sonar_publication(median, clear_for, now - self._last_sonar_publish)
         if out is not None:
             self._last_sonar_publish = now
