@@ -11,6 +11,13 @@ set -u
 ROVER=metrox@192.168.0.56
 VIEWER=/home/openclaw/miniconda3/envs/lerobot052/bin/dimos-viewer
 
+echo "== 0/5 no stack already flying =="
+# A forgotten running stack holds the motor bus and the hardware preflight
+# collides with its feedback polling: both drives read "mute" (26/08 19h00,
+# one hour lost on a stack launched at 18h22 for map viewing and never stopped).
+ssh $ROVER "pgrep -f \"[b]in/dimos\" >/dev/null" \
+  && { echo "A DIMOS STACK IS ALREADY RUNNING - stop it first (estop, then dimos stop)"; exit 1; }
+
 echo "== 1/5 preflight hardware =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight.py' || { echo "HARDWARE KO - no flight"; exit 1; }
 echo "== 2/5 preflight nav =="
