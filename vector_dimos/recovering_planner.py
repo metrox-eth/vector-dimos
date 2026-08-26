@@ -219,7 +219,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             # 15 s in a dead end (seen 23/08 17:00, metrox: "il va a reculons").
             driving_for = time.perf_counter() - self._path_started_at
             if self._position_tracker.is_stuck() and driving_for >= self._stuck_time_window:
-                self._back_up()
+                self._back_up(trigger="stuck_detector")
                 with self._lock:
                     has_goal = self._current_goal is not None
                 if not has_goal:
@@ -245,22 +245,29 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         finally:
             self._in_stop_message = False
 
-    def slip(self, direction: float = -1.0) -> bool:
+    def slip(self, direction: float = -1.0, trigger: str = "slip") -> bool:
         """Slip reflex (stuck_guard saw the wheels turn while the lidar pose
         stood still, within 1 s): stop, back off BACKUP_DISTANCE_M in our own
         thread, then ask the monitor for a replan. While the wheels push, the
         odometry slides with them and smears the map (23/08 18:45: 25 s of
         pushing, map lost) - the only cure is to stop within the second.
+
+        `trigger` says who asked (slip / bump / bump_rear) and is carried all
+        the way into the back-off log line: until 26/08 a back-off looked the
+        same in the run log whether a switch, the slip detector or the stuck
+        detector caused it, and that alone made the contact switches look dead.
+
         Returns False if a recovery is already running."""
         if self._recovering:
             return False
         self._recovering = True
-        threading.Thread(target=self._slip_recovery, args=(direction,), daemon=True).start()
+        threading.Thread(target=self._slip_recovery, args=(direction, trigger),
+                         daemon=True).start()
         return True
 
-    def _slip_recovery(self, direction: float = -1.0) -> None:
+    def _slip_recovery(self, direction: float = -1.0, trigger: str = "slip") -> None:
         try:
-            self._back_up(direction)
+            self._back_up(direction, trigger)
             with self._lock:
                 has_goal = self._current_goal is not None
             if has_goal:
@@ -280,7 +287,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         else:
             self._path_started_at = float("inf")
 
-    def _back_up(self, direction: float = -1.0) -> float:
+    def _back_up(self, direction: float = -1.0, trigger: str = "stuck_detector") -> float:
         """Reverse until odometry says we moved backup_distance_m, or time out.
 
         Runs in the planner's monitoring thread; the local path follower is
@@ -309,6 +316,8 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         self._path_started_at = float("inf")
         logger.info(
             "Stuck: backed up before replanning",
+            trigger=trigger,
+            direction="forward" if direction > 0 else "reverse",
             travelled_m=round(travelled, 3),
             seconds=round(time.perf_counter() - t0, 1),
         )
@@ -331,12 +340,22 @@ class RecoveringPlanner(ReplanningAStarPlanner):
 
     async def handle_slip(self, msg: Bool) -> None:
         if getattr(msg, "data", False):
-            self._planner.slip()
+            self._planner.slip(trigger="slip")
 
     async def handle_bump(self, msg: Bool) -> None:
+        """Front contact: stop, back off 0.20 m, replan.
+
+        The arrival is logged here, in the planner's own worker, whatever the
+        reflex then decides: a bump that lands while a recovery is already
+        running (acted=False) used to leave no trace at all on either side."""
         if getattr(msg, "data", False):
-            self._planner.slip()   # front contact: stop, back off 0.20 m, replan
+            acted = self._planner.slip(trigger="bump")
+            logger.warning("BUMP received: front contact", reflex="back off 0.20 m",
+                           acted=acted)
 
     async def handle_bump_rear(self, msg: Bool) -> None:
+        """Rear contact: stop, move FORWARD 0.20 m, replan."""
         if getattr(msg, "data", False):
-            self._planner.slip(direction=+1.0)   # rear contact: stop, move FORWARD 0.20 m, replan
+            acted = self._planner.slip(direction=+1.0, trigger="bump_rear")
+            logger.warning("BUMP received: rear contact", reflex="forward 0.20 m",
+                           acted=acted)
