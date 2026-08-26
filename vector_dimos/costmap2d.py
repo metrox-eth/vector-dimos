@@ -14,8 +14,10 @@ neighbours are unobserved). metrox's spec, from living with a Xiaomi vacuum:
     twenty positions is solid (up to ten misses);
   * two layers, because the sensors do not see the same things: what the
     lidar put down a lidar ray may clear; what the camera put down (a low box,
-    under the 0.37 m scan plane) only the camera seeing the floor there may
-    clear.
+    under the 0.37 m scan plane) only the camera may clear - by seeing the
+    floor there, or by seeing THROUGH it at low height (`camera_rays`, metrox
+    26/08: "chaque fois que la RealSense passe dessus, ca corrige" - a
+    persistent map is good, but a ghost must never survive being looked at).
 
 A cell the camera JUST called an obstacle is deaf to floor samples for
 LOW_HIT_PROTECT_S. Measured 26/08 on run B: a table leg thinner than a 5 cm
@@ -68,6 +70,10 @@ LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar
 PUBLISH_EVERY = 5            # lidar revolutions between two costmap publications (10 Hz -> 2 Hz)
 RAY_MAX_M = 4.0              # rays are carved (misses) up to this range only: 12 m x 0.025 m steps cost 227 ms per revolution (2.3 cores at 10 Hz, 23/08 20:20)
 RAY_EVERY = 2                # carve on every other revolution; hits are taken on all
+CAMERA_HEIGHT_M = 0.56       # = lidar_odometry.CAMERA_XYZ_BASE[2] (rear mast, 24/08) - keep in sync
+CARVE_Z_BAND = (0.10, 0.45)  # a camera ray crossing a cell at this height proves nothing low stands
+                             # there; a higher ray flies OVER boxes (0.9 m up says nothing about a
+                             # 0.3 m box) and must not erase them
 CHECKPOINT_EVERY_S = 30.0    # metrox 23/08: 'when it crashes we lose everything - resume from a minute before'
 CHECKPOINT_KEEP = 40         # 20 minutes of history
 CHECKPOINT_DIR = persistent_map.CHECKPOINT_DIR
@@ -202,6 +208,53 @@ class ScoredGrid:
         protected = self._last_low_hit[gy, gx] > now - LOW_HIT_PROTECT_S
         self._miss(self.low, gx[~protected], gy[~protected])
         self._miss(self.lidar, gx, gy)
+
+    def camera_rays(self, pts_xyz: np.ndarray, from_xy: tuple[float, float],
+                    now: float | None = None) -> None:
+        """The camera's rays carve the LOW layer, symmetric to the lidar's
+        (metrox, 26/08 20h20: the SLAM must correct the map every time the
+        RealSense passes over it - without this, a ghost lives until someone
+        rebuilds the map by hand).
+
+        Every cell a ray crosses at low height (CARVE_Z_BAND) held nothing
+        standing, or the ray would have ended on it: a miss. Works for
+        obstacle endpoints and floor samples alike - a floor point at 3 m
+        proves the whole low corridor in front of it. Cells the camera called
+        an obstacle less than LOW_HIT_PROTECT_S ago are skipped: a real thing
+        is re-hit every frame, so only what the camera has STOPPED confirming
+        fades. The lidar layer is never touched - a lidar hit is a different
+        claim, and only a lidar ray may retract it."""
+        if len(pts_xyz) == 0:
+            return
+        now = time.monotonic() if now is None else now
+        dx = pts_xyz[:, 0] - from_xy[0]
+        dy = pts_xyz[:, 1] - from_xy[1]
+        r = np.hypot(dx, dy)
+        keep = r > self.res
+        if not keep.any():
+            return
+        dx, dy, r = dx[keep], dy[keep], r[keep]
+        z_end = pts_xyz[keep, 2]
+        end = np.minimum(r - self.res, RAY_MAX_M)   # stop one cell short of the hit
+        nmax = int(np.floor(end.max() / self.res))
+        if nmax < 1:
+            return
+        d = (np.arange(1, nmax + 1) * self.res)[None, :]
+        f = d / r[:, None]
+        z = CAMERA_HEIGHT_M + (z_end[:, None] - CAMERA_HEIGHT_M) * f
+        valid = (d <= end[:, None]) & (z > CARVE_Z_BAND[0]) & (z < CARVE_Z_BAND[1])
+        if not valid.any():
+            return
+        ux, uy = (dx / r)[:, None], (dy / r)[:, None]
+        xs = (from_xy[0] + ux * d)[valid]
+        ys = (from_xy[1] + uy * d)[valid]
+        gx, gy = self.cell(xs, ys)
+        if len(gx) == 0:
+            return
+        flat = np.unique(gy * self.n + gx)
+        gx, gy = flat % self.n, flat // self.n
+        unprotected = self._last_low_hit[gy, gx] <= now - LOW_HIT_PROTECT_S
+        self._miss(self.low, gx[unprotected], gy[unprotected])
 
     def _ray_cells(self, from_xy: tuple[float, float], hits_xy: np.ndarray):
         """Cells crossed by the rays from `from_xy` to each hit (capped at
@@ -460,6 +513,8 @@ class VectorCostMap(Module):
         pts = np.asarray(msg.as_numpy()[0], dtype=np.float64)
         if len(pts):
             self._grid.camera_floor(pts[:, :2])
+            if self._pose_xy is not None:
+                self._grid.camera_rays(pts, self._pose_xy)
 
     async def handle_lidar(self, msg: PointCloud2) -> None:
         if self._grid is None or self._pose_xy is None or self._frozen:
@@ -476,7 +531,11 @@ class VectorCostMap(Module):
             if time.monotonic() - self._last_ckpt >= CHECKPOINT_EVERY_S:
                 self._checkpoint()
         else:
-            self._grid.camera_obstacles(pts[~is_lidar][:, :2], self._pose_xy)
+            cam = pts[~is_lidar]
+            # hits first: they stamp the 3 s protection, so a frame never
+            # carves the very cells it is confirming
+            self._grid.camera_obstacles(cam[:, :2], self._pose_xy)
+            self._grid.camera_rays(cam, self._pose_xy)
             if is_lidar.any():
                 self._grid.lidar_revolution(pts[is_lidar][:, :2], self._pose_xy)
 
