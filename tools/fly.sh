@@ -24,10 +24,13 @@ echo "== 2/5 preflight nav =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight_nav.py' || { echo "NAV KO - no flight"; exit 1; }
 
 echo "== 3/5 stack =="
+LAUNCH_MARK=$(ssh $ROVER 'date +%s')
 ssh $ROVER 'cd ~/vector-dimos && ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null'
 sleep 12
-ssh $ROVER 'd=$(ls -td ~/.local/state/dimos/logs/*-vector-dimos-explore/ | head -1); grep -q "RPLIDAR C1 up" "$d/main.jsonl"' \
-  || { echo "lidar missing from the run - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
+# the run dir must POSTDATE this launch: on 26/08 a failed launch over a live
+# stack passed the lidar check against the PREVIOUS run's log (false IN FLIGHT)
+ssh $ROVER "d=\$(ls -td ~/.local/state/dimos/logs/*-vector-dimos-explore/ | head -1); [ \$(stat -c %Y \"\$d\") -ge $LAUNCH_MARK ] && grep -q 'RPLIDAR C1 up' \"\$d/main.jsonl\"" \
+  || { echo "no NEW run with a live lidar - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
 
 echo "== 4/5 the map on the owner's screen (GATE) =="
 # A stale viewer shows the PREVIOUS run frozen (owner caught it, 26/08 17h50):
