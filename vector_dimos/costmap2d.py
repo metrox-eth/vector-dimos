@@ -135,11 +135,14 @@ class ScoredGrid:
         last = self._last_hit_xy[gy, gx]
         moved = np.isnan(last[:, 0]) | (np.hypot(last[:, 0] - from_xy[0], last[:, 1] - from_xy[1]) >= NEW_VIEWPOINT_M)
         cur = layer[gy, gx].astype(np.int16)
-        # From one viewpoint a thing may become "occupied" (it IS seen) but no
-        # more certain than that; only new viewpoints reinforce beyond. So a
-        # parked rover sees its obstacles at once, and a false positive
-        # repeated from the same spot stays two misses away from gone.
-        cap = np.where(moved, HIT_CAP, OCCUPIED_AT)
+        # An obstacle is REAL when it was seen from two viewpoints (owner,
+        # 26/08: a passer-by hammered from one parked spot must never become
+        # a wall - the evening flights were spent walled in by exactly such
+        # cells). From one viewpoint a cell rises to OCCUPIED_AT - 1 and no
+        # further; the second viewpoint (0.10 m of motion) makes it a wall.
+        # Driving toward anything real crosses viewpoints within a metre, so
+        # legs and furniture still map on approach.
+        cap = np.where(moved, HIT_CAP, OCCUPIED_AT - 1)
         new = np.minimum(cur + 1, cap).astype(np.int8)
         layer[gy, gx] = new
         self._last_hit_xy[gy[moved], gx[moved]] = from_xy

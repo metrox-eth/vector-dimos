@@ -28,17 +28,20 @@ def fresh() -> ScoredGrid:
     return ScoredGrid(span_m=6.0)
 
 
-def test_leg_seen_from_one_spot_is_occupied_and_ray_is_free() -> None:
+def test_leg_needs_two_viewpoints_and_ray_is_free() -> None:
+    """Owner's rule (26/08 evening): an obstacle is REAL when seen from two
+    viewpoints. A passer-by hammered from one parked spot must never become a
+    wall - the evening flights were spent walled in by exactly such cells."""
     g = fresh()
-    g.lidar_revolution(LEG, (0.0, 0.0))
-    assert g.value_at(1.0, 0.0) == 0, "one hit is not an obstacle yet"
-    g.lidar_revolution(LEG, (0.0, 0.0))
-    assert g.value_at(1.0, 0.0) == 100, "second hit, even from the same spot: obstacle (a parked rover must see its walls)"
+    for _ in range(10):
+        g.lidar_revolution(LEG, (0.0, 0.0))
+    assert g.value_at(1.0, 0.0) == 0, "any number of hits from ONE spot: not a wall"
+    g.lidar_revolution(LEG, (0.0, 0.15))          # second viewpoint (>= NEW_VIEWPOINT_M)
+    assert g.value_at(1.0, 0.0) == 100, "one hit from a SECOND viewpoint: obstacle"
     for x in (0.3, 0.5, 0.7, 0.9):
         assert g.value_at(x, 0.0) == 0, f"floor along the ray at {x} m must be free"
     assert g.value_at(1.3, 0.0) == -1, "behind the leg: never seen"
-    assert g.value_at(1.0, 0.5) == -1, "beside the ray: never seen"
-    print("  leg from one spot -> occupied after 2 hits; ray -> free; behind/beside -> unknown")
+    print("  10 hits one spot -> free; +1 hit second viewpoint -> occupied; ray -> free")
 
 
 def test_ramp_hit_from_one_spot_never_becomes_a_wall() -> None:
@@ -46,7 +49,9 @@ def test_ramp_hit_from_one_spot_never_becomes_a_wall() -> None:
     for _ in range(50):
         g.lidar_revolution(LEG, (0.0, 0.0))
     gx, gy = g.cell(np.array([1.0]), np.array([0.0]))
-    assert g.value_at(1.0, 0.0) == 100 and g.lidar[gy[0], gx[0]] == 2, "same spot: occupied but capped at 2"
+    assert g.value_at(1.0, 0.0) == 0 and g.lidar[gy[0], gx[0]] == 1, "same spot forever: capped BELOW occupied"
+    g.lidar_revolution(LEG, (0.0, 0.15))
+    assert g.value_at(1.0, 0.0) == 100, "the second viewpoint makes it a wall"
     n = 0
     while g.value_at(1.0, 0.0) == 100:
         g.lidar_revolution(np.array([[3.0, 0.0]]), (0.0, 0.0)); n += 1
@@ -152,7 +157,7 @@ def test_revolution_cost() -> None:
 
 
 if __name__ == "__main__":
-    for t in (test_leg_seen_from_one_spot_is_occupied_and_ray_is_free, test_ramp_hit_from_one_spot_never_becomes_a_wall,
+    for t in (test_leg_needs_two_viewpoints_and_ray_is_free, test_ramp_hit_from_one_spot_never_becomes_a_wall,
               test_chair_moved_is_forgotten_by_lidar_rays, test_low_object_only_the_camera_can_forget,
               test_thin_leg_survives_the_floor_sampled_beside_it,
               test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip, test_revolution_cost):

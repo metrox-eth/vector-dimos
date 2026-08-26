@@ -944,6 +944,14 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
     gy0 = int(np.clip(math.floor((ry_world - oy) / res), 0, h - 1))
 
     survey = _survey(grid, res, (gy0, gx0), tuning)
+    # A rover BORN walled-in wiggled silently for two flights (26/08 evening):
+    # say it loud the moment the map says so, on every decision.
+    if survey.reachable_free_m2 < 3.0:
+        import logging
+        logging.getLogger(__name__).warning(
+            "WALLED-IN START? only %.2f m2 of reachable floor around the rover "
+            "- check the map around the start pose before blaming the planner",
+            survey.reachable_free_m2)
     frontier_all = _frontier_mask(survey)
     min_cells = max(1, int(tuning.min_frontier_perimeter_m / res))
     on_the_map = _count_clusters(frontier_all, min_cells)
