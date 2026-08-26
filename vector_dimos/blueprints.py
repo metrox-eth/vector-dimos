@@ -105,7 +105,7 @@ def _vector_base(hw_id: str = "base",
         hardware_type=HardwareType.BASE,
         joints=make_twist_base_joints(hw_id),
         adapter_type="vector",
-        address=address,   # RS485 serial port; adapter default: /dev/ttyTHS1
+        address=address,   # RS485 serial port; adapter default: the FTDI dongle (see adapter.DEFAULT_PORT)
     )
 
 

@@ -1,7 +1,7 @@
 """Read-only dump of the ZLAC8015D parameters that decide what the wheels do
 when nobody is talking to them. Writes nothing; safe with motors powered.
 
-    $ python tests/read_zlac_params.py                # defaults to /dev/ttyTHS1
+    $ python tests/read_zlac_params.py                # defaults to the adapter's port (the FTDI dongle)
 
 Registers (ZLAC8015D manual): 0x2000 communication-offline time [ms] (the
 drive-side watchdog: what the drive does after that long without a MODBUS
@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pymodbus.client.sync import ModbusSerialClient
 
-from vector_dimos.adapter import BACK_ID, BAUDRATE, FRONT_ID, SERIAL_TIMEOUT_S
+from vector_dimos.adapter import BACK_ID, BAUDRATE, DEFAULT_PORT, FRONT_ID, SERIAL_TIMEOUT_S
 
 REGS = (
     (0x2000, 1, "comm offline time [ms]"),
@@ -29,7 +29,7 @@ REGS = (
     (0x20AB, 2, "feedback rpm x10 L/R"),
 )
 
-port = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyTHS1"
+port = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PORT   # ttyTHS1 was the Waveshare HAT era: it cost two false "drives are dead" verdicts on 26/08
 client = ModbusSerialClient(method="rtu", port=port, baudrate=BAUDRATE,
                             timeout=SERIAL_TIMEOUT_S)
 if not client.connect():

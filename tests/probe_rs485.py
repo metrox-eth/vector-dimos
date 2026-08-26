@@ -6,7 +6,7 @@ feedback-RPM register pair (0x20AB) on both driver ids. No register is
 written and no drive is enabled, so it is safe to run with the motors
 powered.
 
-    $ python tests/probe_rs485.py                 # defaults to /dev/ttyTHS1
+    $ python tests/probe_rs485.py                 # defaults to the adapter's port (FTDI dongle)
     $ python tests/probe_rs485.py /dev/ttyUSB0
 
 A driver that answers prints `unit N: regs=[...]` in a few milliseconds. A
@@ -22,10 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pymodbus.client.sync import ModbusSerialClient
 
-from vector_dimos.adapter import BACK_ID, BAUDRATE, FRONT_ID, SERIAL_TIMEOUT_S
+from vector_dimos.adapter import DEFAULT_PORT, BACK_ID, BAUDRATE, FRONT_ID, SERIAL_TIMEOUT_S
 from vector_dimos.zlac8015d import L_FB_RPM
 
-port = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyTHS1"
+port = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PORT
 client = ModbusSerialClient(method="rtu", port=port, baudrate=BAUDRATE,
                             timeout=SERIAL_TIMEOUT_S)
 opened = client.connect()

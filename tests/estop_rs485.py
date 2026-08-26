@@ -6,7 +6,7 @@ last setpoint until told otherwise or powered off. `dimos stop` already does
 these two writes through the adapter's disconnect(); this is the same two
 writes with no runtime in between. Safe to run on idle, disabled drives.
 
-    $ python tests/estop_rs485.py                 # defaults to /dev/ttyTHS1
+    $ python tests/estop_rs485.py                 # defaults to the adapter's port (FTDI dongle)
     $ python tests/estop_rs485.py /dev/ttyUSB0
 
 Exit code 0 only when both drives acknowledged both writes. Anything else:
@@ -19,10 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pymodbus.client.sync import ModbusSerialClient
 
-from vector_dimos.adapter import BACK_ID, BAUDRATE, FRONT_ID, SERIAL_TIMEOUT_S
+from vector_dimos.adapter import DEFAULT_PORT, BACK_ID, BAUDRATE, FRONT_ID, SERIAL_TIMEOUT_S
 from vector_dimos.zlac8015d import Controller
 
-port = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyTHS1"
+port = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PORT   # an e-stop aimed at the dead HAT port stops nothing (26/08)
 client = ModbusSerialClient(method="rtu", port=port, baudrate=BAUDRATE,
                             timeout=SERIAL_TIMEOUT_S)
 if not client.connect():
