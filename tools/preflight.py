@@ -9,7 +9,7 @@ you see, what do you not see" in ten seconds, with the real port map:
     ttyUSB0  FTDI FT232R (Waveshare dongle)  ZLAC motor bus, 115200
     ttyUSB1  CH340                           PZEM-017 battery shunt, 9600 8N2
     ttyACM0  Espressif ESP32                 contact switches + sonar, 115200
-    ttyACM1  FIREPHX                         RPLIDAR C1, 460800
+    ttyUSB2  CP2102 Silicon Labs              RPLIDAR C1, 460800
 
 Read-only: nothing is enabled, written or moved.
 
