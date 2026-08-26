@@ -172,6 +172,29 @@ the saved flat (off by default: it would move the flat under the zones).
 $ python tests/test_relocalization_cold.py   # 73 checks: known pose in, known pose out
 ```
 
+### The two maps in Rerun
+
+The viewer shows two different things, and every failure lives in the gap
+between them.
+
+`world/global_map` is the pretty one: the accumulating voxel cloud, coloured by
+height. It is a picture of the flat and nothing reads it.
+
+`world/global_costmap` is the one the rover obeys — the 2D decision map, flat on
+the floor, under the cloud. Three layers, each switchable in the tree:
+
+| entity | colour | means |
+|---|---|---|
+| `world/global_costmap/obstacle` | red | lethal: the planner will not enter |
+| `world/global_costmap/keepout`  | orange, labelled | lethal because a zone says so |
+| `world/global_costmap/unknown`  | dark grey | never observed |
+
+Free space is drawn as nothing at all — where the floor shows through, the rover
+believes it can drive. A wall standing in the cloud with no red under it is a
+wall the rover does not know about; red with nothing above it is a memory the
+lidar no longer confirms. `unknown` is the biggest layer by far (tens of
+thousands of cells): hide it first if the viewer gets heavy.
+
 ## Layout
 
 ```

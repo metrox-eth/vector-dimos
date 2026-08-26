@@ -16,6 +16,8 @@ tools/explore_sim.py.
 """
 from __future__ import annotations
 
+import os
+
 from dimos.core.coordination.blueprints import autoconnect
 
 from vector_dimos.blueprints import VectorControlCoordinator, _coordinator_blueprint
@@ -113,12 +115,175 @@ def camera_frustum_view(camera_info):
     ]
 
 
+# --- the DECISION costmap ------------------------------------------------
+#
+# `global_costmap` (VectorCostMap) is the map the planner and the explorer
+# actually read: 100 occupied, 0 free (observed), -1 unknown, nothing else.
+# It WAS reaching Rerun all along - the bridge logs every message that has a
+# to_rerun() - but it arrived invisible, for two reasons, both in
+# dimos/msgs/nav_msgs/OccupancyGrid.py:
+#
+#   * `_build_occupancy_lut(colormap=None, ...)` is the default LUT, and it
+#     paints cost `c` as 72*(1 - c/100), 73*(1 - c/100), 129*(1 - c/100). At
+#     c = 100 that is (0, 0, 0): the lethal cells, the only ones that matter,
+#     are drawn PURE BLACK. Unknown (-1) is hardcoded black too. On the
+#     blueprint's black background the decision map was two shades of nothing.
+#   * `to_rerun()` draws one opaque textured quad over the whole crop, so the
+#     free cells - most of the map - were an opaque slab lying on the floor,
+#     and it decimates any grid wider than 256 cells (`grid[::step_h, ::step_w]`,
+#     a stride, not a max), which drops exactly the one-cell table legs this
+#     map exists to show.
+#
+# Alpha is not a way out. Measured 26/08 in a rerun 0.32 viewer: a Mesh3D
+# albedo_texture ignores its alpha channel (a magenta half at alpha 0 rendered
+# opaque magenta over the markers underneath). So "free = transparent" can only
+# mean "no geometry there at all", and the layer is drawn as Points3D over the
+# cells that are NOT free - one point per cell, at full grid resolution, no
+# decimation, so a leg seen in a single 5 cm cell is drawn.
+#
+# Three child entities rather than one coloured cloud, so each can be switched
+# off in the viewer tree - `unknown` is by far the biggest (~39-47k cells on a
+# mapped flat, against ~4k obstacle cells) and is the one to hide first if the
+# Jetson complains.
+#
+# `keepout` is drawn as flat solid rectangles, one per zone, not as cells: the
+# owner's zones ARE rectangles, and with the 26/08 fences around the house they
+# cover ~95k cells of a mapped crop - two megabytes of points, 1-2 times a
+# second, to say what five labelled boxes say better.
+COSTMAP_Z = -0.01              # a hair under the floor: never fights the voxel cloud
+COSTMAP_OCCUPIED = (220, 30, 30)    # lethal: the planner will not enter
+COSTMAP_KEEPOUT = (255, 140, 0)     # lethal because the OWNER drew a zone there
+COSTMAP_UNKNOWN = (70, 70, 70)      # never observed - not free, not an obstacle
+
+_FORBIDDEN_ZONES: dict = {"mtime": None, "zones": []}
+
+
+def _forbidden_zones(cells, res: float, ox: float, oy: float):
+    """The owner's keep-out rectangles as (cell mask, boxes), or (None, None).
+
+    The published grid cannot say which cells were forced - they are 100 like
+    any obstacle - and it does not carry the run's frame either, while the
+    zones only apply to a run that relocalized into the persistent frame
+    (costmap2d._decide). The map answers that itself: ScoredGrid.occupancy()
+    forces EVERY cell of a forbidden rectangle to 100, so a rectangle that is
+    not solid 100 is a rectangle that was never applied - and this returns None
+    rather than paint an orange rule the rover is not actually obeying.
+
+    Tested one cell in from the edges. The map floors the rectangle against its
+    OWN origin and this floors it against the published crop's, and the two
+    disagree by a cell on an edge often enough to matter (measured 26/08 on the
+    live map: 627 border cells out of 95k). The interior is the honest test,
+    and the rectangles are clipped to the crop, so the overlay never claims
+    ground the published map does not cover.
+    """
+    import numpy as np
+
+    from vector_dimos import persistent_map
+
+    try:
+        mtime = (os.path.getmtime(persistent_map.KEEPOUT_PATH)
+                 if os.path.isfile(persistent_map.KEEPOUT_PATH) else None)
+        if mtime is None:
+            return None, None
+        if _FORBIDDEN_ZONES["mtime"] != mtime:
+            _FORBIDDEN_ZONES["zones"] = persistent_map.zones_of(
+                persistent_map.load_keepouts(), persistent_map.FORBIDDEN)
+            _FORBIDDEN_ZONES["mtime"] = mtime
+    except Exception:  # noqa: BLE001 - a display layer never takes the bridge down
+        return None, None
+
+    zones = _FORBIDDEN_ZONES["zones"]
+    if not zones:
+        return None, None
+    h, w = cells.shape
+    mask = np.zeros((h, w), dtype=bool)
+    centers, half_sizes, labels = [], [], []
+    for z in zones:
+        # same arithmetic as persistent_map.keepout_mask, on the published crop
+        x0, x1 = int((z["x0"] - ox) // res), int((z["x1"] - ox) // res)
+        y0, y1 = int((z["y0"] - oy) // res), int((z["y1"] - oy) // res)
+        if x1 < 0 or y1 < 0 or x0 > w - 1 or y0 > h - 1:
+            continue                       # this zone falls outside the crop
+        x0, x1 = max(0, x0), min(w - 1, x1)
+        y0, y1 = max(0, y0), min(h - 1, y1)
+        tx0, tx1 = (x0 + 1, x1 - 1) if x1 - x0 >= 2 else (x0, x1)
+        ty0, ty1 = (y0 + 1, y1 - 1) if y1 - y0 >= 2 else (y0, y1)
+        if not bool((cells[ty0:ty1 + 1, tx0:tx1 + 1] == 100).all()):
+            return None, None              # not in force in this run
+        mask[y0:y1 + 1, x0:x1 + 1] = True
+        centers.append((ox + (x0 + x1 + 1) * res / 2,
+                        oy + (y0 + y1 + 1) * res / 2, COSTMAP_Z))
+        half_sizes.append(((x1 - x0 + 1) * res / 2, (y1 - y0 + 1) * res / 2, 0.001))
+        labels.append(str(z.get("label", "forbidden")))
+    if not centers:
+        return None, None
+    return mask, (centers, half_sizes, labels)
+
+
+def _cell_points(mask, res: float, ox: float, oy: float, color):
+    """One flat point per selected cell, at its centre. Empty clears the layer."""
+    import numpy as np
+    import rerun as rr
+
+    if mask is None:
+        return rr.Points3D(positions=np.zeros((0, 3), dtype=np.float32))
+    ys, xs = np.nonzero(mask)
+    if len(xs) == 0:
+        return rr.Points3D(positions=np.zeros((0, 3), dtype=np.float32))
+    pos = np.empty((len(xs), 3), dtype=np.float32)
+    pos[:, 0] = ox + (xs + 0.5) * res
+    pos[:, 1] = oy + (ys + 0.5) * res
+    pos[:, 2] = COSTMAP_Z
+    return rr.Points3D(positions=pos, colors=color, radii=res / 2)
+
+
+def _zone_boxes(boxes):
+    """The keep-out rectangles as flat solid slabs. Empty clears the layer."""
+    import rerun as rr
+
+    if boxes is None:
+        return rr.Boxes3D(centers=[], half_sizes=[])
+    centers, half_sizes, labels = boxes
+    return rr.Boxes3D(centers=centers, half_sizes=half_sizes, labels=labels,
+                      show_labels=True, colors=COSTMAP_KEEPOUT,
+                      fill_mode=rr.components.FillMode.Solid)
+
+
+def decision_costmap_view(grid):
+    """`global_costmap` as a flat, readable overlay under the voxel cloud."""
+    import rerun as rr
+
+    cells = grid.grid
+    if cells.size == 0:
+        return None
+    res = float(grid.resolution)
+    ox, oy = float(grid.origin.position.x), float(grid.origin.position.y)
+
+    keepout, boxes = _forbidden_zones(cells, res, ox, oy)
+    occupied = cells == 100
+    if keepout is not None:
+        occupied = occupied & ~keepout
+
+    # Returning a list of (path, archetype) makes the bridge skip its own frame
+    # attachment, so the pose is set here; the children inherit it.
+    return [
+        ("world/global_costmap",
+         rr.Transform3D(parent_frame=f"tf#/{grid.frame_id}")),
+        ("world/global_costmap/obstacle",
+         _cell_points(occupied, res, ox, oy, COSTMAP_OCCUPIED)),
+        ("world/global_costmap/keepout", _zone_boxes(boxes)),
+        ("world/global_costmap/unknown",
+         _cell_points(cells == -1, res, ox, oy, COSTMAP_UNKNOWN)),
+    ]
+
+
 RERUN_CONFIG = {
     # 512MB replay history instead of the 25% default: on the 8 GB Jetson that
     # default let the Rerun bridge grow to 2.7 GB (measured 24/08).
     "memory_limit": "512MB",
     "visual_override": {
         "world/global_map": voxel_map_view,
+        "world/global_costmap": decision_costmap_view,
         "world/camera_info": camera_frustum_view,
         # Aligned depth shares camera_color_optical_frame, so this is the same
         # frustum a second time - and it would stay pinned at the origin.
