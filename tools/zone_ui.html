@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VECTOR - zones interdites</title>
+<style>
+  :root {
+    --bg: #1b1c20; --panel: #f4f4f2; --ink: #1d1d1f; --muted: #6b6b70;
+    --line: #d6d6d2; --accent: #d97706; --accent2: #2b7fd4; --bad: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); }
+  #app { display: flex; height: 100%; }
+  #side { width: 320px; min-width: 320px; background: var(--panel); border-right: 1px solid var(--line);
+          display: flex; flex-direction: column; overflow-y: auto; }
+  #side > * { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 8px; }
+  .sub { color: var(--muted); font-size: 12px; }
+  button { font: inherit; padding: 7px 10px; border: 1px solid var(--line); background: #fff; border-radius: 6px;
+           cursor: pointer; }
+  button:hover:not(:disabled) { background: #ebebe7; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: #b45f05; }
+  button.danger { color: var(--bad); border-color: #e6c4c4; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .row > button { flex: 1 1 auto; }
+  #zones { list-style: none; margin: 0; padding: 0; }
+  #zones li { padding: 7px 8px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
+  #zones li:hover { background: #ebebe7; }
+  #zones li.sel { background: #fff; border-color: var(--accent); }
+  #zones .nm { font-weight: 600; }
+  #zones .meta { font-size: 12px; color: var(--muted); }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+  .dot.forbidden { background: var(--accent); }
+  .dot.no_slip_reflex { background: var(--accent2); }
+  label.f { display: block; margin: 8px 0 3px; font-size: 12px; color: var(--muted); }
+  input[type=text] { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  .radio { display: block; padding: 5px 0; cursor: pointer; }
+  #msg { display: none; padding: 9px 14px; font-size: 13px; }
+  #msg.ok { display: block; background: #e6f4e6; color: #14532d; }
+  #msg.err { display: block; background: #fdeaea; color: var(--bad); }
+  #main { flex: 1; position: relative; background: var(--bg); overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas.draw { cursor: crosshair; }
+  canvas.grabbing { cursor: grabbing; }
+  #hud { position: absolute; left: 12px; bottom: 12px; background: rgba(20,20,24,.82); color: #f2f2ef;
+         padding: 7px 11px; border-radius: 6px; font-variant-numeric: tabular-nums; font-size: 13px; }
+  #hint { position: absolute; left: 50%; transform: translateX(-50%); top: 12px; background: rgba(20,20,24,.86);
+          color: #f2f2ef; padding: 7px 13px; border-radius: 6px; font-size: 13px; display: none; }
+  #legend { position: absolute; right: 12px; bottom: 12px; background: rgba(20,20,24,.82); color: #f2f2ef;
+            padding: 8px 11px; border-radius: 6px; font-size: 12px; }
+  #legend div { margin: 2px 0; }
+  .help { font-size: 12.5px; color: var(--muted); }
+  .help ol { margin: 6px 0 0; padding-left: 18px; }
+  .help li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div>
+      <h1>Zones du rover</h1>
+      <div class="sub" id="mapinfo">chargement de la carte...</div>
+    </div>
+
+    <div id="msg"></div>
+
+    <div>
+      <h2>Dessiner</h2>
+      <div class="row">
+        <button id="b-draw" class="primary">Dessiner une zone</button>
+        <button id="b-close" disabled>Fermer</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="b-undo" disabled>Retirer le dernier point</button>
+        <button id="b-cancel" disabled>Annuler</button>
+      </div>
+      <div class="sub" id="drawinfo" style="margin-top:8px">Molette = zoom, glisser = deplacer la carte.</div>
+    </div>
+
+    <div id="form" style="display:none">
+      <h2>Nouvelle zone</h2>
+      <label class="f" for="f-name">Nom</label>
+      <input type="text" id="f-name" autocomplete="off">
+      <label class="f">Type</label>
+      <label class="radio"><input type="radio" name="ftype" value="forbidden" checked>
+        <span class="dot forbidden"></span>Interdit <span class="sub">- le rover n'y entre jamais</span></label>
+      <label class="radio"><input type="radio" name="ftype" value="no_slip_reflex">
+        <span class="dot no_slip_reflex"></span>Rampe sans reflexe
+        <span class="sub">- autorise, mais les reflexes anti-glissade se taisent</span></label>
+      <label class="f" for="f-note">Note (facultatif)</label>
+      <input type="text" id="f-note" autocomplete="off">
+      <div class="row" style="margin-top:10px">
+        <button id="b-save" class="primary">Enregistrer</button>
+        <button id="b-discard">Jeter</button>
+      </div>
+    </div>
+
+    <div>
+      <h2>Zones enregistrees (<span id="count">0</span>)</h2>
+      <ul id="zones"></ul>
+      <div class="row" style="margin-top:10px">
+        <button id="b-del" class="danger" disabled>Supprimer</button>
+        <button id="b-reload">Recharger</button>
+      </div>
+    </div>
+
+    <div class="help">
+      <h2>Mode d'emploi</h2>
+      <ol>
+        <li><b>Dessiner</b> : clique sur « Dessiner une zone », puis clique un coin apres l'autre sur la carte.</li>
+        <li><b>Fermer</b> : double-clic sur le dernier point, ou le bouton « Fermer ».</li>
+        <li><b>Nommer</b> : un nom, « interdit » ou « rampe sans reflexe », puis « Enregistrer ».</li>
+        <li><b>Supprimer</b> : clique la zone dans la liste (ou sur la carte), puis « Supprimer ».</li>
+      </ol>
+      <p style="margin:8px 0 0">Le rover relit le fichier tout seul dans la demi-minute : rien a redemarrer.</p>
+    </div>
+  </aside>
+
+  <div id="main">
+    <canvas id="cv"></canvas>
+    <div id="hint"></div>
+    <div id="hud">x&nbsp;<span id="hx">-</span>&nbsp;m &nbsp; y&nbsp;<span id="hy">-</span>&nbsp;m</div>
+    <div id="legend">
+      <div><span class="dot" style="background:#d92d2d"></span>obstacle vu</div>
+      <div><span class="dot" style="background:#dedeDa"></span>sol libre</div>
+      <div><span class="dot" style="background:#222226"></span>jamais vu</div>
+      <div><span class="dot forbidden"></span>zone interdite</div>
+      <div><span class="dot no_slip_reflex"></span>rampe sans reflexe</div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+var cv = document.getElementById("cv");
+var ctx = cv.getContext("2d");
+var meta = null;            // res, ox, oy, n, width, height
+var mapImg = null;
+var zones = [];             // as saved on the rover
+var selected = -1;
+var draft = null;           // {points: [[x,y],...], closed: bool}
+var mode = "nav";           // "nav" | "draw"
+var view = { scale: 30, x: -12, y: 12 };   // px per metre, world coords at the canvas top-left
+
+var COL = {
+  forbidden: { fill: "rgba(217,119,6,.30)", line: "#f59e0b" },
+  no_slip_reflex: { fill: "rgba(43,127,212,.28)", line: "#60a5fa" }
+};
+
+// --- geometry --------------------------------------------------------------
+
+function sx(x) { return (x - view.x) * view.scale; }
+function sy(y) { return (view.y - y) * view.scale; }
+function wx(px) { return view.x + px / view.scale; }
+function wy(py) { return view.y - py / view.scale; }
+
+function zonePoints(z) {
+  if (z.points) return z.points;
+  return [[z.x0, z.y0], [z.x1, z.y0], [z.x1, z.y1], [z.x0, z.y1]];
+}
+
+function centroid(pts) {
+  var a = 0, cx = 0, cy = 0;
+  for (var i = 0; i < pts.length; i++) {
+    var p = pts[i], q = pts[(i + 1) % pts.length];
+    var f = p[0] * q[1] - q[0] * p[1];
+    a += f; cx += (p[0] + q[0]) * f; cy += (p[1] + q[1]) * f;
+  }
+  if (Math.abs(a) < 1e-9) {           // degenerate: fall back to the average
+    cx = 0; cy = 0;
+    for (var j = 0; j < pts.length; j++) { cx += pts[j][0]; cy += pts[j][1]; }
+    return [cx / pts.length, cy / pts.length];
+  }
+  return [cx / (3 * a), cy / (3 * a)];
+}
+
+function area(pts) {
+  var a = 0;
+  for (var i = 0; i < pts.length; i++) {
+    var p = pts[i], q = pts[(i + 1) % pts.length];
+    a += p[0] * q[1] - q[0] * p[1];
+  }
+  return Math.abs(a) / 2;
+}
+
+// --- drawing ---------------------------------------------------------------
+
+function resize() {
+  var r = window.devicePixelRatio || 1;
+  cv.width = Math.round(cv.clientWidth * r);
+  cv.height = Math.round(cv.clientHeight * r);
+  ctx.setTransform(r, 0, 0, r, 0, 0);
+  draw();
+}
+
+function fitView() {
+  if (!meta) return;
+  var w = meta.width * meta.res, h = meta.height * meta.res;
+  var s = Math.min(cv.clientWidth / w, cv.clientHeight / h) * 0.94;
+  view.scale = s;
+  view.x = meta.ox - (cv.clientWidth / s - w) / 2;
+  view.y = meta.oy + h + (cv.clientHeight / s - h) / 2;
+  draw();
+}
+
+function path(pts) {
+  ctx.beginPath();
+  ctx.moveTo(sx(pts[0][0]), sy(pts[0][1]));
+  for (var i = 1; i < pts.length; i++) ctx.lineTo(sx(pts[i][0]), sy(pts[i][1]));
+  ctx.closePath();
+}
+
+function label(text, x, y) {
+  ctx.font = "600 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.lineWidth = 3.5;
+  ctx.strokeStyle = "rgba(15,15,18,.85)";
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = "#fff";
+  ctx.fillText(text, x, y);
+}
+
+function drawGrid() {
+  if (view.scale < 12) return;
+  var x0 = Math.floor(wx(0)), x1 = Math.ceil(wx(cv.clientWidth));
+  var y0 = Math.floor(wy(cv.clientHeight)), y1 = Math.ceil(wy(0));
+  ctx.strokeStyle = "rgba(255,255,255,.07)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (var x = x0; x <= x1; x++) { ctx.moveTo(sx(x), 0); ctx.lineTo(sx(x), cv.clientHeight); }
+  for (var y = y0; y <= y1; y++) { ctx.moveTo(0, sy(y)); ctx.lineTo(cv.clientWidth, sy(y)); }
+  ctx.stroke();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, cv.clientWidth, cv.clientHeight);
+  if (mapImg && meta) {
+    var w = meta.width * meta.res * view.scale;
+    var h = meta.height * meta.res * view.scale;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mapImg, sx(meta.ox), sy(meta.oy + meta.height * meta.res), w, h);
+  }
+  drawGrid();
+
+  for (var i = 0; i < zones.length; i++) {
+    var z = zones[i], pts = zonePoints(z);
+    var c = COL[z.type] || COL.forbidden;
+    path(pts);
+    ctx.fillStyle = c.fill;
+    ctx.fill();
+    ctx.strokeStyle = (i === selected) ? "#ffffff" : c.line;
+    ctx.lineWidth = (i === selected) ? 3 : 1.6;
+    ctx.stroke();
+    var m = centroid(pts);
+    label(z.label, sx(m[0]), sy(m[1]));
+  }
+
+  if (draft && draft.points.length) {
+    var p = draft.points;
+    ctx.strokeStyle = "#ffd166";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(sx(p[0][0]), sy(p[0][1]));
+    for (var k = 1; k < p.length; k++) ctx.lineTo(sx(p[k][0]), sy(p[k][1]));
+    if (draft.closed) {
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,209,102,.22)";
+      ctx.fill();
+    } else if (draft.hover) {
+      ctx.lineTo(sx(draft.hover[0]), sy(draft.hover[1]));
+    }
+    ctx.stroke();
+    ctx.fillStyle = "#ffd166";
+    for (var v = 0; v < p.length; v++) {
+      ctx.beginPath();
+      ctx.arc(sx(p[v][0]), sy(p[v][1]), 4, 0, 6.2832);
+      ctx.fill();
+    }
+  }
+}
+
+// --- talking to the rover --------------------------------------------------
+
+function say(text, bad) {
+  var el = document.getElementById("msg");
+  el.textContent = text;
+  el.className = bad ? "err" : "ok";
+  if (!bad) window.setTimeout(function () { if (el.textContent === text) el.className = ""; }, 6000);
+}
+
+function loadMeta() {
+  return fetch("/map_meta").then(function (r) { return r.json(); }).then(function (m) {
+    if (m.error) throw new Error(m.error);
+    meta = m;
+    document.getElementById("mapinfo").textContent =
+      "Carte : " + m.width + " x " + m.height + " cases de " + m.res + " m, "
+      + "x " + m.x_min.toFixed(1) + " a " + m.x_max.toFixed(1) + " m, "
+      + "y " + m.y_min.toFixed(1) + " a " + m.y_max.toFixed(1) + " m (" + m.saved + ")";
+    return new Promise(function (ok, ko) {
+      var img = new Image();
+      img.onload = function () { mapImg = img; ok(); };
+      img.onerror = function () { ko(new Error("image de la carte illisible")); };
+      img.src = "/map.png?t=" + m.map_mtime;
+    });
+  });
+}
+
+function loadZones() {
+  return fetch("/zones").then(function (r) { return r.json(); }).then(function (d) {
+    if (d.error) throw new Error(d.error);
+    zones = d.zones || [];
+    selected = -1;
+    renderList();
+    draw();
+  });
+}
+
+function postZones(next, done) {
+  fetch("/zones", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ zones: next })
+  }).then(function (r) {
+    return r.json().then(function (d) { return { ok: r.ok, d: d }; });
+  }).then(function (res) {
+    if (!res.ok) { say(res.d.error || "refuse par le rover", true); return; }
+    zones = res.d.zones || [];
+    selected = -1;
+    renderList();
+    draw();
+    say("Enregistre. Le rover relira le fichier dans la demi-minute.", false);
+    if (done) done();
+  }).catch(function (e) { say("Echec de l'enregistrement : " + e.message, true); });
+}
+
+// --- the sidebar list ------------------------------------------------------
+
+function renderList() {
+  var ul = document.getElementById("zones");
+  ul.innerHTML = "";
+  document.getElementById("count").textContent = zones.length;
+  zones.forEach(function (z, i) {
+    var pts = zonePoints(z);
+    var li = document.createElement("li");
+    if (i === selected) li.className = "sel";
+    var kind = z.type === "no_slip_reflex" ? "rampe sans reflexe" : "interdit";
+    var shape = z.points ? (z.points.length + " points") : "rectangle";
+    var nm = document.createElement("div");
+    nm.className = "nm";
+    nm.innerHTML = '<span class="dot ' + z.type + '"></span>';
+    nm.appendChild(document.createTextNode(z.label));
+    var mt = document.createElement("div");
+    mt.className = "meta";
+    mt.textContent = kind + " - " + shape + " - " + area(pts).toFixed(2) + " m2"
+                     + (z.note ? " - " + z.note : "");
+    li.appendChild(nm);
+    li.appendChild(mt);
+    li.onclick = function () { selected = i; renderList(); draw(); };
+    ul.appendChild(li);
+  });
+  document.getElementById("b-del").disabled = (selected < 0);
+}
+
+// --- drawing a zone --------------------------------------------------------
+
+function setMode(m) {
+  mode = m;
+  cv.classList.toggle("draw", m === "draw");
+  var drawing = (m === "draw");
+  document.getElementById("b-draw").disabled = drawing;
+  document.getElementById("b-undo").disabled = !drawing || !draft || !draft.points.length;
+  document.getElementById("b-cancel").disabled = !drawing;
+  document.getElementById("b-close").disabled = !drawing || !draft || draft.points.length < 3;
+  var hint = document.getElementById("hint");
+  if (drawing) {
+    hint.style.display = "block";
+    hint.textContent = "Clique chaque coin de la zone. Double-clic (ou « Fermer ») pour fermer.";
+  } else {
+    hint.style.display = "none";
+  }
+}
+
+function startDraw() {
+  draft = { points: [], closed: false, hover: null };
+  document.getElementById("form").style.display = "none";
+  setMode("draw");
+  draw();
+}
+
+function closeDraft() {
+  if (!draft || draft.points.length < 3) return;
+  draft.closed = true;
+  draft.hover = null;
+  setMode("nav");
+  var f = document.getElementById("form");
+  f.style.display = "block";
+  var name = document.getElementById("f-name");
+  name.value = "zone-" + (zones.length + 1);
+  document.getElementById("f-note").value = "";
+  name.focus();
+  name.select();
+  draw();
+}
+
+function cancelDraft() {
+  draft = null;
+  document.getElementById("form").style.display = "none";
+  setMode("nav");
+  draw();
+}
+
+// --- mouse -----------------------------------------------------------------
+
+var down = null, panned = false;
+
+cv.addEventListener("mousedown", function (e) {
+  down = { x: e.offsetX, y: e.offsetY, vx: view.x, vy: view.y };
+  panned = false;
+});
+
+cv.addEventListener("mousemove", function (e) {
+  var x = wx(e.offsetX), y = wy(e.offsetY);
+  document.getElementById("hx").textContent = (x >= 0 ? "+" : "") + x.toFixed(2);
+  document.getElementById("hy").textContent = (y >= 0 ? "+" : "") + y.toFixed(2);
+  if (down) {
+    var dx = e.offsetX - down.x, dy = e.offsetY - down.y;
+    if (!panned && Math.abs(dx) + Math.abs(dy) > 4) { panned = true; cv.classList.add("grabbing"); }
+    if (panned) {
+      view.x = down.vx - dx / view.scale;
+      view.y = down.vy + dy / view.scale;
+      draw();
+      return;
+    }
+  }
+  if (mode === "draw" && draft) { draft.hover = [x, y]; draw(); }
+});
+
+window.addEventListener("mouseup", function (e) {
+  var wasPan = panned;
+  down = null; panned = false;
+  cv.classList.remove("grabbing");
+  if (wasPan || e.target !== cv) return;
+  var x = wx(e.offsetX), y = wy(e.offsetY);
+  if (mode === "draw" && draft) {
+    draft.points.push([x, y]);
+    setMode("draw");
+    draw();
+    return;
+  }
+  // navigation: clicking a zone selects it, like clicking it in the list
+  var hit = -1;
+  for (var i = zones.length - 1; i >= 0; i--) {
+    path(zonePoints(zones[i]));
+    if (ctx.isPointInPath(e.offsetX * (window.devicePixelRatio || 1),
+                          e.offsetY * (window.devicePixelRatio || 1))) { hit = i; break; }
+  }
+  selected = hit;
+  renderList();
+  draw();
+});
+
+cv.addEventListener("dblclick", function (e) {
+  // The two clicks of a double-click already landed as two vertices at the same
+  // spot: drop the duplicate, keep the last corner, close. Below 4 points there
+  // would be nothing left to close, so the double-click is simply ignored.
+  e.preventDefault();
+  if (mode === "draw" && draft && draft.points.length >= 4) {
+    draft.points.pop();
+    closeDraft();
+  }
+});
+
+cv.addEventListener("contextmenu", function (e) {
+  e.preventDefault();
+  if (mode === "draw" && draft && draft.points.length) { draft.points.pop(); setMode("draw"); draw(); }
+});
+
+cv.addEventListener("wheel", function (e) {
+  e.preventDefault();
+  var x = wx(e.offsetX), y = wy(e.offsetY);
+  var k = Math.pow(1.0015, -e.deltaY);
+  view.scale = Math.max(2, Math.min(400, view.scale * k));
+  view.x = x - e.offsetX / view.scale;
+  view.y = y + e.offsetY / view.scale;
+  draw();
+}, { passive: false });
+
+window.addEventListener("keydown", function (e) {
+  if (e.target.tagName === "INPUT") {
+    if (e.key === "Enter" && document.getElementById("form").style.display !== "none") save();
+    return;
+  }
+  if (e.key === "Escape") cancelDraft();
+  if (e.key === "Enter" && mode === "draw") closeDraft();
+  if (e.key === "Backspace" && mode === "draw" && draft && draft.points.length) {
+    e.preventDefault(); draft.points.pop(); setMode("draw"); draw();
+  }
+});
+
+// --- buttons ---------------------------------------------------------------
+
+function save() {
+  if (!draft || !draft.closed) return;
+  var name = document.getElementById("f-name").value.trim();
+  if (!name) { say("Donne un nom a la zone.", true); return; }
+  for (var i = 0; i < zones.length; i++) {
+    if (zones[i].label === name) { say("Une zone s'appelle deja « " + name + " ».", true); return; }
+  }
+  var type = document.querySelector('input[name=ftype]:checked').value;
+  var zone = { label: name, type: type,
+               points: draft.points.map(function (p) { return [+p[0].toFixed(3), +p[1].toFixed(3)]; }),
+               note: document.getElementById("f-note").value.trim() };
+  postZones(zones.concat([zone]), function () { cancelDraft(); });
+}
+
+document.getElementById("b-draw").onclick = startDraw;
+document.getElementById("b-close").onclick = closeDraft;
+document.getElementById("b-cancel").onclick = cancelDraft;
+document.getElementById("b-discard").onclick = cancelDraft;
+document.getElementById("b-undo").onclick = function () {
+  if (draft && draft.points.length) { draft.points.pop(); setMode("draw"); draw(); }
+};
+document.getElementById("b-save").onclick = save;
+document.getElementById("b-reload").onclick = function () {
+  loadZones().then(function () { say("Zones rechargees depuis le rover.", false); })
+             .catch(function (e) { say(e.message, true); });
+};
+document.getElementById("b-del").onclick = function () {
+  if (selected < 0) return;
+  var z = zones[selected];
+  if (!window.confirm("Supprimer la zone « " + z.label + " » ?")) return;
+  postZones(zones.filter(function (_, i) { return i !== selected; }));
+};
+
+// --- go --------------------------------------------------------------------
+
+window.addEventListener("resize", resize);
+resize();
+loadMeta()
+  .then(function () { fitView(); return loadZones(); })
+  .catch(function (e) { say(e.message, true); });
+</script>
+</body>
+</html>

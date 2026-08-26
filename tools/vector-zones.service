@@ -1,0 +1,31 @@
+# The zone drawing UI, on the rover, always up: metrox opens
+# http://192.168.0.56:8902 in Firefox and draws his keep-out limits with the
+# mouse. Read-only on the map, read-write on keepout.json, and nothing else -
+# no serial port, no motor, no dimOS stack.
+#
+# Install (on the Jetson):
+#   sudo cp tools/vector-zones.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now vector-zones
+#   systemctl status vector-zones ; journalctl -u vector-zones -f
+
+[Unit]
+Description=VECTOR keep-out zone drawing UI (port 8902)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=metrox
+Group=metrox
+WorkingDirectory=/home/metrox/vector-dimos
+ExecStart=/home/metrox/vector-dimos/.venv/bin/python tools/zone_server.py
+Restart=on-failure
+RestartSec=5
+# It has no business anywhere but the map file and the zone file.
+NoNewPrivileges=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -148,21 +148,38 @@ is known lands 3.0 cm and 0.16 deg off, score 0.985, walls overlapping to
 
 ### Zones
 
-```console
-$ python tools/keepout.py list
-$ python tools/keepout.py add toilettes 0.55 -9.95 2.65 -6.65
-$ python tools/keepout.py add rampe -3.0 -8.2 -1.95 -7.75 --type no_slip_reflex
-$ python tools/keepout.py rm toilettes
-```
-
-Coordinates are metres in the persistent frame — read them off the Rerun map by
-hovering it. `forbidden` cells become occupied AFTER every costmap layer, so no
-lidar ray, no camera floor sample and no `body_clear` can erase them.
+A zone is a place the rover must treat differently, in metres, in the persistent
+frame. `forbidden` cells become occupied AFTER every costmap layer, so no lidar
+ray, no camera floor sample and no `body_clear` can erase them.
 `no_slip_reflex` marks a place where the wheels are MEANT to slip (a ramp): the
 rover may go there, but `stuck_guard` and `ImuSlipDetector` stay quiet inside
 it instead of cutting the torque mid-climb. Zones apply only to a run that
 relocalized into the persistent frame, and the log says so when they do not.
 An edit is picked up within about half a minute — no restart.
+
+A zone is a **rectangle** (`x0/y0/x1/y1`) or a **polygon** (`points`, at least 3
+vertices). The polygons exist because the house sits 5.75 deg off the map axes:
+every axis-aligned fence drawn around it either ate a corridor or leaked a
+corner. Both shapes are read by the same code — `persistent_map.keepout_mask`
+rasterises them (even-odd ray casting on the cell centres, plus the outline, so
+a zone always rounds outward and a zone thinner than a cell still forbids one),
+`persistent_map.point_in_zone` answers the guards, and the Rerun overlay draws
+both.
+
+Drawn with the mouse, on the map the rover actually uses — **http://192.168.0.56:8902**
+(`tools/zone_server.py`, installed as `vector-zones.service`): the persistent map
+is rendered as a picture, a click puts down a vertex, a double-click closes the
+shape, and it is saved into the same `keepout.json`. The page reads and writes
+those two files and nothing else — no serial port, no motor, no dimOS stack.
+
+Typed, for a rectangle:
+
+```console
+$ python tools/keepout.py list
+$ python tools/keepout.py add toilettes 0.55 -9.95 2.65 -6.65
+$ python tools/keepout.py add rampe -3.0 -8.2 -1.95 -7.75 --type no_slip_reflex
+$ python tools/keepout.py rm toilettes            # works on polygons too
+```
 
 `PERSISTENT_MAP=0` turns the whole thing off: no relocalization, no saved map,
 no zones. `PERSISTENT_MAP_REBASE=1` lets a run that did NOT relocalize replace
@@ -170,6 +187,8 @@ the saved flat (off by default: it would move the flat under the zones).
 
 ```console
 $ python tests/test_relocalization_cold.py   # 73 checks: known pose in, known pose out
+$ python tests/test_zones_cold.py            # polygons: exact cell sets, the pose test,
+                                             # the map picture, the atomic save
 ```
 
 ### The two maps in Rerun
@@ -186,7 +205,7 @@ the floor, under the cloud. Three layers, each switchable in the tree:
 | entity | colour | means |
 |---|---|---|
 | `world/global_costmap/obstacle` | red | lethal: the planner will not enter |
-| `world/global_costmap/keepout`  | orange, labelled | lethal because a zone says so |
+| `world/global_costmap/keepout`  | orange, labelled | lethal because a zone says so (a rectangle is one slab, a polygon one per row of cells) |
 | `world/global_costmap/unknown`  | dark grey | never observed |
 
 Free space is drawn as nothing at all — where the floor shows through, the rover
@@ -209,13 +228,17 @@ vector_dimos/
                    # (the base blueprint already gets odometry from the adapter)
   mock.py          # mock MODBUS client for the cold benches
   lidar_odometry.py  # kiss-icp scan-to-map + the frame the map lives in (relocalization)
-  costmap2d.py       # the 2D map that learns and unlearns, checkpoints, keep-out cells
+  costmap2d.py       # the 2D map that learns and unlearns (a cell the camera just called
+                     # an obstacle ignores floor samples for 3 s), checkpoints, keep-out cells
   relocalize2d.py    # global 2D relocalization: a scan back onto a saved map (numpy only)
   persistent_map.py  # the saved map, its generations, and the zone file
   stuck_guard.py     # wheels turn, world does not -> slip (quiet inside a no_slip_reflex zone)
   imu_slip.py        # the body as witness: slip in 0.2-0.5 s (same zone rule)
 tools/
-  keepout.py       # declare the zones, in metres, in the persistent frame
+  keepout.py       # declare the zones, in metres, in the persistent frame (CLI)
+  zone_server.py   # the same zones, drawn with the mouse on the map: http://<rover>:8902
+  zone_ui.html     # the page it serves (vanilla canvas, no CDN, no build step)
+  vector-zones.service  # the systemd unit that keeps that page up on the Jetson
   reloc_proof.py   # prove the relocalizer on recorded runs, in centimetres
 docs/
   hardware.md            # what VECTOR is made of

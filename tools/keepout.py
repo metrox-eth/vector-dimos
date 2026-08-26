@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """Declare, once, the places the rover must treat differently.
 
-A zone is an axis-aligned rectangle in the persistent frame - the frame the
-saved map lives in, the one the rover relocalizes into at boot. Read the
-corner coordinates straight off the Rerun map by hovering it.
+A zone lives in the persistent frame - the frame the saved map lives in, the
+one the rover relocalizes into at boot - and has one of two shapes:
+
+  rectangle  axis-aligned, x0/y0/x1/y1. What this CLI writes: read the corner
+             coordinates straight off the Rerun map by hovering it.
+  polygon    a `points` list of at least 3 vertices in metres. Drawn with the
+             mouse in the web UI (`tools/zone_server.py`, http://<rover>:8902),
+             because the house is 5.75 deg off the map axes and no rectangle
+             fits it. `list` and `rm` handle both; `add` writes rectangles
+             only - typing a polygon vertex by vertex is what the UI is for.
 
     tools/keepout.py add toilettes 0.55 -9.95 2.65 -6.65
     tools/keepout.py add rampe -3.0 -8.2 -1.95 -7.75 --type no_slip_reflex \
@@ -67,9 +74,14 @@ def cmd_list(_args: argparse.Namespace) -> int:
     print(f"{len(zones)} zone(s) in {persistent_map.KEEPOUT_PATH}"
           + (f", drawn on {frame!r}" if frame else "") + ":")
     for z in zones:
-        w, h = z["x1"] - z["x0"], z["y1"] - z["y0"]
-        print(f"  {z['label']:<24} {z['type']:<15} x {z['x0']:+.2f} .. {z['x1']:+.2f}   "
-              f"y {z['y0']:+.2f} .. {z['y1']:+.2f}   ({w:.2f} x {h:.2f} m)")
+        x0, y0, x1, y1 = persistent_map.zone_bounds(z)
+        pts = persistent_map.zone_points(z)
+        if pts is None:
+            shape = f"({x1 - x0:.2f} x {y1 - y0:.2f} m)"
+        else:
+            shape = f"polygone, {len(pts)} sommets, {persistent_map.polygon_area(pts):.2f} m2"
+        print(f"  {z['label']:<24} {z['type']:<15} x {x0:+.2f} .. {x1:+.2f}   "
+              f"y {y0:+.2f} .. {y1:+.2f}   {shape}")
         if z["note"]:
             print(f"  {'':<24} {'':<15} {z['note']}")
     return 0
@@ -107,7 +119,8 @@ def main() -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    p_add = sub.add_parser("add", help="declare a rectangle, in metres, in the persistent frame")
+    p_add = sub.add_parser("add", help="declare a rectangle, in metres, in the persistent frame "
+                                      "(polygons are drawn in the web UI)")
     p_add.add_argument("label")
     for name in ("x0", "y0", "x1", "y1"):
         p_add.add_argument(name, type=float)
