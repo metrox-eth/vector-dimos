@@ -308,9 +308,30 @@ def _panel_html():
     return _PANEL % ("".join(rows), extra, ", ".join(d["ports_plugged"]))
 
 
+# One URL for the whole flight deck (owner, 26/08 21h10: "a chaque fois je
+# dois tout lancer, reorganiser les fenetres... au pire une url avec les
+# iframes"). The iframe sources resolve in the BROWSER on the rig: the
+# cockpit through its 127.0.0.1:7780 tunnel, the rest straight over the LAN.
+# Rerun (the 3D map) stays its own native window - fly.sh opens it.
+_VOL = """<!doctype html><html><head><meta charset="utf-8"><title>VECTOR - vol</title>
+<style>
+ body{margin:0;background:#111;color:#ddd;font:13px sans-serif;height:100vh;display:flex;flex-direction:column}
+ .row{flex:1;display:flex;min-height:0}
+ iframe{flex:1;border:1px solid #333;background:#fff}
+ .tag{position:absolute;background:#111a;padding:1px 6px;font-size:11px}
+</style></head><body>
+<div class="row"><iframe src="http://127.0.0.1:7780/" title="cockpit"></iframe>
+<iframe src="/panel" title="organes"></iframe></div>
+<div class="row"><iframe src="http://192.168.0.56:8902/" title="zones"></iframe></div>
+</body></html>"""
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path in ("/panel", "/"):
+        if self.path == "/vol":
+            body = _VOL.encode()
+            ctype = "text/html"
+        elif self.path in ("/panel", "/"):
             try:
                 body = _panel_html().encode()
             except Exception as e:

@@ -1,18 +1,27 @@
 #!/usr/bin/env bash
-# VECTOR flight: preflight -> stack -> THE MAP ON THE OWNER'S SCREEN -> explore.
+# VECTOR flight: preflight -> stack -> EVERYTHING ON THE OWNER'S SCREEN -> explore.
 #
-# Owner's rule (26/08, asked three days running): a run he cannot watch does not
-# launch. The viewer is a GATE in the flight sequence, not an option - if the
-# map is not on his screen, the stack is stopped and the flight is refused.
+# Owner's rule (26/08, asked three days running, hardened 26/08 evening): a run
+# he cannot watch does not launch. THREE displays are GATES in the flight
+# sequence, not options - the map (Rerun), the organ panel (:8900/panel) and
+# the camera cockpit (7780, Firefox - proven there 24/08). If one is dead, the
+# stack is stopped and the flight is refused: "si ca merde de nouveau et que je
+# vois pas d'ou ca vient, ca va de nouveau etre le drame".
 #
 # Runs on the RIG (the machine with the screen), not on the rover:
-#     tools/fly.sh
+#     tools/fly.sh          full flight
+#     DRY=1 tools/fly.sh    everything up and displayed, exploration NOT started
 set -u
 ROVER=metrox@192.168.0.56
 VIEWER=/home/openclaw/miniconda3/envs/lerobot052/bin/dimos-viewer
+RELAY_EXT=45817          # fixed rover-side UDP port relaying to the run's dynamic QUIC port
+DRY="${DRY:-0}"
 
-echo "== 0/5 no stack already flying =="
+echo "== 0/7 no stack already flying =="
 ssh $ROVER 'for p in $(pgrep -f "[s]onar_live"); do kill "$p"; done' 2>/dev/null   # the readout UI holds the ESP port
+# a STALE deno (cockpit server of a previous run) keeps port 7780 and its QUIC
+# socket, and a stale relay keeps $RELAY_EXT: the new run's cockpit is stillborn
+ssh $ROVER 'for p in $(pgrep -x deno) $(pgrep -f "[u]dp_forward"); do kill "$p"; done' 2>/dev/null
 
 # A forgotten running stack holds the motor bus and the hardware preflight
 # collides with its feedback polling: both drives read "mute" (26/08 19h00,
@@ -20,12 +29,12 @@ ssh $ROVER 'for p in $(pgrep -f "[s]onar_live"); do kill "$p"; done' 2>/dev/null
 ssh $ROVER "pgrep -f \"[b]in/dimos\" >/dev/null" \
   && { echo "A DIMOS STACK IS ALREADY RUNNING - stop it first (estop, then dimos stop)"; exit 1; }
 
-echo "== 1/5 preflight hardware =="
+echo "== 1/7 preflight hardware =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight.py' || { echo "HARDWARE KO - no flight"; exit 1; }
-echo "== 2/5 preflight nav =="
+echo "== 2/7 preflight nav =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight_nav.py' || { echo "NAV KO - no flight"; exit 1; }
 
-echo "== 3/5 stack =="
+echo "== 3/7 stack =="
 LAUNCH_MARK=$(ssh $ROVER 'date +%s')
 ssh $ROVER 'cd ~/vector-dimos && ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null'
 sleep 12
@@ -34,7 +43,7 @@ sleep 12
 ssh $ROVER "d=\$(ls -td ~/.local/state/dimos/logs/*-vector-dimos-explore/ | head -1); [ \$(stat -c %Y \"\$d\") -ge $LAUNCH_MARK ] && grep -q 'RPLIDAR C1 up' \"\$d/main.jsonl\"" \
   || { echo "no NEW run with a live lidar - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
 
-echo "== 4/5 the map on the owner's screen (GATE) =="
+echo "== 4/7 the map on the owner's screen (GATE) =="
 # A stale viewer shows the PREVIOUS run frozen (owner caught it, 26/08 17h50):
 # kill it, start a fresh one against THIS run's server, then verify from the
 # rover that the connection is ESTABLISHED. A window is not a gate; a live
@@ -47,7 +56,47 @@ ssh $ROVER "ss -tn state established \"( sport = :9877 )\" | grep -q ." \
   || { echo "NO LIVE MAP CONNECTION - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
 echo "viewer CONNECTED to this run - the map is live"
 
-echo "== 5/5 exploration =="
+echo "== 5/7 the organ panel on the owner's screen (GATE) =="
+# stats_server: passive LCM listener + battery meter, port 8900 on the LAN.
+ssh $ROVER 'pgrep -f "[s]tats_server" >/dev/null || (cd ~/vector-dimos && nohup ./.venv/bin/python tools/stats_server.py >> /tmp/stats_server.log 2>&1 & sleep 2)'
+curl -sf -m 5 "http://192.168.0.56:8900/metrics" | grep -q '"sensors"' \
+  || { echo "NO ORGAN PANEL - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
+DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://192.168.0.56:8900/panel" >/dev/null 2>&1 &
+echo "panel answering - organ page opened in Firefox"
+
+echo "== 6/7 the camera cockpit on the owner's screen (GATE) =="
+# The cockpit page (deno, 7780) and its video (WebTransport over QUIC/UDP) both
+# live on the rover's LOOPBACK only. Page: SSH tunnel. Video: udp_forward on
+# BOTH sides - rover 0.0.0.0:$RELAY_EXT -> 127.0.0.1:<run's QUIC port>, rig
+# 127.0.0.1:<same QUIC port> -> rover:$RELAY_EXT. The QUIC port changes every
+# run (wt_url in main.jsonl). 26/08 midday the relay was bound on the WRONG
+# side (rover, on deno's own port -> Address already in use): page up, video
+# never came. Firefox is fine (proven 24/08) - the browser was never the bug.
+# every network command is bounded: the first dry flight (26/08 20h51) hung
+# HERE in silence past the 3-minute timeout - a flight sequence may fail loud,
+# never hang mute.
+WT_PORT=$(timeout 15 ssh $ROVER "d=\$(ls -td ~/.local/state/dimos/logs/*-vector-dimos-explore/ | head -1); grep -oE \"wt_url='https://127.0.0.1:[0-9]+\" \"\$d/main.jsonl\" | tail -1 | grep -oE '[0-9]+\$'")
+[ -n "$WT_PORT" ] || { echo "NO COCKPIT (no wt_url in this run's log) - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
+timeout 15 ssh $ROVER "cd ~/vector-dimos && nohup .venv/bin/python tools/udp_forward.py $RELAY_EXT 127.0.0.1 $WT_PORT 0.0.0.0 > /tmp/udp_forward_rover.log 2>&1 < /dev/null &"
+pkill -f "[u]dp_forward" 2>/dev/null; sleep 1
+nohup python3 "$(dirname "$0")/udp_forward.py" "$WT_PORT" 192.168.0.56 "$RELAY_EXT" 127.0.0.1 > /tmp/udp_forward_rig.log 2>&1 &
+for p in $(pgrep -f "[s]sh -fN -L 7780"); do kill "$p"; done 2>/dev/null
+timeout 15 ssh -fN -L 7780:127.0.0.1:7780 $ROVER
+sleep 2
+curl -sf -m 8 -o /dev/null "http://127.0.0.1:7780/" \
+  || { echo "NO COCKPIT PAGE - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
+DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://127.0.0.1:7780/" >/dev/null 2>&1 &
+echo "cockpit page live (QUIC port $WT_PORT relayed) - reload the tab if 'connected' is missing;"
+echo "proven 26/08 21h01: color_image 5 fps in Firefox on the owner's screen"
+
+if [ "$DRY" = "1" ]; then
+  echo "== 7/7 DRY: exploration NOT started =="
+  echo "Everything is up and displayed. Stop cleanly (wheels are still, but always):"
+  echo "  ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py && .venv/bin/dimos stop'"
+  exit 0
+fi
+
+echo "== 7/7 exploration =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py start'
 echo "IN FLIGHT. Stop: E-STOP FIRST, then the stack:"
 echo "  ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py && .venv/bin/dimos stop'"

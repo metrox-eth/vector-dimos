@@ -208,6 +208,32 @@ def test_camera_rays_never_touch_the_lidar_layer() -> None:
     print("  camera ray through a lidar wall -> wall stays (layer doctrine)")
 
 
+def test_walled_in_map_is_measured_as_a_prison() -> None:
+    """26/08 evening: a run that starts surrounded by ghost cells must never
+    hand its prison over as the persistent map. The gate reads the reachable
+    free area around the rover."""
+    g = fresh()
+    g.body_clear((0.0, 0.0, 0.0))                       # the rover certifies its own footprint
+    # a closed box of walls 0.5 m around the rover, each cell seen from two places
+    edge = np.arange(-0.5, 0.5 + 1e-9, 0.025)
+    box = np.concatenate([
+        np.stack([edge, np.full_like(edge, -0.5)], 1), np.stack([edge, np.full_like(edge, 0.5)], 1),
+        np.stack([np.full_like(edge, -0.5), edge], 1), np.stack([np.full_like(edge, 0.5), edge], 1)])
+    g.lidar_revolution(box, (0.0, 0.0))
+    g.lidar_revolution(box, (0.0, 0.15))
+    walled = g.reachable_free_m2((0.0, 0.0))
+    assert walled is not None and walled < 3.0, f"a 1x1 m box is a prison, got {walled}"
+    g2 = fresh()
+    g2.body_clear((0.0, 0.0, 0.0))
+    ang = np.radians(np.arange(0, 360, 2.0))
+    room = np.stack([2.5 * np.cos(ang), 2.5 * np.sin(ang)], 1)   # a 5 m round room
+    g2.lidar_revolution(room, (0.0, 0.0))
+    g2.lidar_revolution(room, (0.0, 0.15))
+    open_m2 = g2.reachable_free_m2((0.0, 0.0))
+    assert open_m2 is not None and open_m2 > 3.0, f"a 5 m room is not a prison, got {open_m2}"
+    print(f"  1x1 m box -> {walled:.1f} m2 (prison, promotion refused); 5 m room -> {open_m2:.1f} m2 (fine)")
+
+
 def test_revolution_cost() -> None:
     import time
     g = fresh()
@@ -230,6 +256,7 @@ if __name__ == "__main__":
               test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip,
               test_ghost_dies_when_the_camera_sees_through_it, test_high_ray_never_erases_a_low_box,
               test_fresh_hits_are_protected_from_carving, test_floor_ray_carves_the_low_corridor,
-              test_camera_rays_never_touch_the_lidar_layer, test_revolution_cost):
+              test_camera_rays_never_touch_the_lidar_layer, test_walled_in_map_is_measured_as_a_prison,
+              test_revolution_cost):
         print(t.__name__); t()
     print("TEST PASSED")

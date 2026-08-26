@@ -126,10 +126,15 @@ def check_esp() -> None:
         sonar = [float(m.group(1)) for ln in lines
                  for m in [_re.search(r"SONAR ([0-9.]+)", ln)] if m]
         if sonar:
-            verdict(min(sonar) >= 0.30, "sonar voit de l'espace devant",
-                    f"{min(sonar):.2f} m" + ("" if min(sonar) >= 0.30 else
-                    " -> LE COUSSINET DU BUMPER S'EST RELEVE DEVANT LE SONAR: le remettre"
-                    " (cause du 26/08 - le sonar est desactive dans la stack mais ce check veille)"))
+            # WARNING only, never a KO: the sonar is out of the drive path
+            # (SONAR_ENABLED=False, owner's vote 26/08 19h45) and a disabled
+            # sensor must not be able to cancel a flight. The loud cushion
+            # message stays - it is the reminder for the owner's bench.
+            blocked = min(sonar) < 0.30
+            print(f"  {'!! ' if blocked else 'OK '}sonar (info seulement) - {min(sonar):.2f} m"
+                  + (" -> LE COUSSINET DU BUMPER S'EST RELEVE DEVANT LE SONAR: le remettre"
+                     " (cause du 26/08 - le sonar est coupe dans la stack, ceci ne bloque PAS le vol)"
+                     if blocked else ""))
     except Exception as exc:  # noqa: BLE001
         verdict(False, "ESP32", str(exc))
 
