@@ -17,6 +17,16 @@ neighbours are unobserved). metrox's spec, from living with a Xiaomi vacuum:
     under the 0.37 m scan plane) only the camera seeing the floor there may
     clear.
 
+A cell the camera JUST called an obstacle is deaf to floor samples for
+LOW_HIT_PROTECT_S. Measured 26/08 on run B: a table leg thinner than a 5 cm
+cell was found at low = -3 after ten real contacts. lidar_odometry drops floor
+samples that land on an obstacle cell of the SAME frame
+(`split_floor_and_obstacles`), but the next frame is a new frame: the leg is
+seen in one frame and the floor beside it - same cell, 5 cm of quantisation -
+in the next, so the leg never accumulated the two hits it needs. This is not a
+weakening of the unlearning: an object that is really gone stops being hit, and
+after 3 s of floor samples it fades exactly as before.
+
 Sensor doctrine (metrox, 25/08): only the lidar and the camera write here.
 The sonar brakes and the contact switches protect - neither leaves a trace in
 the map. What the body drove over (body_clear) is still cleared: that one is a
@@ -54,6 +64,7 @@ HIT_CAP = 10                 # ceiling: no cell gets more certain than this
 FREE_FLOOR = -3              # floor: no cell gets more "free" than this
 OCCUPIED_AT = 2              # two hits from two places = an obstacle
 NEW_VIEWPOINT_M = 0.10       # a hit counts only if the rover moved this much since the cell's last hit
+LOW_HIT_PROTECT_S = 3.0      # after a camera obstacle hit, that cell's LOW layer ignores floor samples this long
 LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M)
 PUBLISH_EVERY = 5            # lidar revolutions between two costmap publications (10 Hz -> 2 Hz)
 RAY_MAX_M = 4.0              # rays are carved (misses) up to this range only: 12 m x 0.025 m steps cost 227 ms per revolution (2.3 cores at 10 Hz, 23/08 20:20)
@@ -81,6 +92,10 @@ class ScoredGrid:
         self.low = np.zeros((self.n, self.n), dtype=np.int8)       # what the camera saw below the scan plane
         self.seen = np.zeros((self.n, self.n), dtype=bool)
         self._last_hit_xy = np.full((self.n, self.n, 2), np.nan, dtype=np.float32)
+        # when the camera last called each cell an obstacle (monotonic seconds).
+        # Runtime only, never saved: it protects a leg for 3 s, and a monotonic
+        # clock means nothing in another process anyway.
+        self._last_low_hit = np.full((self.n, self.n), -np.inf, dtype=np.float64)
         # undo journal: (monotonic time, layer, flat indices, applied deltas, seen-was-new mask)
         self._journal: list[tuple[float, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = []
         self._keepout: np.ndarray | None = None   # cells the rover may never enter, whatever the layers say
@@ -166,18 +181,34 @@ class ScoredGrid:
                 self._miss(self.lidar, cells[0], cells[1])
         self._hit(self.lidar, hits_xy[:, 0], hits_xy[:, 1], from_xy)
 
-    def camera_obstacles(self, pts_xy: np.ndarray, from_xy: tuple[float, float]) -> None:
+    def camera_obstacles(self, pts_xy: np.ndarray, from_xy: tuple[float, float],
+                         now: float | None = None) -> None:
+        """The camera saw something standing here: a hit on the LOW layer, and
+        the cell is stamped - for the next LOW_HIT_PROTECT_S the floor beside it
+        may not erase it (see the module docstring: the table leg of run B)."""
         self._hit(self.low, pts_xy[:, 0], pts_xy[:, 1], from_xy)
+        gx, gy = self.cell(pts_xy[:, 0], pts_xy[:, 1])
+        if len(gx):
+            self._last_low_hit[gy, gx] = time.monotonic() if now is None else now
 
-    def camera_floor(self, pts_xy: np.ndarray) -> None:
+    def camera_floor(self, pts_xy: np.ndarray, now: float | None = None) -> None:
         """The camera saw bare floor here: a miss on BOTH layers (the only way a
-        low object is ever forgotten)."""
+        low object is ever forgotten).
+
+        Except on the LOW layer of a cell the camera called an obstacle less
+        than LOW_HIT_PROTECT_S ago: there, the floor sample is dropped. A thing
+        thinner than a 5 cm cell is seen in one frame and its floor in the next,
+        and the two cancelled forever. The lidar-layer miss is untouched - a
+        lidar hit is a different claim, and this protects nothing it says.
+        """
+        now = time.monotonic() if now is None else now
         gx, gy = self.cell(pts_xy[:, 0], pts_xy[:, 1])
         if len(gx) == 0:
             return
         flat = np.unique(gy * self.n + gx)
         gx, gy = flat % self.n, flat // self.n
-        self._miss(self.low, gx, gy)
+        protected = self._last_low_hit[gy, gx] > now - LOW_HIT_PROTECT_S
+        self._miss(self.low, gx[~protected], gy[~protected])
         self._miss(self.lidar, gx, gy)
 
     def _ray_cells(self, from_xy: tuple[float, float], hits_xy: np.ndarray):
@@ -267,6 +298,7 @@ class ScoredGrid:
         # journal and the keep-out slot __init__ would have given it.
         g._journal = []
         g._keepout = None
+        g._last_low_hit = np.full((g.n, g.n), -np.inf, dtype=np.float64)
         return g
 
     # ---- output ------------------------------------------------------------

@@ -9,11 +9,17 @@ Known input -> known output, in metres:
      change nothing; the camera seeing floor there 5 times -> free
   5. the ceiling: 30 hits from 30 places -> score 10, then 13 misses -> free
      (bounded unlearning, never a wall for a day)
+  6. the table leg of run B (26/08): thinner than a cell, seen ten times, found
+     at low = -3 - the floor sampled on its own cell in the NEXT frame erased
+     every hit. A cell hit by the camera is deaf to floor samples for
+     LOW_HIT_PROTECT_S; past that window it is forgotten exactly as before.
 """
 
 import numpy as np
 
-from vector_dimos.costmap2d import FREE_FLOOR, HIT_CAP, ScoredGrid
+from vector_dimos.costmap2d import (
+    FREE_FLOOR, HIT_CAP, LOW_HIT_PROTECT_S, OCCUPIED_AT, ScoredGrid,
+)
 
 LEG = np.array([[1.0, 0.0]])
 
@@ -72,10 +78,37 @@ def test_low_object_only_the_camera_can_forget() -> None:
         g.lidar_revolution(np.array([[3.0, 0.0]]), (0.0, 0.0))   # lidar rays pass over the box
     assert g.value_at(1.0, 0.0) == 100, "a lidar ray at 0.37 m does not prove the box is gone"
     n = 0
+    later = __import__("time").monotonic() + LOW_HIT_PROTECT_S + 1.0   # past the fresh-hit window
     while g.value_at(1.0, 0.0) == 100:
-        g.camera_floor(box); n += 1
+        g.camera_floor(box, now=later + n); n += 1
         assert n < 10
     print(f"  low box: 20 lidar rays over it -> still occupied; camera floor x{n} -> free")
+
+
+def test_thin_leg_survives_the_floor_sampled_beside_it() -> None:
+    """Run B, 26/08: a table leg thinner than a 5 cm cell, seen ten times, sat
+    at low = -3. The camera calls the cell an obstacle in one frame and bare
+    floor in the next (5 cm of quantisation), and the two cancel forever."""
+    g = fresh()
+    leg = np.array([[1.0, 0.0]])
+    t = 1000.0                                     # an injected clock, in seconds
+    g.camera_obstacles(leg, (0.0, 0.00), now=t)
+    g.camera_obstacles(leg, (0.0, 0.15), now=t + 0.1)
+    gx, gy = g.cell(np.array([1.0]), np.array([0.0]))
+    assert g.low[gy[0], gx[0]] == 2 and g.value_at(1.0, 0.0) == 100, "two hits, two viewpoints"
+    for i in range(25):                            # 2.5 s of floor samples on its own cell
+        g.camera_floor(leg, now=t + 0.2 + 0.1 * i)
+    assert g.low[gy[0], gx[0]] == 2, "a leg seen 0.1 s ago is not erased by the floor beside it"
+    assert g.value_at(1.0, 0.0) == 100
+    assert g.lidar[gy[0], gx[0]] == FREE_FLOOR, "the LIDAR layer still takes every floor miss"
+    n = 0                                          # nothing hits it any more
+    while g.value_at(1.0, 0.0) == 100:
+        n += 1
+        g.camera_floor(leg, now=t + LOW_HIT_PROTECT_S + n)
+        assert n < 10
+    assert g.low[gy[0], gx[0]] < OCCUPIED_AT
+    print(f"  thin leg: 25 floor samples inside the {LOW_HIT_PROTECT_S:.0f} s window -> still "
+          f"occupied; {n} past it -> forgotten (legitimate unlearning untouched)")
 
 
 def test_reinforcement_is_capped_and_unlearning_bounded() -> None:
@@ -156,6 +189,7 @@ def test_journal_pruned_beyond_window() -> None:
 if __name__ == "__main__":
     for t in (test_leg_seen_from_one_spot_is_occupied_and_ray_is_free, test_ramp_hit_from_one_spot_never_becomes_a_wall,
               test_chair_moved_is_forgotten_by_lidar_rays, test_low_object_only_the_camera_can_forget,
+              test_thin_leg_survives_the_floor_sampled_beside_it,
               test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip, test_revolution_cost, test_slip_rollback_restores_the_exact_map, test_journal_pruned_beyond_window):
         print(t.__name__); t()
     print("TEST PASSED")
