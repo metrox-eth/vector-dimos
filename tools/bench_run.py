@@ -32,6 +32,7 @@ import bisect
 import json
 import math
 import os
+import re
 import shutil
 import sqlite3
 import struct
@@ -66,6 +67,22 @@ REVERSAL_S = 3.0       # ... only if it happens in less than this
 
 # --- dimOS log events --------------------------------------------------------
 # Substring matched against the "event" field of each JSONL record.
+#
+# Two explorers write these logs and they do not speak the same dialect, so a
+# table scored on the v1 patterns alone showed a v2 run as all zeros - no
+# goals, no completion - which is exactly the wrong thing for an A/B:
+#
+#   v1  fast_explorer / the stock wavefront module (25-26/08)
+#       "Published frontier goal: (x, y)" and "Exploration complete ..."
+#   v2  vector_dimos.explorer2 (26/08 onwards)
+#       "goal 7: (0.43, 5.83) 5.5 m away, 42 frontier cells, ..." and
+#       "exploration complete: no reachable frontier left (10 targets, 26 ms)"
+#
+# The two completions are NOT the same event and must never be added up.
+# v1's is the self-stop this rewrite exists to remove (three of them in one
+# night with ten valid clusters on the map); v2's is the only way it can end -
+# it says the map holds nothing reachable left to look at. So v1's keeps its
+# own row, and v2's gets a row of its own: "clean termination".
 
 EVENT_PATTERNS = [
     ("goals_published", "Published frontier goal"),
@@ -75,6 +92,24 @@ EVENT_PATTERNS = [
     ("map_rollbacks", "rolled back"),
     ("exploration_complete", "Exploration complete"),
 ]
+
+# explorer2's own lines. `goals_published` is deliberately the SAME counter as
+# v1's: a run is one explorer or the other for its whole life (see
+# explorer2.explorer_v2_enabled), so the two can never both fire in one log.
+# ("no path found" is NOT here: the global planner logs that itself, in both
+# dialects, and explorer2's "planner gave up on that goal" is the same refusal
+# reported a second time - counting both would double every one of them.)
+V2_EVENT_PATTERNS = [
+    ("clean_termination", "exploration complete: no reachable frontier left"),
+    ("goal_timeouts", "goal timeout after"),
+    ("waits", "clusters are on a recently failed goal"),
+    ("back_offs", "born cornered"),
+]
+
+# "goal 12: (-2.87, 0.68) 3.4 m away, ..." - the number is what tells it apart
+# from every other line that starts with the word "goal".
+V2_GOAL_RE = re.compile(r"^goal \d+: \(")
+V2_LOGGER = "explorer2.py"
 
 SCHEMA_VERSION = "vector_bench_run/1"
 
@@ -402,8 +437,14 @@ def coverage_metrics(conn, streams, traj):
 # =============================================================================
 
 def parse_log(path):
-    """Count the events of interest in a dimOS main.jsonl run log."""
+    """Count the events of interest in a dimOS main.jsonl run log.
+
+    Both explorer dialects are counted (see EVENT_PATTERNS): the goal counters
+    add up, because one log only ever holds one of them, and the two
+    completions keep separate rows because they mean opposite things.
+    """
     counts = {key: 0 for key, _ in EVENT_PATTERNS}
+    counts.update({key: 0 for key, _ in V2_EVENT_PATTERNS})
     lines = 0
     unparsed = 0
     with open(path, "r", encoding="utf-8", errors="replace") as handle:
@@ -423,6 +464,13 @@ def parse_log(path):
             for key, pattern in EVENT_PATTERNS:
                 if pattern in event:
                     counts[key] += 1
+            for key, pattern in V2_EVENT_PATTERNS:
+                if pattern in event:
+                    counts[key] += 1
+            logger = record.get("logger")
+            if V2_GOAL_RE.match(event) and (
+                    not isinstance(logger, str) or logger.endswith(V2_LOGGER)):
+                counts["goals_published"] += 1
     counts["lines_parsed"] = lines
     counts["lines_unparsed"] = unparsed
     return counts
@@ -511,6 +559,8 @@ def print_scorecard(score):
               f"{', %d unparsed' % events['lines_unparsed'] if events['lines_unparsed'] else ''})")
         for key, pattern in EVENT_PATTERNS:
             print(f"  {key:<30}  {events[key]:9d}   \"{pattern}\"")
+        for key, pattern in V2_EVENT_PATTERNS:
+            print(f"  {key:<30}  {events.get(key, 0):9d}   \"{pattern}\"")
     print(line)
 
 
@@ -540,6 +590,10 @@ COMPARE_ROWS = [
     ("slips", "n", ("log_events", "slips"), "10.0f"),
     ("map rollbacks", "n", ("log_events", "map_rollbacks"), "10.0f"),
     ("exploration complete", "n", ("log_events", "exploration_complete"), "10.0f"),
+    ("clean termination", "n", ("log_events", "clean_termination"), "10.0f"),
+    ("goal timeouts", "n", ("log_events", "goal_timeouts"), "10.0f"),
+    ("waits (not a stop)", "n", ("log_events", "waits"), "10.0f"),
+    ("back-offs", "n", ("log_events", "back_offs"), "10.0f"),
 ]
 
 
