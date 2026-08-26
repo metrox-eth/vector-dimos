@@ -218,7 +218,14 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             if not self._in_stop_message and self._local_planner_state() in ("initial_rotation", "final_rotation", "idle"):
                 # "idle" added 26/08: while explorer2 WAITS out an exclusion the
                 # follower commands nothing - stillness without intent is not
-                # "stuck".
+                # "stuck". And the tracker's window must RESTART here (evening
+                # 26/08): a mecanum turns in place for seconds, the tracker
+                # counted that stillness, and the first blink into
+                # path_following fired a replan - new path, sometimes the other
+                # way round an obstacle, new rotation, replan again: the 1 Hz
+                # bang-bang wiggle that killed both evening flights. Stillness
+                # while rotating never feeds the stuck verdict.
+                self._position_tracker.reset_data()
                 return
             with self._lock:
                 has_goal = self._current_goal is not None and self._current_odom is not None

@@ -95,8 +95,11 @@ def test_stuck_needs_a_driven_path_and_ignores_rotation() -> None:
     calls.clear()
     planner._path_started_at = time.perf_counter() - 30.0
     fake._state = "initial_rotation"                         # turning in place: position still, not stuck
+    resets = []
+    planner._position_tracker.reset_data = lambda: resets.append(1)  # type: ignore[method-assign]
     planner._replan_path()
     assert calls == [] and planner._current_goal is not None, calls
+    assert resets, "rotation must RESTART the stuck tracker window (the 1 Hz wiggle, 26/08 evening)"
     planner._in_stop_message = True                          # but a follower stop message is handled
     planner._replan_path()
     planner._in_stop_message = False

@@ -23,13 +23,17 @@ ssh $ROVER 'd=$(ls -td ~/.local/state/dimos/logs/*-vector-dimos-explore/ | head 
   || { echo "lidar missing from the run - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
 
 echo "== 4/5 the map on the owner's screen (GATE) =="
-if ! pgrep -f dimos-viewer >/dev/null; then
-  DISPLAY="${DISPLAY:-:1}" nohup "$VIEWER" "rerun+http://192.168.0.56:9877/proxy" >/tmp/dimos_viewer.log 2>&1 &
-  sleep 6
-fi
-pgrep -f dimos-viewer >/dev/null \
-  || { echo "NO MAP ON SCREEN - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
-echo "viewer up - the map is visible"
+# A stale viewer shows the PREVIOUS run frozen (owner caught it, 26/08 17h50):
+# kill it, start a fresh one against THIS run's server, then verify from the
+# rover that the connection is ESTABLISHED. A window is not a gate; a live
+# TCP connection to this run's rerun port is.
+pkill -f dimos-viewer 2>/dev/null
+sleep 1
+DISPLAY="${DISPLAY:-:1}" nohup "$VIEWER" "rerun+http://192.168.0.56:9877/proxy" >/tmp/dimos_viewer.log 2>&1 &
+sleep 8
+ssh $ROVER "ss -tn state established \"( sport = :9877 )\" | grep -q ." \
+  || { echo "NO LIVE MAP CONNECTION - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
+echo "viewer CONNECTED to this run - the map is live"
 
 echo "== 5/5 exploration =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py start'
