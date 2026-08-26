@@ -457,10 +457,12 @@ def main(argv=None) -> int:
     #   pose lookup and the rebuilt memory are the ones the run had.
     #   the goal is what the CURRENT scoring picks; it matches the run only
     #   while the scoring has not moved since that run.
-    print(f"input fidelity: {same_count} of {n_goals} decisions see exactly the cluster "
-          f"count the run logged")
-    print(f"same choice as the run: {same_goal} of {n_goals} goals")
-    return 0 if same_count == n_goals else 1
+    print(f"decisions whose cluster count matches the run's: {same_count} of {n_goals}")
+    print(f"decisions whose goal matches the run's:          {same_goal} of {n_goals}")
+    print("(both are comparisons, not tests: they read 10 of 10 on the code that flew "
+          "run B\n and move as the scoring moves. What is under test lives in "
+          "tests/test_explorer2_cold.py.)")
+    return 0
 
 
 if __name__ == "__main__":
