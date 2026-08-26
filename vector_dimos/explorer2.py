@@ -39,18 +39,50 @@ PR, and what is not:
            it does not need to enter the unknown to see it, and a goal it can
            actually stand on is a goal it can actually reach (1 of 29 reached
            on the real run of 25/08).
-  changed  information gain is the unknown AREA behind a frontier, not the
-           length of the frontier (Tuning.info_radius_m). Dividing a boundary
-           length by path cost makes the rover take the nearest door every
-           time; measured on the real flat, that myopia cost +71 % travel.
+  changed  information gain is the unknown AREA a revolution from the viewpoint
+           would actually reveal - unknown cells in LINE OF SIGHT of it, within
+           Tuning.info_radius_m - not the length of the frontier. Dividing a
+           boundary length by path cost makes the rover take the nearest door
+           every time; measured on the real flat, that myopia cost +71 % travel.
   added    a cluster reachable only across unmapped ground is a PROBE and is
            ranked behind every safe frontier (Tuning.probe_penalty).
-  added    a cluster whose standing point the rover has already decided from is
-           dropped (Tuning.observed_radius_m). This is the SECOND thing that
-           can end a run, and it is deliberate: it is geometry, not a counter -
-           see the field on ExploreState and the note there. Without it a
-           frontier no viewpoint can resolve is retargeted forever (measured:
-           300 goals and 184 m of travel for the last 0.2 m2 of map).
+  added    a viewpoint the rover has already decided from is never handed out
+           again (Tuning.observed_radius_m): driving to a spot it is already at
+           reveals nothing. That is geometry, not a counter, and it is what
+           keeps a frontier no viewpoint can resolve from being retargeted for
+           ever (measured: 300 goals and 184 m of travel for the last 0.2 m2).
+
+
+What run B of 26/08 changed (recordings/courseB_explorer2.db, the first real
+run of this module, 10 goals in 6 min 33; tools/replay_decision.py replays any
+of its decisions through this function):
+
+  the owner watched it turn round and go back into the bedroom it had already
+  mapped instead of pushing on. Replayed, goal 10 is unambiguous: the frontier
+  at the bedroom wall scored 0.0160 against 0.0074 for the best unmapped-room
+  cluster, and the two terms that did it were the ones that have nothing to do
+  with information - a x4 probe penalty every cluster beyond the mapped floor
+  pays and a mapped-floor errand does not, and 1/(1 + path cost) at 3.4 m
+  against 25 m. The gain term barely separated them (0.514 vs 0.672), because a
+  box filter over the unknown counts the unknown on the far side of the wall
+  the rover would be standing against. Hence the two changes above and below:
+  gain is what a revolution there would SEE, and the anti-revisit fade is
+  quadratic (an area, not a length) over every goal published this run except
+  the one just attempted. Same recording, same state, new scoring: goal 10
+  becomes a cluster in the unmapped west, and the bedroom drops to sixth.
+
+  it then ended "no reachable frontier left" at 6 min 33 with 42 frontier
+  clusters still on the map and about a third of the flat unseen. Not one of
+  them had been retired by the standing-point rule: every one was dropped
+  because the frontier CELL did not touch the region the body can reach. The
+  rover had spent the whole run in the hallway; the rooms are behind doorways
+  its own inflated map prices at 0.54-0.58 m for a body that needs 0.60, so the
+  flood stopped at the hallway - an 8.9 m2 pocket - and took all 42 with it.
+  Eleven of them had a viewpoint the body could stand on within the standoff it
+  already uses. So a cluster is now offered when there is somewhere to STAND
+  and look at it, which is the question that was meant to be asked; the lidar
+  reaches 12 m and a doorway is a fine place to map a room from. Replayed, the
+  call that ended the run publishes a goal 7.6 m away with 65 frontier cells.
 
 Field additions, all measured on VECTOR (spec §7):
 
@@ -58,7 +90,10 @@ Field additions, all measured on VECTOR (spec §7):
         every cluster is temporarily excluded the function returns a WAIT
         directive, not None.
   §7.3  born-cornered detection: no reachable frontier AND a reachable free
-        area under 0.5 m2 -> one back-off directive, before anything else.
+        area under 0.5 m2 -> one back-off directive, before anything else. The
+        same one back-off answers the other way a rover can be shut in: no
+        reachable frontier while the MAP still holds frontier clusters. Pinched
+        is not finished, and the two used to be reported with the same words.
   §4    prefer-forward, on the robot's real heading: in discovery mode the
         camera looks ahead, so a target behind costs a turn and a blind side.
   §7.2  keep-out zones need no code here: costmap2d.ScoredGrid.occupancy()
@@ -146,7 +181,20 @@ _NEIGHBOURS = ((-1, -1, _SQRT2), (-1, 0, 1.0), (-1, 1, _SQRT2),
 
 DIRECTIVE_FRONTIER = "frontier"   # drive here (goal_request)
 DIRECTIVE_WAIT = "wait"           # stay, re-evaluate in `wait_s` - NOT the end (§7.1)
-DIRECTIVE_BACK_OFF = "back_off"   # born cornered: reverse once, then re-evaluate (§7.3)
+DIRECTIVE_BACK_OFF = "back_off"   # cornered or pinched: reverse once, then re-evaluate (§7.3)
+
+# How many of a cluster's nearest free viewpoints are tested for line of sight
+# to it before the nearest one is taken anyway. Bounded on purpose: in the
+# middle of a wide room every cell of the standoff window is a candidate, and
+# an unbounded search would turn one decision into thousands of ray walks.
+_LOS_CANDIDATES = 32
+
+# The anti-revisit fade. Not a Tuning field: Tuning holds physical quantities,
+# and this is the SHAPE of a preference, fixed by an argument rather than
+# measured on the robot - what a second look at the same spot can add is the
+# AREA the first revolution did not cover, and an area goes as the square of
+# how far the rover moved.
+_REVISIT_FADE_POWER = 2
 
 
 # --- tuning ----------------------------------------------------------------
@@ -179,15 +227,16 @@ class Tuning:
     # this fraction of what a walk over seen floor scores. Not a ban: a probe
     # is how the next room gets found. Just last in the queue.
     probe_penalty: float = 0.25
-    # Information gain is the UNKNOWN AREA within this radius of the frontier,
-    # not the length of the frontier itself. PR #2830 uses the cluster cell
-    # count, which is the boundary's length: a doorway into an unmapped room and
-    # a doorway into a cupboard have the same one, and a strategy that divides
-    # it by path cost then always takes the nearest door. Measured in the
-    # harness on the real flat, that myopia cost +71 % travel against the old
-    # scoring, whose 4 m "lookahead distance" happened to compensate for it.
-    # Area answers the question actually being asked - how much map is behind
-    # this door - and it is one box filter for the whole grid.
+    # Information gain is the UNKNOWN AREA the viewpoint can SEE within this
+    # radius - _visible_unknown, one ray-cast revolution - not the length of the
+    # frontier. PR #2830 uses the cluster cell count, which is the boundary's
+    # length: a doorway into an unmapped room and a doorway into a cupboard have
+    # the same one, and a strategy that divides it by path cost then always
+    # takes the nearest door. Measured in the harness on the real flat, that
+    # myopia cost +71 % travel against the old scoring, whose 4 m "lookahead
+    # distance" happened to compensate for it. Area answers the question
+    # actually being asked - how much map is behind this door - and line of
+    # sight is what keeps the answer honest at a wall (see _visible_unknown).
     info_radius_m: float = 2.0
     # How far from the cluster the rover is asked to stand. It only has to SEE
     # the unknown (RPLIDAR C1, 12 m), not enter it.
@@ -195,17 +244,21 @@ class Tuning:
 
     # Scoring.
     forward_bonus: float = 0.5     # PR #2830's momentum weight, on the real heading
-    revisit_radius_m: float = 1.0  # a spot the rover already stood within 1 m of
-                                   # has had its lidar sweep; fade it linearly
+    revisit_radius_m: float = 1.0  # within 1 m of a goal already published this
+                                   # run, the score fades as the square of the
+                                   # distance (_REVISIT_FADE_POWER)
     # Hard version of the same idea, and the only thing besides "no frontier"
-    # that can end a run. A cluster whose standing point is a place the rover
-    # has ALREADY decided from - i.e. already taken a full lidar revolution at -
-    # cannot be made to give up more by going back to it: the rover would not
-    # move. That is a geometric fact, not an attempt counter, and it is what
-    # lesh's "nothing reachable AND worth it" means. Without it a frontier that
-    # no viewpoint can resolve (a shadow the 2D scan plane never enters) is
-    # retargeted forever: measured in the harness, 300 goals and 184 m of travel
-    # for the last 0.2 m2 of map.
+    # that can end a run. A place the rover has ALREADY decided from - i.e.
+    # already taken a full lidar revolution at - cannot be made to give up more
+    # by going back to it: the rover would not move. That is a geometric fact,
+    # not an attempt counter, and it is what lesh's "nothing reachable AND worth
+    # it" means. Without it a frontier that no viewpoint can resolve (a shadow
+    # the 2D scan plane never enters) is retargeted forever: measured in the
+    # harness, 300 goals and 184 m of travel for the last 0.2 m2 of map.
+    #
+    # It is a rule about VIEWPOINTS, and only about viewpoints. A cluster whose
+    # nearest viewpoint is spent still has the rest of its standoff window to be
+    # looked at from; what retires the cluster itself is stated in _clusters.
     observed_radius_m: float = 0.30   # the follower's arrival tolerance (0.25 m) + a cell
 
     # §7.1 failed-target memory. 0.6 m / 60 s as shipped in fast_explorer.py.
@@ -234,7 +287,9 @@ class ExploreState:
 
     `next_target` writes ONLY these fields, and only these:
       visited          appended with every frontier target it hands out
-      observed         appended with the pose it was called from (deduplicated)
+      observed         appended with the pose it was called from (deduplicated);
+                       every entry is a place the rover really stood, and only
+                       these retire a frontier
       failed           expired entries pruned (the loop appends new ones)
       heading          refreshed from the pose it was given
       back_off_issued  set when a back-off goes out, cleared when a frontier does
@@ -314,6 +369,113 @@ def _nearest_true(mask: np.ndarray, yx: tuple[int, int]) -> tuple[int, int] | No
     return int(idx[0][y, x]), int(idx[1][y, x])
 
 
+# --- what a viewpoint can see ----------------------------------------------
+#
+# Two questions, one primitive: does a straight line between two cells cross an
+# obstacle. "How much unknown would a lidar revolution here reveal" is that
+# question asked once per ray; "was this frontier ever in view from there" is it
+# asked once. Both are answered on the RAW occupancy - unknown never blocks a
+# ray, because unknown is exactly what the rover is going to find out.
+
+_RAYS: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def _rays(radius_cells: int) -> tuple[np.ndarray, np.ndarray]:
+    """(dy, dx) of one revolution: enough rays that no cell of the disc is missed.
+
+    One ray per cell of the outer circumference (2 pi r), sampled every cell
+    outwards. Cached per radius, which is a constant of the tuning, so the whole
+    cost is paid once per process.
+    """
+    key = int(radius_cells)
+    cached = _RAYS.get(key)
+    if cached is None:
+        n_rays = max(8, int(math.ceil(2.0 * math.pi * key)))
+        angles = np.linspace(0.0, 2.0 * math.pi, n_rays, endpoint=False)
+        steps = np.arange(1, key + 1)
+        dy = np.rint(np.sin(angles)[:, None] * steps[None, :]).astype(np.int32)
+        dx = np.rint(np.cos(angles)[:, None] * steps[None, :]).astype(np.int32)
+        _RAYS[key] = cached = (dy, dx)
+    return cached
+
+
+def _visible_unknown(unknown: np.ndarray, occupied: np.ndarray,
+                     centre: tuple[int, int], radius_cells: int) -> float:
+    """Unknown cells in LINE OF SIGHT of `centre`, as a fraction of its disc.
+
+    This is the information gain, and it is the answer to the question actually
+    being asked: how much of what I do not know would ONE revolution from that
+    spot show me. A box filter over the unknown mask - what this used to be -
+    counts the unknown on the far side of the wall the rover would be standing
+    against, and on the real flat that is most of it: at the decision the owner
+    objected to on 26/08 (recordings/courseB_explorer2.db, goal 10) the box gave
+    the frontier at the bedroom wall 0.514 and the ray-cast gives it 0.327,
+    against 0.70-0.78 for the frontiers that open onto the unmapped rooms.
+    """
+    dy, dx = _rays(radius_cells)
+    h, w = unknown.shape
+    cy, cx = centre
+    ys, xs = cy + dy, cx + dx
+    inside = (ys >= 0) & (ys < h) & (xs >= 0) & (xs < w)
+    ysc = np.clip(ys, 0, h - 1)
+    xsc = np.clip(xs, 0, w - 1)
+    blocked = occupied[ysc, xsc] | ~inside
+    steps = blocked.shape[1]
+    first = np.where(blocked.any(axis=1), blocked.argmax(axis=1), steps)
+    open_run = np.arange(steps)[None, :] < first[:, None]
+    hit = open_run & inside & unknown[ysc, xsc]
+    if not hit.any():
+        return 0.0
+    # rays overlap near the centre: count CELLS, not ray samples
+    seen = np.zeros((2 * radius_cells + 1, 2 * radius_cells + 1), dtype=bool)
+    seen[dy[hit] + radius_cells, dx[hit] + radius_cells] = True
+    return float(seen.sum()) / (math.pi * radius_cells * radius_cells)
+
+
+def _line_of_sight(occupied: np.ndarray, a: tuple[int, int], b: tuple[int, int]) -> bool:
+    """True when no obstacle cell sits strictly between the two cells."""
+    (y0, x0), (y1, x1) = a, b
+    n = int(max(abs(y1 - y0), abs(x1 - x0)))
+    if n <= 1:
+        return True
+    t = np.arange(1, n) / n
+    ys = np.rint(y0 + (y1 - y0) * t).astype(np.int64)
+    xs = np.rint(x0 + (x1 - x0) * t).astype(np.int64)
+    return not bool(occupied[ys, xs].any())
+
+
+def _cells_of(points: list[tuple[float, float]], shape: tuple[int, int], res: float,
+              origin: tuple[float, float]) -> np.ndarray:
+    """World points -> an (n, 2) array of (row, col), clipped to the grid."""
+    if not points:
+        return np.zeros((0, 2), dtype=np.int64)
+    ox, oy = origin
+    h, w = shape
+    ys = np.clip(np.floor((np.array([p[1] for p in points]) - oy) / res), 0, h - 1)
+    xs = np.clip(np.floor((np.array([p[0] for p in points]) - ox) / res), 0, w - 1)
+    return np.stack([ys, xs], axis=1).astype(np.int64)
+
+
+def _decided_from(observed: list[tuple[float, float]], shape: tuple[int, int], res: float,
+                  origin: tuple[float, float], radius_m: float) -> np.ndarray:
+    """Cells within `radius_m` of a pose the rover has already decided from.
+
+    A viewpoint inside this mask has had its lidar revolution: sending the rover
+    back to it cannot show it anything, whatever the frontier it would be aimed
+    at. That is the only thing the rule below is allowed to conclude.
+    """
+    mask = np.zeros(shape, dtype=bool)
+    cells = _cells_of(observed, shape, res, origin)
+    if not cells.size:
+        return mask
+    mask[cells[:, 0], cells[:, 1]] = True
+    r = int(math.ceil(radius_m / res))
+    if r <= 0:
+        return mask
+    yy, xx = np.ogrid[-r:r + 1, -r:r + 1]
+    return ndimage.binary_dilation(mask, structure=(yy * yy + xx * xx <= r * r))
+
+
 # --- the map, read once ----------------------------------------------------
 
 @dataclass
@@ -327,7 +489,6 @@ class _Survey:
     reachable: np.ndarray         # free or unknown, body fits, connected to the robot
     goal_ok: np.ndarray           # free and reachable: where a goal may sit
     walkable: np.ndarray          # ... of which this part needs no bet on unmapped ground
-    unknown_density: np.ndarray   # fraction of a 2 x info_radius box that is unknown
     cell_cost: np.ndarray         # cost multiplier per cell (1.0 = a plain free metre)
     seed: tuple[int, int] | None  # the cell the robot plans from
     reachable_free_m2: float
@@ -357,8 +518,7 @@ def _survey(grid: np.ndarray, res: float, robot_yx: tuple[int, int], tuning: Tun
         if snapped is None:
             empty = np.zeros_like(free)
             return _Survey(free, unknown, occupied, lethal, empty, empty, empty,
-                           np.zeros(grid.shape, dtype=np.float32), np.ones(grid.shape),
-                           None, 0.0)
+                           np.ones(grid.shape), None, 0.0)
         ry, rx = snapped
     comp_labels, _ = ndimage.label(physical, structure=_EIGHT)
     component = comp_labels == comp_labels[ry, rx]
@@ -380,7 +540,7 @@ def _survey(grid: np.ndarray, res: float, robot_yx: tuple[int, int], tuning: Tun
         # pocket's own free area, not on the inflated one.
         empty = np.zeros_like(free)
         return _Survey(free, unknown, occupied, lethal, empty, empty, empty,
-                       np.zeros(grid.shape, dtype=np.float32), np.ones(grid.shape), None,
+                       np.ones(grid.shape), None,
                        float((component & free).sum()) * res * res)
     seed = (ry, rx)
     trav_labels, _ = ndimage.label(traversable, structure=_EIGHT)
@@ -412,17 +572,12 @@ def _survey(grid: np.ndarray, res: float, robot_yx: tuple[int, int], tuning: Tun
     reachable_free_m2 = float((walkable & free).sum()) * res * res
 
     # Cost per cell, in "metres per metre". Free and clear = 1.0.
-    # How much unknown sits within info_radius of every cell, as a fraction of
-    # the box. One separable box filter for the whole grid.
-    box = max(3, int(2 * tuning.info_radius_m / res) | 1)
-    unknown_density = ndimage.uniform_filter(unknown.astype(np.float32), size=box, mode="constant")
-
     ramp = np.clip((tuning.pivot_clearance_m - distance_m)
                    / max(tuning.pivot_clearance_m - tuning.lethal_clearance_m, 1e-6), 0.0, 1.0)
     cell_cost = (1.0 + tuning.pivot_cost_factor * ramp ** tuning.pivot_ramp_exponent)
     cell_cost = np.where(unknown, cell_cost * tuning.unknown_cost_factor, cell_cost)
     return _Survey(free, unknown, occupied, lethal, reachable, goal_ok, walkable,
-                   unknown_density, cell_cost.astype(np.float64), seed, reachable_free_m2)
+                   cell_cost.astype(np.float64), seed, reachable_free_m2)
 
 
 def _path_cost(reachable: np.ndarray, cell_cost: np.ndarray, seed: tuple[int, int],
@@ -477,33 +632,84 @@ class Cluster:
     """One frontier, with the place the rover would look at it from."""
 
     size: int                        # frontier cells (PR #2830's own gain proxy)
-    gain: float                      # unknown area within info_radius of the look-at point,
-                                     # as a fraction of that box: the gain actually used
+    gain: float                      # unknown cells in line of sight of the viewpoint,
+                                     # as a fraction of its disc: the gain actually used
     centroid_xy: tuple[float, float]
     look_at_xy: tuple[float, float]  # the cluster cell nearest the centroid
     goal_xy: tuple[float, float]     # where to stand
     goal_yx: tuple[int, int]
     on_frontier: bool                # True when no free standing spot was found
     probe: bool                      # getting there means betting on unmapped ground
+    retired: bool = False            # every viewpoint of it has already been used
+    in_sight: bool = True            # the viewpoint can actually SEE the frontier
 
 
-def _clusters(survey: _Survey, grid_shape: tuple[int, int], res: float,
-              origin: tuple[float, float], tuning: Tuning) -> list[Cluster]:
+def _frontier_mask(survey: _Survey) -> np.ndarray:
     """dimOS's own frontier definition, kept as it is: an UNKNOWN cell with a
-    FREE 8-neighbour and no occupied 8-neighbour, restricted to what the robot
-    can reach, clustered 8-connected.
-
-    The body radius deliberately does NOT filter these cells. A frontier is a
-    measurement of unknown area, not a place to drive; narrowing it would throw
-    away information and bring back the false extinctions. Where the rover
-    stands to look at it is a separate question, answered below with
-    `survey.goal_ok`, which is body-aware.
-    """
+    FREE 8-neighbour and no occupied 8-neighbour."""
     near_occupied = ndimage.binary_dilation(survey.occupied, structure=_EIGHT)
     near_free = ndimage.binary_dilation(survey.free, structure=_EIGHT)
-    frontier = survey.unknown & near_free & ~near_occupied
-    # Reachability of an unknown cell = it touches the region the body can reach.
-    frontier &= ndimage.binary_dilation(survey.reachable, structure=_EIGHT)
+    return survey.unknown & near_free & ~near_occupied
+
+
+def _count_clusters(frontier: np.ndarray, min_cells: int) -> int:
+    """How many frontier clusters the MAP holds, reachable or not.
+
+    The difference between this number and the number of clusters the rover can
+    plan to is the whole difference between "there is nothing left to see" and
+    "I am pinched": see next_target. Run B of 26/08 ended on that confusion with
+    37 clusters and 1492 frontier cells on the map, none of them touching the
+    8.9 m2 pocket the body was closed into.
+    """
+    if not frontier.any():
+        return 0
+    labels, count = ndimage.label(frontier, structure=_EIGHT)
+    if count == 0:
+        return 0
+    sizes = np.bincount(labels.ravel())[1:]
+    return int((sizes >= min_cells).sum())
+
+
+def _clusters(survey: _Survey, frontier_all: np.ndarray, grid_shape: tuple[int, int],
+              res: float, origin: tuple[float, float], tuning: Tuning,
+              decided_from: np.ndarray, observed_yx: np.ndarray) -> list[Cluster]:
+    """The reachable frontier clusters, each with the viewpoint to look at it from.
+
+    The body radius deliberately does NOT filter the frontier cells. A frontier
+    is a measurement of unknown area, not a place to drive; narrowing it would
+    throw away information and bring back the false extinctions. Where the rover
+    stands to look at it is a separate question, answered below with
+    `survey.goal_ok`, which is body-aware.
+
+    `decided_from` are the cells the rover has already taken a lidar revolution
+    at, and `observed_yx` those revolutions' centres. They are not allowed as
+    viewpoints - driving to a spot the rover is effectively already at reveals
+    nothing, which is geometry and not a counter.
+
+    A cluster is RETIRED when the frontier itself has already been in CLEAR
+    VIEW - line of sight, within standoff range - from a spot the rover stood
+    at. If a full revolution with nothing in the way left those cells unknown,
+    no second viewpoint at that scale is going to resolve them: that is the
+    shadow the 2D scan plane never enters, and retargeting it forever is the
+    300-goals-and-184-m pathology the rule exists for. The shipped rule retired
+    a cluster as soon as its NEAREST viewpoint had been used, whether or not
+    anything of the frontier could be seen from there - so a frontier round the
+    corner from a spot the rover happened to stand at died silently, and the
+    log said "exploration complete".
+
+    A cluster is offered when there is somewhere the BODY CAN STAND within
+    standoff_max_m of it. That is the real question, and it is not the same as
+    the shipped test - "the frontier cell itself touches the region the body can
+    reach" - which is what ended run B of 26/08: the rover spent the whole run
+    in the flat's hallway, saw into every room through the doorways, and then
+    dropped all 42 clusters because the rooms are behind doorways the inflated
+    map prices 1 cm too narrow for the body. Eleven of those clusters had a
+    viewpoint the body could stand on within the existing 1.00 m standoff. The
+    lidar reaches 12 m: standing in a doorway maps the room, and that is what
+    this rover has to do until a doorway is measured wide enough to drive
+    through.
+    """
+    frontier = frontier_all
     if not frontier.any():
         return []
 
@@ -515,6 +721,11 @@ def _clusters(survey: _Survey, grid_shape: tuple[int, int], res: float,
     ox, oy = origin
     h, w = grid_shape
     pad = int(tuning.standoff_max_m / res) + 2
+    standoff_cells = tuning.standoff_max_m / res
+    info_cells = max(1, int(round(tuning.info_radius_m / res)))
+    # "close enough for a revolution to have resolved it": one standoff, plus
+    # the tolerance on where the rover actually came to a stop.
+    seen_cells = (tuning.standoff_max_m + tuning.observed_radius_m) / res
     out: list[Cluster] = []
     for i, box in enumerate(boxes, start=1):
         if box is None:
@@ -536,25 +747,71 @@ def _clusters(survey: _Survey, grid_shape: tuple[int, int], res: float,
         rep = int(np.argmin((ys - cy) ** 2 + (xs - cx) ** 2))
         ry_c, rx_c = int(ys[rep]), int(xs[rep])
 
-        # The place to STAND: the free, reachable, body-fits cell nearest that
-        # look-at point, searched only in a window around it so a free cell on
-        # the far side of a wall cannot be picked by Euclidean luck.
+        # Has this frontier already been looked straight at, from close enough?
+        seen_clearly = False
+        if observed_yx.size:
+            d2 = ((observed_yx[:, 0] - ry_c) ** 2 + (observed_yx[:, 1] - rx_c) ** 2)
+            close = np.nonzero(d2 <= seen_cells * seen_cells)[0]
+            for i in close[np.argsort(d2[close])]:
+                if _line_of_sight(survey.occupied,
+                                  (int(observed_yx[i, 0]), int(observed_yx[i, 1])), (ry_c, rx_c)):
+                    seen_clearly = True
+                    break
+
+        # The place to STAND: a free, reachable, body-fits cell within
+        # standoff_max_m of that look-at point, searched only in a window around
+        # it so a free cell on the far side of a wall cannot be picked by
+        # Euclidean luck. Of those candidates: never one the rover has already
+        # decided from, and, among the rest, the nearest one that can actually
+        # SEE the frontier - a viewpoint round the corner from the thing it is
+        # sent to look at is a wasted goal.
         wy0, wy1 = max(0, ry_c - pad), min(h, ry_c + pad + 1)
         wx0, wx1 = max(0, rx_c - pad), min(w, rx_c + pad + 1)
         window = survey.goal_ok[wy0:wy1, wx0:wx1]
         gy = gx = None
+        retired = in_sight = False
         if window.any():
             wys, wxs = np.nonzero(window)
-            d2 = (wys + wy0 - ry_c) ** 2 + (wxs + wx0 - rx_c) ** 2
-            best = int(np.argmin(d2))
-            if math.sqrt(float(d2[best])) * res <= tuning.standoff_max_m:
-                gy, gx = int(wys[best] + wy0), int(wxs[best] + wx0)
+            ys_abs, xs_abs = wys + wy0, wxs + wx0
+            d2 = (ys_abs - ry_c) ** 2 + (xs_abs - rx_c) ** 2
+            near = d2 <= standoff_cells * standoff_cells
+            if near.any():
+                ys_abs, xs_abs = ys_abs[near], xs_abs[near]
+                order = np.argsort(d2[near], kind="stable")
+                free_slots = [i for i in order if not decided_from[ys_abs[i], xs_abs[i]]]
+                if not free_slots:
+                    # Not one viewpoint left that the rover is not already at.
+                    retired = True
+                    gy, gx = int(ys_abs[order[0]]), int(xs_abs[order[0]])
+                else:
+                    pick = free_slots[0]
+                    for i in free_slots[:_LOS_CANDIDATES]:
+                        if _line_of_sight(survey.occupied, (ys_abs[i], xs_abs[i]), (ry_c, rx_c)):
+                            pick, in_sight = i, True
+                            break
+                    gy, gx = int(ys_abs[pick]), int(xs_abs[pick])
+                    # Retired when there is nothing more this rover can learn
+                    # about it from where it can stand: it has already been
+                    # looked straight at, or nowhere within the standoff can
+                    # see it at all. Both are read off THIS map, so both undo
+                    # themselves as soon as the map near it changes.
+                    retired = seen_clearly or not in_sight
         on_frontier = gy is None
         if on_frontier:
-            # Nowhere to stand within reach: fall back to dimOS's own behaviour
-            # and aim at the frontier cell itself, in unknown space. Harder to
+            if not survey.reachable[ry_c, rx_c]:
+                # Nowhere to stand within standoff, and the frontier itself is
+                # not in the region the body can reach either. This one is out
+                # of reach from where the rover stands - counted by the caller
+                # (a map that still holds frontiers is not an explored map),
+                # never published, because the planner would refuse it.
+                continue
+            # Nowhere to stand within reach, but the frontier is inside the
+            # region the body can reach: fall back to dimOS's own behaviour and
+            # aim at the frontier cell itself, in unknown space. Harder to
             # reach, but dropping the cluster would be a silent extinction.
             gy, gx = ry_c, rx_c
+            in_sight = True
+            retired = seen_clearly
         # Cell CENTRES, not dimOS's grid_to_world corner. A corner is shared by
         # four cells and floor((corner - origin) / res) can land on any of them
         # (measured: floor(3.7 / 0.05) == 73, not 74), so a goal published on a
@@ -563,13 +820,15 @@ def _clusters(survey: _Survey, grid_shape: tuple[int, int], res: float,
         # had just certified as clear. A centre is half a cell from any edge.
         out.append(Cluster(
             size=size,
-            gain=float(survey.unknown_density[ry_c, rx_c]),
+            gain=_visible_unknown(survey.unknown, survey.occupied, (gy, gx), info_cells),
             centroid_xy=(ox + (cx + 0.5) * res, oy + (cy + 0.5) * res),
             look_at_xy=(ox + (rx_c + 0.5) * res, oy + (ry_c + 0.5) * res),
             goal_xy=(ox + (gx + 0.5) * res, oy + (gy + 0.5) * res),
             goal_yx=(gy, gx),
             on_frontier=on_frontier,
             probe=on_frontier or not survey.walkable[gy, gx],
+            retired=retired,
+            in_sight=in_sight,
         ))
     return out
 
@@ -597,9 +856,12 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
           "wait"      stay put, re-evaluate in `.wait_s` seconds; a cluster is
                       temporarily excluded, NOT absent (§7.1)
           "back_off"  reverse `.back_off_m`; born cornered (§7.3)
-        or None, which happens on exactly one condition: no reachable frontier
-        cluster exists and no exclusion is holding one back. No counters, no
-        attempt limits, no timers.
+        or None, which happens on exactly one condition: nothing reachable is
+        left to look at and no exclusion is holding anything back - either the
+        map holds no frontier cluster at all, or every one it holds has already
+        been looked straight at from where the rover stood, or nowhere the body
+        can stand can see it. No counters, no attempt limits, no timers; a rover
+        that is merely shut in gets a back-off, not a None.
     """
     now = time.monotonic() if now is None else float(now)
     grid = np.asarray(costmap.grid)
@@ -627,38 +889,74 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
     gy0 = int(np.clip(math.floor((ry_world - oy) / res), 0, h - 1))
 
     survey = _survey(grid, res, (gy0, gx0), tuning)
+    frontier_all = _frontier_mask(survey)
+    min_cells = max(1, int(tuning.min_frontier_perimeter_m / res))
+    on_the_map = _count_clusters(frontier_all, min_cells)
+    # A viewpoint is spent by STANDING there, and by nothing else. Counting a
+    # goal that was merely issued would make this an attempt counter wearing a
+    # geometric hat, and it shows: with issued goals spent too, the harness
+    # runs ended having given up on a frontier whose viewpoint the planner
+    # could still reach from where the rover was standing when it stopped
+    # (3 of 4 starts). What stops a goal being re-issued for ever is the loop's
+    # §7.1 exclusion on a drive that made no progress - a timer, and one that
+    # can only ever produce a WAIT.
+    decided_from = _decided_from(state.observed, (h, w), res, (ox, oy),
+                                 tuning.observed_radius_m)
+    observed_yx = _cells_of(state.observed, (h, w), res, (ox, oy))
     clusters = ([] if survey.seed is None
-                else _clusters(survey, (h, w), res, (ox, oy), tuning))
+                else _clusters(survey, frontier_all, (h, w), res, (ox, oy), tuning,
+                               decided_from, observed_yx))
 
-    # --- §7.3 born cornered, before anything else --------------------------
-    if not clusters and survey.reachable_free_m2 < tuning.cornered_area_m2:
-        if not state.back_off_issued:
-            state.back_off_issued = True
-            state.last_directive = DIRECTIVE_BACK_OFF
-            return _target_pose(rx - tuning.back_off_m * math.cos(heading),
-                                ry_world - tuning.back_off_m * math.sin(heading),
-                                frame_id=frame_id, ts=ts, directive=DIRECTIVE_BACK_OFF,
-                                back_off_m=tuning.back_off_m,
-                                reachable_free_m2=survey.reachable_free_m2)
-        # Already backed off once and still cornered: that is the end.
-        state.last_directive = ""
-        return None
-
+    # --- §7.3 nothing reachable: pinched, cornered, or actually finished ----
+    #
+    # These are three different facts and the shipped version reported all three
+    # as the same "no reachable frontier left":
+    #
+    #   finished   the MAP holds no frontier cluster at all. Nothing left to
+    #              see, and that is the one honest end of a run.
+    #   cornered   no frontier and under cornered_area_m2 of floor: the rover is
+    #              wedged in a pocket (§7.3, born cornered).
+    #   pinched    the map still holds frontier clusters, but not one of them
+    #              touches the region the BODY can reach from where it stands.
+    #              That is not "explored", it is "shut in": run B of 26/08 ended
+    #              this way at 6 min 33 with 37 clusters on the map, sealed into
+    #              8.9 m2 by a doorway the inflated map prices at 0.54 m for a
+    #              body that needs 0.60 - a doorway its own wheels had come
+    #              through minutes earlier (min clearance along its last 240 s
+    #              of trajectory, on that same map: 0.269 m).
+    #
+    # Cornered and pinched get the same answer, which is the reflex that freed
+    # the rover by hand three times: reverse once and look again. Once per
+    # pocket, exactly as before - the flag is cleared only when a frontier goal
+    # goes out - so this can never become a spin.
     if not clusters:
+        if on_the_map > 0 or survey.reachable_free_m2 < tuning.cornered_area_m2:
+            if not state.back_off_issued:
+                state.back_off_issued = True
+                state.last_directive = DIRECTIVE_BACK_OFF
+                return _target_pose(rx - tuning.back_off_m * math.cos(heading),
+                                    ry_world - tuning.back_off_m * math.sin(heading),
+                                    frame_id=frame_id, ts=ts, directive=DIRECTIVE_BACK_OFF,
+                                    back_off_m=tuning.back_off_m,
+                                    reachable_free_m2=survey.reachable_free_m2,
+                                    n_clusters=0, n_on_the_map=on_the_map)
+        # Backed off once already and the picture has not changed, or the map
+        # holds no frontier at all: that is the end.
         state.last_directive = ""
         return None
 
     # --- §7.1 temporary exclusions -----------------------------------------
     radius2 = tuning.failed_goal_radius_m ** 2
-    observed2 = tuning.observed_radius_m ** 2
     eligible: list[Cluster] = []
     blocked_until: list[float] = []
     n_seen_from = 0
     for cluster in clusters:
         gx, gy = cluster.goal_xy
-        if any((gx - px) ** 2 + (gy - py) ** 2 < observed2 for px, py in state.observed):
-            # Already looked from there. Not a failure and not a timer: driving
-            # to a spot the rover is effectively already at reveals nothing.
+        if cluster.retired:
+            # Every viewpoint within reach of this frontier has already had its
+            # revolution. Not a failure and not a timer: driving to a spot the
+            # rover is effectively already at reveals nothing, wherever it is
+            # then asked to look.
             n_seen_from += 1
             continue
         expiries = [f[2] + tuning.failed_goal_hold_s for f in state.failed
@@ -685,7 +983,7 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
         return _target_pose(rx, ry_world, frame_id=frame_id, ts=ts,
                             directive=DIRECTIVE_WAIT, wait_s=wait_s,
                             n_clusters=len(clusters), n_excluded=len(blocked_until),
-                            n_already_seen_from=n_seen_from)
+                            n_already_seen_from=n_seen_from, n_on_the_map=on_the_map)
 
     # --- score (spec §4B / PR #2830) ---------------------------------------
     costs = _path_cost(survey.reachable, survey.cell_cost, survey.seed, res)
@@ -710,10 +1008,32 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
             align = max(0.0, math.cos(heading) * dx / span + math.sin(heading) * dy / span)
             score *= 1.0 + tuning.forward_bonus * align
 
-        if state.visited:
-            nearest = min(math.hypot(gxw - vx, gyw - vy) for vx, vy in state.visited)
+        # Anti-revisit. Two changes on what shipped, both from the run the
+        # owner watched on 26/08 (his words: "re-visiting is only worth it once
+        # the other rooms are done"):
+        #
+        #   what counts   every place the rover has already SWEPT counts, not
+        #                 only the goals it was sent to. That is what
+        #                 revisit_radius_m has always said it meant.
+        #   how it fades  as the square of the distance, because what a second
+        #                 look can add is an AREA - the crescent the first
+        #                 revolution did not cover - and an area goes as the
+        #                 square of how far the rover moved. Linear was too
+        #                 gentle to matter: at goal 10 of run B the fade was
+        #                 already 0.10 on the frontier 10 cm from a goal
+        #                 published 6 minutes earlier, and it still won,
+        #                 because a mapped-floor errand takes neither the x4
+        #                 probe penalty nor the distance the unmapped rooms do.
+        # ... every goal published this run EXCEPT the one just attempted. That
+        # last one is not a revisit, it is unfinished business: fading it is how
+        # a rover that timed out three metres short of a frontier turns round
+        # and crosses the flat for the next-best thing, and then does it again
+        # (measured in the harness: 25 m of travel over four goals for 2 m2).
+        older = state.visited[:-1]
+        if older:
+            nearest = min(math.hypot(gxw - vx, gyw - vy) for vx, vy in older)
             if nearest < tuning.revisit_radius_m:
-                score *= nearest / tuning.revisit_radius_m
+                score *= (nearest / tuning.revisit_radius_m) ** _REVISIT_FADE_POWER
 
         if score > best_score:
             best, best_score, best_cost = cluster, score, cost
@@ -732,8 +1052,9 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
                         path_cost_m=best_cost, info_cells=best.size, info_gain=best.gain,
                         centroid_xy=best.centroid_xy, look_at_xy=best.look_at_xy,
                         on_frontier=best.on_frontier, probe=best.probe,
+                        in_sight=best.in_sight,
                         n_clusters=len(clusters), n_excluded=len(blocked_until),
-                        n_already_seen_from=n_seen_from)
+                        n_already_seen_from=n_seen_from, n_on_the_map=on_the_map)
 
 
 # ===========================================================================
@@ -756,6 +1077,14 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
 
     WAIT_POLL_S = 1.0        # longest single sleep on a WAIT: the map keeps growing
     BACK_OFF_SETTLE_S = 3.0  # the planner's back-up is ~2 s at 0.10 m/s over 0.20 m
+    # A goal that times out having closed less than this much of the gap is not
+    # "still on its way", it is stuck against something, and re-publishing it
+    # unchanged is how a rover spends 19 goals and 30 m in one corner
+    # (measured in tools/explore_sim.py). It becomes a §7.1 exclusion, which
+    # holds it for failed_goal_hold_s and can only ever produce a WAIT - never
+    # an end of run. A goal that IS closing the gap is left alone: at the
+    # exploration speed cap a 7 m goal simply takes longer than goal_timeout.
+    GOAL_PROGRESS_M = 0.25   # the follower's own arrival tolerance
 
     class Explorer2Config(WavefrontConfig):
         """WavefrontConfig so the blueprint stays drop-in. The fields v2 ignores
@@ -874,6 +1203,7 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
                 goal.ts = costmap.ts
                 self._last_goal = (float(goal.position.x), float(goal.position.y))
                 self._last_goal_ok = None
+                gap_at_issue = self._gap_to(self._last_goal)
                 self.goal_reached_event.clear()
                 self.goal_request.publish(goal)
                 logger.info(
@@ -891,11 +1221,24 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
                     logger.info("planner gave up on that goal: excluded for "
                                 f"{self._tuning.failed_goal_hold_s:.0f} s")
                 elif not arrived:
-                    # Timed out mid-drive. NOT a failure: at the exploration
-                    # speed cap a 7 m goal simply takes longer than
-                    # goal_timeout, and excluding it would push the rover away
-                    # from the frontier it was about to see. Just re-decide.
-                    logger.info(f"goal timeout after {self.config.goal_timeout:.0f} s, re-deciding")
+                    # Timed out mid-drive. Whether that is a failure depends on
+                    # one measurement: did the gap close (see GOAL_PROGRESS_M).
+                    closed = gap_at_issue - self._gap_to(self._last_goal)
+                    if closed < GOAL_PROGRESS_M:
+                        state.note_failed(*self._last_goal, time.monotonic())
+                        logger.info(f"goal timeout after {self.config.goal_timeout:.0f} s having "
+                                    f"closed {closed:.2f} m of {gap_at_issue:.2f} m: excluded for "
+                                    f"{self._tuning.failed_goal_hold_s:.0f} s")
+                    else:
+                        logger.info(f"goal timeout after {self.config.goal_timeout:.0f} s, "
+                                    f"{closed:.2f} m closer, re-deciding")
+
+        def _gap_to(self, goal: tuple[float, float]) -> float:
+            """Metres from where the rover is now to `goal`, or inf if unknown."""
+            odom = self.latest_odometry
+            if odom is None:
+                return float("inf")
+            return math.hypot(goal[0] - float(odom.position.x), goal[1] - float(odom.position.y))
 
         @rpc
         def explore_state(self) -> dict[str, _Any]:
