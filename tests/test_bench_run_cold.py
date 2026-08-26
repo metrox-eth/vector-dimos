@@ -277,4 +277,55 @@ with tempfile.TemporaryDirectory(prefix="bench_run_cold_") as tmp:
     check("1 malformed line survived", events["lines_unparsed"] == 1,
           str(events["lines_unparsed"]))
 
+    # --- the explorer2 dialect: the same questions, different words ---------
+    print("H. run log parser, explorer2 dialect (4 goals, 1 clean termination)")
+    log2 = Path(tmp) / "v2.jsonl"
+    records = [
+        {"event": "Building the blueprint", "logger": "dimos/core/x.py"},
+        {"event": "goal 1: (-2.87, 0.58) 3.2 m away, 11 frontier cells, 11 clusters,"
+                  " chosen in 575 ms", "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        {"event": "goal timeout after 45 s, re-deciding",
+         "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        {"event": "goal 2: (-1.22, 4.48) 3.6 m away, 122 frontier cells, 9 clusters,"
+                  " chosen in 158 ms", "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        {"event": "No path found to the goal.", "logger": "dimos/navigation/global_planner.py"},
+        {"event": "planner gave up on that goal: excluded for 60 s",
+         "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        {"event": "3 of 11 clusters are on a recently failed goal: waiting 12.0 s, not stopping",
+         "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        {"event": "born cornered: 0.22 m2 of reachable floor and no frontier - one"
+                  " 0.22 m back-off via the bump reflex",
+         "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        {"event": "goal 3: (2.28, 4.48) 6.4 m away, 280 frontier cells, 11 clusters,"
+                  " chosen in 468 ms", "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        {"event": "Arrived at goal.", "logger": "dimos/navigation/global_planner.py"},
+        {"event": "goal 4: (0.43, 5.83) 5.5 m away, 42 frontier cells, 12 clusters,"
+                  " chosen in 154 ms", "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        {"event": "exploration complete: no reachable frontier left (4 targets, 26 ms)",
+         "logger": "/home/metrox/vector-dimos/vector_dimos/explorer2.py"},
+        # a line that starts with the word "goal" and is NOT one
+        {"event": "goal request published on world frame",
+         "logger": "dimos/navigation/global_planner.py"},
+    ]
+    with open(log2, "w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record) + "\n")
+
+    v2 = bench_run.parse_log(str(log2))
+    check("goals published = 4 (from explorer2's own lines)", v2["goals_published"] == 4,
+          str(v2["goals_published"]))
+    check("clean termination = 1", v2["clean_termination"] == 1, str(v2["clean_termination"]))
+    check("v1's 'Exploration complete' stays 0: it is a different event",
+          v2["exploration_complete"] == 0, str(v2["exploration_complete"]))
+    check("no path found = 1, counted once and not twice", v2["no_path_found"] == 1,
+          str(v2["no_path_found"]))
+    check("goal timeouts = 1", v2["goal_timeouts"] == 1, str(v2["goal_timeouts"]))
+    check("waits = 1 (a wait is not a stop)", v2["waits"] == 1, str(v2["waits"]))
+    check("back-offs = 1", v2["back_offs"] == 1, str(v2["back_offs"]))
+    check("goals arrived = 1", v2["goals_arrived"] == 1, str(v2["goals_arrived"]))
+
+    # and the v1 fixture must not have grown a v2 event
+    check("a v1 log reports no clean termination", events["clean_termination"] == 0,
+          str(events["clean_termination"]))
+
 sys.exit(FAIL)
