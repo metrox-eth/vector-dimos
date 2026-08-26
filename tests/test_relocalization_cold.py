@@ -7,15 +7,15 @@ Rule #2: a known input must give a known output, in physical units. Groups:
                         synthetic flat must come back within 5 cm and 2 deg
   C. rejection        - a scan from an ALIEN room must be refused, and say why
   D. forbidden zones  - forced to 100 after every layer; body_clear, a lidar
-                        ray and a slip rollback all fail to erase them
+                        ray fails to erase them
   E. no_slip_reflex   - the ramp: the two slip guards stay silent inside it and
                         trip on the very same numbers outside it
   F. files            - keepout.json round trip, persistent map generations
   G. the state machine - origin arithmetic in metres, and what a boot rejection,
                         a late acceptance and a hand-carry each do to the frame
 
-A, B, C and the ZoneWatch part of E need numpy only. D and the guard part of E
-need dimOS (they are dimOS Modules), so they run on the Jetson.
+A, B, C and E need numpy only. D needs dimOS (ScoredGrid), so it runs on the
+Jetson.
 
 Run:  .venv/bin/python3 tests/test_relocalization_cold.py
 """
@@ -44,7 +44,7 @@ except Exception:  # noqa: BLE001 - no dimOS on a laptop
     HAVE_DIMOS = False
 
 FORBIDDEN = persistent_map.FORBIDDEN
-NO_SLIP = persistent_map.NO_SLIP_REFLEX
+NO_SLIP = "no_slip_reflex"   # the LEGACY type: died with the slip detectors 26/08
 
 RES = 0.05
 OK = 0
@@ -207,7 +207,7 @@ else:
     g = ScoredGrid(span_m=6.0)
     cells = g.set_keepouts(ZONE)
     check("a 1.0 x 1.0 m forbidden zone at 0.05 m -> 21 x 21 cells", cells == 441, f"{cells} cells")
-    check("the no_slip_reflex zone is NOT a wall in the map", g.value_at(-1.5, 0.0) == -1,
+    check("the legacy no_slip_reflex zone is NOT a wall in the map", g.value_at(-1.5, 0.0) == -1,
           f"value {g.value_at(-1.5, 0.0)}")
     check("inside the zone -> occupied", g.value_at(1.5, 0.0) == 100)
     check("outside the zone -> untouched (unknown)", g.value_at(0.0, 0.0) == -1)
@@ -221,8 +221,6 @@ else:
     gx, gy = g.cell(np.array([1.5]), np.array([0.0]))
     check("the layers underneath really were cleared (nothing hidden)",
           g.lidar[gy[0], gx[0]] < OCCUPIED_AT, f"score {g.lidar[gy[0], gx[0]]}")
-    g.rollback(10.0)
-    check("a slip rollback -> still occupied", g.value_at(1.5, 0.0) == 100)
     check("dropping the zones frees the cell again", (g.set_keepouts([]) == 0
                                                       and g.value_at(1.5, 0.0) != 100))
     check("a file with only no_slip_reflex zones leaves the map alone",
@@ -239,109 +237,41 @@ else:
         back = ScoredGrid.load(path)
         check("reloaded map keeps its obstacle", back.value_at(1.0, 0.0) == 100)
         back.lidar_revolution(np.array([[2.0, 0.0]]), (0.0, 0.0))   # a loaded map must be writable
-        check("a loaded map can be continued (journal restored)", len(back._journal) > 0)
+        wgx, wgy = back.cell(np.array([2.0]), np.array([0.0]))
+        check("a loaded map can be continued (still writable)", back.lidar[wgy[0], wgx[0]] > 0)
         back.set_keepouts(ZONE)
         check("keep-out applies to a loaded map", back.value_at(1.5, 0.0) == 100)
     finally:
         shutil.rmtree(d, ignore_errors=True)
 
-# --- E. no_slip_reflex: the ramp ------------------------------------------
+# --- E. legacy zones ---------------------------------------------------------
 
-print("E. no_slip_reflex - the ramp, where the wheels are MEANT to slip")
+print("E. legacy no_slip_reflex zones: dropped on load (the slip detectors died 26/08)")
 RAMP = {"label": "rampe-cuisine-atelier", "type": NO_SLIP,
         "x0": -3.0, "y0": -8.2, "x1": -1.95, "y1": -7.75, "note": "26/08"}
 d = tempfile.mkdtemp()
 zone_file = os.path.join(d, "keepout.json")
 persistent_map.save_keepouts([{"label": "toilettes", "type": FORBIDDEN,
-                               "x0": 0.55, "y0": -9.95, "x1": 2.65, "y1": -6.65, "note": ""},
-                              RAMP], zone_file, frame="cold bench")
+                               "x0": 0.55, "y0": -9.95, "x1": 2.65, "y1": -6.65, "note": ""}],
+                             zone_file, frame="cold bench")
 try:
-    w = persistent_map.ZoneWatch(NO_SLIP, zone_file)
-    w.note_frame("reloc:persistent")
-    check("on the ramp -> the zone's label", w.at(-2.5, -8.0) == RAMP["label"], f"{w.at(-2.5, -8.0)}")
-    check("20 cm past its edge -> nothing", w.at(-1.75, -8.0) is None)
-    check("in the toilets -> nothing (wrong type)", w.at(1.5, -8.0) is None)
-    w.note_frame("reloc:fresh")
-    check("fresh frame -> the ramp zone is ignored, wherever we stand",
-          w.at(-2.5, -8.0) is None)
-
-    if not HAVE_DIMOS:
-        print("  -- guard tests skipped, no dimOS here: run this on the Jetson")
-    else:
-        import asyncio
-        from collections import deque
-
-        from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
-        from dimos.msgs.geometry_msgs.Vector3 import Vector3
-
-        from vector_dimos.imu_slip import ImuSlipDetector
-        from vector_dimos.stuck_guard import MAX_RATIO, MIN_WHEEL_M, WINDOW_S, StuckGuard
-
-        class Probe:
-            def __init__(self):
-                self.msgs = []
-
-            def publish(self, msg):
-                self.msgs.append(msg)
-
-        def stuck_guard_at(x, y, frame="reloc:persistent"):
-            """Wheels roll 0.40 m, the body does not move: a textbook slip,
-            at (x, y)."""
-            g = StuckGuard.__new__(StuckGuard)
-            g._wheel = deque(maxlen=400); g._lidar = deque(maxlen=400); g._cmd = deque(maxlen=400)
-            g._last_check = g._last_trip = g._last_debug = g._last_quiet_log = 0.0
-            g.trips = 0; g.slip = Probe()
-            g._quiet = persistent_map.ZoneWatch(NO_SLIP, zone_file)
-            asyncio.run(g.handle_reloc_frame(PoseStamped(0.0, frame)))
-            now = time.monotonic()
-            for i in range(20):
-                t = now - WINDOW_S * 1.5 + i * WINDOW_S * 1.5 / 19
-                g._wheel.append((t, 5.0 + 0.40 * i / 19, 5.0, 0.0))     # the wheels rolled 0.40 m
-                g._lidar.append((t, x, y, 0.0))                          # the body did not move
-            g._check(now)
-            return g.trips, len(g.slip.msgs)
-
-        trips, slips = stuck_guard_at(-2.5, -8.0)
-        check("stuck guard ON the ramp -> no trip, no slip published",
-              trips == 0 and slips == 0, f"{trips} trips")
-        trips, slips = stuck_guard_at(0.0, 0.0)
-        check("stuck guard OFF the ramp, same numbers -> trips",
-              trips == 1 and slips == 1, f"{trips} trips")
-        trips, _ = stuck_guard_at(-2.5, -8.0, frame="reloc:fresh")
-        check("stuck guard on the ramp in a FRESH frame -> trips (zones do not apply)",
-              trips == 1, f"{trips} trips")
-        check("the slip condition itself is unchanged (0.40 m wheels, 0 m body)",
-              0.40 >= MIN_WHEEL_M and 0.0 < MAX_RATIO * 0.40)
-
-        def imu_slip_at(x, y, frame="reloc:persistent"):
-            """Wheels claim 0.6 rad/s of spin, the gyro measures none."""
-            s_ = ImuSlipDetector.__new__(ImuSlipDetector)
-            s_._gyro = deque(maxlen=256); s_._accel = deque(maxlen=256)
-            s_._wheel_v = deque(maxlen=128)
-            s_._mismatch_since = 0.0; s_._last_trip = 0.0; s_.trips = 0
-            s_._last_quiet_log = 0.0; s_.slip = Probe(); s_._xy = None
-            s_._quiet = persistent_map.ZoneWatch(NO_SLIP, zone_file)
-            asyncio.run(s_.handle_reloc_frame(PoseStamped(0.0, frame)))
-            asyncio.run(s_.handle_odom(PoseStamped(0.0, "world", position=Vector3(x, y, 0.0))))
-            now = time.monotonic()
-            for i in range(12):
-                t = now - 0.5 + i * 0.5 / 11
-                s_._gyro.append((t, 0.0))            # the body is not turning
-                s_._accel.append((t, 0.0))
-                s_._wheel_v.append((t, 0.0, 0.6))    # the wheels say it is
-            s_._mismatch_since = now - 1.0           # the mismatch has held long enough
-            s_._check(now)
-            return s_.trips, len(s_.slip.msgs)
-
-        trips, slips = imu_slip_at(-2.5, -8.0)
-        check("IMU slip ON the ramp -> no trip, no slip published",
-              trips == 0 and slips == 0, f"{trips} trips")
-        trips, slips = imu_slip_at(0.0, 0.0)
-        check("IMU slip OFF the ramp, same numbers -> trips",
-              trips == 1 and slips == 1, f"{trips} trips")
-        trips, _ = imu_slip_at(-2.5, -8.0, frame="reloc:fresh")
-        check("IMU slip on the ramp in a FRESH frame -> trips (zones do not apply)",
-              trips == 1, f"{trips} trips")
+    import json as _json
+    doc = _json.load(open(zone_file))
+    doc["zones"].append(RAMP)
+    with open(zone_file, "w") as fh:
+        _json.dump(doc, fh)
+    back = persistent_map.load_keepouts(zone_file)
+    check("a file carrying a legacy ramp zone loads without it, without crashing",
+          [z["label"] for z in back] == ["toilettes"], f"{[z['label'] for z in back]}")
+    doc["zones"].append({"label": "x", "type": "carrement_inconnu",
+                         "x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0})
+    with open(zone_file, "w") as fh:
+        _json.dump(doc, fh)
+    try:
+        persistent_map.load_keepouts(zone_file)
+        check("a truly unknown type still raises", False)
+    except ValueError as exc:
+        check("a truly unknown type still raises", True, str(exc))
 finally:
     shutil.rmtree(d, ignore_errors=True)
 
@@ -352,11 +282,11 @@ d = tempfile.mkdtemp()
 try:
     kp = os.path.join(d, "keepout.json")
     persistent_map.save_keepouts(
-        [{"label": "rampe", "type": NO_SLIP, "x0": 2.0, "y0": 0.5, "x1": 1.0, "y1": -0.5,
+        [{"label": "rampe", "type": FORBIDDEN, "x0": 2.0, "y0": 0.5, "x1": 1.0, "y1": -0.5,
           "note": "ramp"}], kp, frame="carte_saine")
     back = persistent_map.load_keepouts(kp)
     check("corners are normalised on the way back", back == [
-        {"label": "rampe", "type": NO_SLIP, "x0": 1.0, "y0": -0.5, "x1": 2.0, "y1": 0.5,
+        {"label": "rampe", "type": FORBIDDEN, "x0": 1.0, "y0": -0.5, "x1": 2.0, "y1": 0.5,
          "note": "ramp"}], f"{back}")
     check("the frame note survives", persistent_map.keepout_frame(kp) == "carte_saine")
     with open(kp, "w") as fh:
@@ -379,8 +309,9 @@ try:
     mask = persistent_map.keepout_mask(forbidden, RES, -1.0, -1.0, 80)
     check("mask covers 21 x 21 cells at the right place", int(mask.sum()) == 441
           and mask[int((0.0 + 1.0) / RES), int((1.5 + 1.0) / RES)], f"{int(mask.sum())} cells")
-    check("keepout_mask ignores the no_slip_reflex zones",
-          int(persistent_map.keepout_mask(back, RES, -1.0, -1.0, 80).sum()) == 0)
+    stale_legacy = [dict(back[0], type=NO_SLIP)]     # an old in-memory list, pre-26/08
+    check("keepout_mask ignores a stale legacy no_slip_reflex zone",
+          int(persistent_map.keepout_mask(stale_legacy, RES, -1.0, -1.0, 80).sum()) == 0)
 
     saved = persistent_map.MAP_PATH
     persistent_map.MAP_PATH = os.path.join(d, "persistent_map.npz")

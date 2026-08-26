@@ -1115,9 +1115,9 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
 
         Extra Out: `bump` - the same reflex the human triggered by hand three
         times on 26/08 to free a cornered rover. RecoveringPlanner already
-        listens to it (stop, reverse 0.20 m, replan), and StuckGuard and
-        ImuSlipDetector already share `slip` the same way, so a second producer
-        on one stream is how this stack is wired.
+        listens to it (stop, escape 0.20 m in reverse, abandon the goal); the
+        contact switches publish on the same stream, and a second producer on
+        one stream is how this stack is wired.
         """
 
         config: Explorer2Config

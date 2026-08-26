@@ -61,7 +61,6 @@ from dimos.msgs.sensor_msgs.Imu import Imu
 from dimos.msgs.sensor_msgs.JointState import JointState
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.msgs.tf2_msgs.TFMessage import TFMessage
-from dimos_lcm.std_msgs import Bool
 from dimos.utils.logging_config import setup_logger
 
 from vector_dimos import persistent_map
@@ -70,7 +69,6 @@ from vector_dimos.relocalize2d import MapField, relocalize
 logger = setup_logger()
 
 PLANE_THICKNESS_M = 0.05
-SLIP_HOLD_S = 3.0              # after a slip: wheels not believed, map not written, for this long
 LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (metrox, 2026-08-23: 37 cm; centred in width, 3 cm behind the length centre)
 # D455F on the mast at the front bumper: 0.30 m ahead of the lidar (rover 54 cm
 # long, lidar 3 cm behind its centre), 0.80 m up (floor reads 0.80 m below the
@@ -146,7 +144,6 @@ class LidarOdometry(Module):
     imu: In[Imu]
     coordinator_joint_state: In[JointState]
     depth_image: In[Image]          # RealSense depth (aligned to colour), DEPTH16 mm
-    slip: In[Bool]                  # stuck_guard: wheels turn, world does not -> freeze the wheel prior, stop writing the map
     camera_info: In[CameraInfo]     # colour intrinsics (= aligned depth intrinsics)
     odom: Out[PoseStamped]
     lidar: Out[PointCloud2]
@@ -189,7 +186,6 @@ class LidarOdometry(Module):
         self._prior_used = "cv"
         self._K: tuple[float, float, float, float] | None = None
         self._pose_hist: list[tuple[float, float, float, float]] = []   # (wall ts, x, y, yaw), last ~3 s
-        self._slip_until = 0.0          # monotonic: until then the wheels are not believed and the map is not written
         self._yaw_rate = 0.0
         self._depth_n = 0
         self._depth_pts_last = 0
@@ -321,8 +317,8 @@ class LidarOdometry(Module):
         # pose at the frame's capture time (the depth handler runs 50-200 ms late;
         # at 17 deg/s that smeared the camera layer by several degrees per frame)
         fts = float(getattr(msg, "ts", 0.0) or 0.0)
-        if abs(self._yaw_rate) > math.radians(8.0) or self.slipping or self._searching:
-            return                         # turning, slipping or relocalizing: the pose is not trusted
+        if abs(self._yaw_rate) > math.radians(8.0) or self._searching:
+            return                         # turning or relocalizing: the pose is not trusted
         pose = self._pose_at(fts) if fts > 0 else self.pose2d
         x, y, yaw = pose
         c, s_ = math.cos(yaw), math.sin(yaw)
@@ -357,22 +353,8 @@ class LidarOdometry(Module):
                 return (a[1] + f * (b[1] - a[1]), a[2] + f * (b[2] - a[2]), a[3] + f * dyaw)
         return self.pose2d
 
-    async def handle_slip(self, msg: Bool) -> None:
-        if getattr(msg, "data", False):
-            self._slip_until = time.monotonic() + SLIP_HOLD_S
-
-    @property
-    def slipping(self) -> bool:
-        return time.monotonic() < self._slip_until
-
     def _prior_delta(self) -> np.ndarray:
-        """Motion since the last scan, in the previous lidar frame (SE(2) as 4x4).
-        While slipping: identity - a rover pushing against a table barely moves
-        (it pivots around the contact at most); believing the wheels there
-        dragged the pose a metre and smeared the map (23/08 18:45)."""
-        if self.slipping:
-            self._prior_used = "frozen(slip)"
-            return _se2(0.0, 0.0, 0.0)
+        """Motion since the last scan, in the previous lidar frame (SE(2) as 4x4)."""
         last_delta = np.asarray(self._kiss.last_delta)
         dx, dy = float(last_delta[0, 3]), float(last_delta[1, 3])
         dyaw = math.atan2(last_delta[1, 0], last_delta[0, 0])
@@ -621,7 +603,7 @@ class LidarOdometry(Module):
         self.reloc_frame.publish(PoseStamped(
             ts, f"reloc:{'searching' if self._searching else self._frame}",
             position=Vector3(self._origin[0], self._origin[1], 0.0), orientation=_yaw_quat(self._origin[2])))
-        if not self.slipping and not self._searching:
+        if not self._searching:
             self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
         self.tf.publish(TFMessage(
             Transform(translation=Vector3(x, y, 0.0), rotation=q, frame_id=self.world_frame, child_frame_id=self.base_frame, ts=ts),

@@ -434,7 +434,6 @@ def _explore_blueprint():
     from vector_dimos.costmap2d import VectorCostMap
     from dimos.mapping.voxels.module import VoxelGridMapper
     from vector_dimos.esp_sensors import EspSensors
-    from vector_dimos.imu_slip import ImuSlipDetector
     from vector_dimos.memory import VectorMemory
     from dimos.navigation.movement_manager.movement_manager import MovementManager
     from vector_dimos.recovering_planner import RecoveringPlanner
@@ -442,7 +441,6 @@ def _explore_blueprint():
     from vector_dimos.lidar_odometry import LidarOdometry
     from vector_dimos.rplidar_c1 import RPLidarC1
     from vector_dimos.respeaker import ReSpeakerMic
-    from vector_dimos.stuck_guard import StuckGuard
 
     return autoconnect(
         _coordinator_blueprint(),
@@ -473,8 +471,6 @@ def _explore_blueprint():
         RecoveringPlanner.blueprint(robot_width=0.50, robot_rotation_diameter=0.78),
         MovementManager.blueprint(),
         _explorer_blueprint(),
-        StuckGuard.blueprint(),
-        ImuSlipDetector.blueprint(),   # the body as witness: slip in 0.2-0.5 s, wheels in the air included
         # contact corners + sonar via the ESP32 USB bridge. Neither writes the map (sensor
         # doctrine, 25/08): front bump = back off, rear bump = move forward, sonar = the forward
         # brake in adapter.py (creep under 0.55 m, stop under 0.30 m).

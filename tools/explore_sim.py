@@ -1250,8 +1250,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"map        {os.path.relpath(args.map, ROOT)}  "
           f"{world.truth.shape[1]}x{world.truth.shape[0]} @ {world.res} m")
     print(f"keep-outs  {len(persistent_map.zones_of(world.zones, persistent_map.FORBIDDEN))} "
-          f"forbidden, {len(persistent_map.zones_of(world.zones, persistent_map.NO_SLIP_REFLEX))} "
-          f"no-slip-reflex" + (f" ({os.path.relpath(keepout, ROOT)})" if keepout else " (none)"))
+          f"forbidden" + (f" ({os.path.relpath(keepout, ROOT)})" if keepout else " (none)"))
     print(f"start      ({start[0]:.2f}, {start[1]:.2f}) heading {args.heading:.2f} rad")
     CEILING[0] = world.visible_area_m2(start)
 

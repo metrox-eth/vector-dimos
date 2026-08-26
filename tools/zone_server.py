@@ -152,8 +152,7 @@ def map_png() -> tuple[bytes, dict]:
 
 # --- what the page is allowed to save ---------------------------------------
 
-TYPE_FR = {persistent_map.FORBIDDEN: "interdit",
-           persistent_map.NO_SLIP_REFLEX: "rampe sans reflexe"}
+TYPE_FR = {persistent_map.FORBIDDEN: "interdit"}
 
 
 class Refused(ValueError):

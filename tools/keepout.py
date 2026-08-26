@@ -13,20 +13,16 @@ one the rover relocalizes into at boot - and has one of two shapes:
              only - typing a polygon vertex by vertex is what the UI is for.
 
     tools/keepout.py add toilettes 0.55 -9.95 2.65 -6.65
-    tools/keepout.py add rampe -3.0 -8.2 -1.95 -7.75 --type no_slip_reflex \
-        --note "slipping on a ramp is normal"
     tools/keepout.py list
     tools/keepout.py rm toilettes
 
-Two types:
+One type:
 
   forbidden       (the default) the cells become occupied in the costmap AFTER
                   every layer: no lidar ray, no camera floor sample and no
                   body_clear can erase them, and the planner never enters.
-  no_slip_reflex  the place is allowed, but while the rover stands in it the
-                  anti-slip reflexes (stuck_guard, ImuSlipDetector) stay
-                  silent. For a ramp, where slipping is normal and cutting the
-                  torque makes the rover slide back down.
+
+(no_slip_reflex zones died with the slip detectors, 26/08.)
 
 The zones land in ~/.local/state/vector/keepout.json. The running stack picks
 an edit up within about half a minute, so there is nothing to restart.
@@ -125,7 +121,7 @@ def main() -> int:
     for name in ("x0", "y0", "x1", "y1"):
         p_add.add_argument(name, type=float)
     p_add.add_argument("--type", choices=persistent_map.ZONE_TYPES, default=persistent_map.FORBIDDEN,
-                       help="forbidden (never enter) or no_slip_reflex (allowed, reflexes stay quiet)")
+                       help="forbidden (never enter)")
     p_add.add_argument("--note", default="", help="why, in your own words")
     p_add.set_defaults(func=cmd_add)
 

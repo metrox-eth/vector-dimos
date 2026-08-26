@@ -40,18 +40,17 @@ A zone has one of two shapes, and both are read everywhere a zone is read:
              an enclosing rectangle either eats the corridor or leaks the
              corner. `points` wins if a zone somehow carries both shapes.
 
-Two types, because "the rover must not go there" and "the rover's reflexes are
-wrong there" are different problems:
+One type:
 
   forbidden       the cells become occupied in `occupancy()`, after every
                   layer: nothing erases them and the planner never enters.
                   (The toilets: a 3 cm step at the door.)
-  no_slip_reflex  the place IS allowed, but while the rover stands in it the
-                  anti-slip reflexes stay silent. Slipping on a ramp is normal
-                  and transient; on 26/08 the reflex cut the torque mid-climb
-                  and the rover slid back down "like ice" (IMU SLIP #9/#10).
 
-Both only apply to a run that relocalized into the persistent frame: in a
+(`no_slip_reflex` zones died with the slip detectors on 26/08 - the contact
+switches replaced them; an old zone file may still carry some, they are
+ignored.)
+
+It only applies to a run that relocalized into the persistent frame: in a
 fresh-frame run the same coordinates point somewhere else in the flat.
 
 Standard library only at import time (numpy is imported inside the one
@@ -74,9 +73,8 @@ KEEPOUT_PATH = os.path.join(STATE_DIR, "keepout.json")
 GENERATIONS = 5          # previous maps kept, newest first: a bad session is undoable
 
 FORBIDDEN = "forbidden"            # never enterable: forced occupied, after every layer
-NO_SLIP_REFLEX = "no_slip_reflex"  # allowed, but the anti-slip reflexes stay quiet inside
-ZONE_TYPES = (FORBIDDEN, NO_SLIP_REFLEX)
-ZONE_RELOAD_S = 30.0               # how often a live module re-reads the file
+ZONE_TYPES = (FORBIDDEN,)
+LEGACY_ZONE_TYPES = ("no_slip_reflex",)   # died with the slip detectors (26/08); old files may carry them
 ZONE_EDGE_TOL_M = 0.025            # half a 5 cm cell: how far outside a polygon edge still counts
                                    # as inside, so a pose answers the same as the cell it stands on
                                    # (a rectangle already rounds outward to whole cells)
@@ -188,6 +186,8 @@ def load_keepouts(path: str = KEEPOUT_PATH) -> list[dict]:
     out = []
     for z in zones:
         kind = str(z.get("type", FORBIDDEN))
+        if kind in LEGACY_ZONE_TYPES:
+            continue                       # a dead concept is dropped, not a crash
         if kind not in ZONE_TYPES:
             raise ValueError(f"keep-out {z.get('label')!r}: unknown type {kind!r}, "
                              f"expected one of {ZONE_TYPES}")
@@ -434,50 +434,3 @@ def keepout_mask(zones: list[dict], res: float, ox: float, oy: float, n: int,
         mask[y0:y1 + 1, x0:x1 + 1] = True
     return mask
 
-
-class ZoneWatch:
-    """Is the rover standing in a zone of this type, right now?
-
-    Shared by the two anti-slip guards, which have no map and no checkpoint
-    tick of their own. It re-reads the file every ZONE_RELOAD_S, so a zone
-    declared with `tools/keepout.py` takes effect without restarting a stack
-    that must not be restarted.
-
-    It answers None until the run has relocalized into the persistent frame:
-    in a fresh-frame run these coordinates point somewhere else in the flat,
-    and a reflex silenced over the wrong square metre is a rover falling down
-    the ramp.
-    """
-
-    def __init__(self, kind: str, path: str = KEEPOUT_PATH) -> None:
-        self.kind = kind
-        self.path = path
-        self.persistent = False
-        self._zones: list[dict] = []
-        self._next_read = 0.0
-
-    def note_frame(self, frame_id: str) -> bool:
-        """Feed it lidar_odometry's `reloc_frame` messages. True on a change."""
-        was = self.persistent
-        state = str(frame_id or "").removeprefix("reloc:")
-        if state in ("persistent", "fresh"):
-            self.persistent = state == "persistent"
-        return self.persistent != was
-
-    def zones(self) -> list[dict]:
-        now = time.monotonic()
-        if now >= self._next_read:
-            self._next_read = now + ZONE_RELOAD_S
-            try:
-                self._zones = zones_of(load_keepouts(self.path), self.kind)
-            except Exception:  # noqa: BLE001 - a broken file must not kill a reflex
-                pass
-        return self._zones
-
-    def at(self, x: float, y: float) -> str | None:
-        if not self.persistent:
-            return None
-        for z in self.zones():
-            if point_in_zone(z, x, y):
-                return str(z["label"])
-        return None
