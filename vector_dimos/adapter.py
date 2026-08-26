@@ -296,21 +296,25 @@ class VectorBaseAdapter:
             self._sonar_t = time.monotonic()
 
     def _brake_vx(self, vx: float) -> float:
-        """Apply the sonar brake to the forward component and log the changes.
+        """The sonar INFORMS, it no longer brakes (owner, 26/08 19h37).
 
-        One line per clamp state CHANGE, never per tick: the brake engages for
-        as long as the sofa is there, and a per-tick line would bury the log.
+        The brake was supposed to die with the guard rip this morning and did
+        not; it then spent the whole evening clamping every forward command to
+        zero on a sonar stuck at 0.08 m ("on avait dit qu'on enlevait le frein
+        de securite - c'est une indication, plus une securite"). The contact
+        switches are the safety. The latch still tracks the level so the log
+        keeps saying what the sonar WOULD have done - information, no action.
         """
         age = (SONAR_MAX_AGE_S + 1.0 if self._sonar_t is None
                else time.monotonic() - self._sonar_t)
         before = self._brake.level
-        out = brake_forward(vx, self._sonar_m, age, self._brake)
+        brake_forward(vx, self._sonar_m, age, self._brake)   # latch only: keeps the log honest
         if self._brake.level != before:
             if self._brake.level == SonarBrake.FREE:
-                _log().info("sonar brake: released")
+                _log().info("sonar info: front clear again")
             else:
-                _log().info(f"sonar brake: engaged at {self._sonar_m:.2f} m")
-        return out
+                _log().info(f"sonar info: something {self._sonar_m:.2f} m ahead (NO braking - switches are the safety)")
+        return vx
 
     # ── connection ─────────────────────────────────────────────────────
     def connect(self) -> bool:

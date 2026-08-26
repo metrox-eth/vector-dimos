@@ -148,12 +148,12 @@ creep = wheel_rpm(free, fbus, (0.05, 0.0, 0.0))
 check("no sonar: 0.20 m/s -> 22 RPM per wheel", full == [(2, (22, -22)), (1, (22, -22))], f"{full}")
 check("no sonar: 0.05 m/s -> 6 RPM per wheel", creep == [(2, (6, -6)), (1, (6, -6))], f"{creep}")
 
-braked.note_sonar_range(0.42)
+braked.note_sonar_range(0.42)   # owner, 26/08 19h37: the sonar INFORMS, it never brakes
 got = wheel_rpm(braked, bbus, (0.2, 0.0, 0.0))
-check("sonar 0.42 m: 0.20 m/s asked -> the 0.05 m/s RPM (6)", got == creep, f"{got}")
+check("sonar 0.42 m: 0.20 m/s asked -> UNBRAKED 22 RPM (info only)", got == full, f"{got}")
 braked.note_sonar_range(0.25)
 got = wheel_rpm(braked, bbus, (0.2, 0.0, 0.0))
-check("sonar 0.25 m: 0.20 m/s asked -> 0 RPM", got == [(2, (0, 0)), (1, (0, 0))], f"{got}")
+check("sonar 0.25 m: 0.20 m/s asked -> UNBRAKED 22 RPM (the evening of 26/08: a sonar stuck at 0.08 m clamped every drive for two hours)", got == full, f"{got}")
 got = wheel_rpm(braked, bbus, (-0.2, 0.0, 0.0))
 check("sonar 0.25 m: reverse -> the unbraked reverse RPM (-22)",
       got == wheel_rpm(free, fbus, (-0.2, 0.0, 0.0)), f"{got}")
