@@ -1,17 +1,22 @@
-"""Lidar odometry for VECTOR: KISS-ICP scan-to-map on the RPLIDAR C1, with a
-motion PRIOR from the D455F gyro (rotation) and the wheels (translation).
+"""Lidar odometry for VECTOR: KISS-ICP scan-to-map on the RPLIDAR C1, with an
+optional rotation PRIOR from the D455F gyro. dimOS ships no odometry for a 2D
+lidar or an RGB-D camera (its robots bring their own), so this module supplies
+the pose.
 
-Doctrine (2026-08-23): the wheels are never the localization reference. dimOS
-ships no odometry for a 2D lidar or an RGB-D camera (its robots bring their
-own), so this module supplies the pose.
+THE WHEELS NEVER FEED THE PRIOR (owner, day one, docs/localization.md, restated
+26/08 21h45). The 25/08 "v2" injected them anyway, and the 26/08 duel showed
+the cost in one log line: wheels spinning at 7-10 RPM against the pinned
+Xiaomi, wheel theta climbing +2100 deg, every scan of a perfectly precise lidar
+stamped at that lying pose - the map doubled. Wheel odometry on mecanum lies BY
+CONSTRUCTION (the rollers slip to strafe); it stays published as a sanity
+signal (carried detection, the panel), never as a pose source.
 
-Why a prior. Measured the same day with kiss-icp alone on 340-point planar
-scans: translation matched the wheels to 5 mm on a straight line, but turns
-were under-estimated by 20-35 % (+16 deg reported for +20 deg, -27 for -41)
-even with indoor thresholds. ICP refines a guess; on a sparse 2D scan a bad
-guess for a spin is not recovered. The gyro measures the spin directly, the
-wheels give a decent translation guess on tiles; ICP corrects both against
-the map and the published pose is ICP's, not the prior.
+Rotation without a prior is the known weak spot: measured 23/08, kiss-icp alone
+under-estimates turns by 20-35 % on these 340-point scans. The honest prior is
+the gyro - currently DEAD (librealsense RSUSB build: the motion pipeline says
+"No device connected", see nav_blueprints), so until it is rebuilt the prior is
+kiss-icp's own constant-velocity model. Bench the turn tracking before trusting
+long runs.
 
 Streams
   pointcloud              : In[PointCloud2]  one revolution, lidar_link (rplidar_c1.py)
@@ -154,7 +159,7 @@ class LidarOdometry(Module):
     def __init__(self, max_range_m: float = 12.0, min_range_m: float = 0.35,
                  voxel_size_m: float = 0.05, initial_threshold_m: float = 0.3,
                  gyro_axis: str = "-y", use_gyro_prior: bool = True,
-                 use_wheel_prior: bool = True, world_frame: str = "world",
+                 world_frame: str = "world",
                  base_frame: str = "base_link", lidar_frame: str = "lidar_link",
                  log_every_s: float = 2.0, **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -164,7 +169,7 @@ class LidarOdometry(Module):
         # motion module reports in the camera's optical frame (x right, y down,
         # z forward): a level camera looking forward gives yaw_rate = -gyro.y.
         self.gyro_axis = gyro_axis
-        self.use_gyro_prior, self.use_wheel_prior = use_gyro_prior, use_wheel_prior
+        self.use_gyro_prior = use_gyro_prior
         self.world_frame, self.base_frame, self.lidar_frame = world_frame, base_frame, lidar_frame
         self.log_every_s = log_every_s
         # dimOS pickles module instances into their worker: no lock, no native
@@ -181,8 +186,7 @@ class LidarOdometry(Module):
         self._gyro_seen = False
         self._gyro_totals = np.zeros(3)
         # wheel odometry: latest and the value at the last scan
-        self._wheel: tuple[float, float, float] | None = None
-        self._wheel_at_scan: tuple[float, float, float] | None = None
+        self._wheel: tuple[float, float, float] | None = None   # sanity signal only (carried detection, panel)
         self._prior_used = "cv"
         self._K: tuple[float, float, float, float] | None = None
         self._pose_hist: list[tuple[float, float, float, float]] = []   # (wall ts, x, y, yaw), last ~3 s
@@ -228,8 +232,8 @@ class LidarOdometry(Module):
         self._kiss = KissICP(cfg)
         self._lock = threading.Lock()
         logger.info(f"lidar odometry up (kiss-icp, voxel {self.voxel_size_m} m, range "
-                    f"{self.min_range_m}-{self.max_range_m} m, priors: gyro={self.use_gyro_prior} "
-                    f"axis {self.gyro_axis}, wheels={self.use_wheel_prior}) -> {self.world_frame}")
+                    f"{self.min_range_m}-{self.max_range_m} m, prior: gyro={self.use_gyro_prior} "
+                    f"axis {self.gyro_axis}, wheels NEVER) -> {self.world_frame}")
         if not persistent_map.enabled():
             logger.info("PERSISTENT_MAP=0: fresh frame, as before this existed")
         elif not persistent_map.map_exists():
@@ -359,13 +363,7 @@ class LidarOdometry(Module):
         dx, dy = float(last_delta[0, 3]), float(last_delta[1, 3])
         dyaw = math.atan2(last_delta[1, 0], last_delta[0, 0])
         used = []
-        if self.use_wheel_prior and self._wheel is not None and self._wheel_at_scan is not None:
-            x0, y0, th0 = self._wheel_at_scan; x1, y1, th1 = self._wheel
-            c, s = math.cos(-th0), math.sin(-th0)
-            wx, wy = x1 - x0, y1 - y0
-            dx, dy = c * wx - s * wy, s * wx + c * wy        # world delta -> body frame at the last scan
-            dyaw = math.atan2(math.sin(th1 - th0), math.cos(th1 - th0))
-            used.append("wheels")
+        # the wheels are NEVER consulted here - see the module docstring
         if self.use_gyro_prior and self._gyro_seen:
             dyaw = self._gyro_acc
             used.append("gyro")
@@ -398,7 +396,6 @@ class LidarOdometry(Module):
             from kiss_icp.kiss_icp import KissICP
             with self._lock:
                 self._kiss = KissICP(self._cfg)
-                self._wheel_at_scan = None
                 self._gyro_acc, self._gyro_seen = 0.0, False
         self._reloc_gen += 1
         self._reloc_pts = []
@@ -577,7 +574,6 @@ class LidarOdometry(Module):
             k.last_pose = new_pose
             # consume the priors
             self._gyro_acc, self._gyro_seen = 0.0, False
-            self._wheel_at_scan = self._wheel
         pose = np.asarray(new_pose)
         R, t = pose[:3, :3], pose[:3, 3]
         kiss = (float(t[0]), float(t[1]), math.atan2(R[1, 0], R[0, 0]))

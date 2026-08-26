@@ -375,7 +375,7 @@ else:
         o._reloc_reason = ""; o._reloc_next = 0.0; o._boot_deadline = 0.0; o._reloc_gen = 0
         o._pose_hist = []; o._wheel_hist = []; o._lost_since = 0.0
         o._carry_cooldown = 0.0; o._cfg = None; o._kiss = Kiss()
-        o._wheel_at_scan = None; o._gyro_acc = 0.0; o._gyro_seen = False
+        o._gyro_acc = 0.0; o._gyro_seen = False
         return o
 
     # the origin is a transform, in metres and degrees
