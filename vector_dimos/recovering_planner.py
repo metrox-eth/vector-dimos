@@ -206,7 +206,11 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             # place (initial/final rotation) the position does not change and a
             # 2.5 s window reads "stuck" -> replan -> new rotation -> "stuck"...
             # (20 bursts in the kitchen, 23/08 19:35). Rotating is not stuck.
-            if not self._in_stop_message and self._local_planner_state() in ("initial_rotation", "final_rotation"):
+            if not self._in_stop_message and self._local_planner_state() in ("initial_rotation", "final_rotation", "idle"):
+                # "idle" added 26/08: while explorer2 WAITS out an exclusion the
+                # follower commands nothing - stillness without intent is not
+                # "stuck", and backing off an un-stuck robot bumped the rear wall
+                # in a loop (owner: "un pas en avant, un pas en arriere")
                 return
             with self._lock:
                 has_goal = self._current_goal is not None and self._current_odom is not None
