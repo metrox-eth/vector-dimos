@@ -61,8 +61,7 @@ echo "== 5/7 the organ panel on the owner's screen (GATE) =="
 ssh $ROVER 'pgrep -f "[s]tats_server" >/dev/null || (cd ~/vector-dimos && nohup ./.venv/bin/python tools/stats_server.py >> /tmp/stats_server.log 2>&1 & sleep 2)'
 curl -sf -m 5 "http://192.168.0.56:8900/metrics" | grep -q '"sensors"' \
   || { echo "NO ORGAN PANEL - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
-DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://192.168.0.56:8900/panel" >/dev/null 2>&1 &
-echo "panel answering - organ page opened in Firefox"
+echo "panel answering (the /vol page opens it - one window, next gate)"
 
 echo "== 6/7 the camera cockpit on the owner's screen (GATE) =="
 # The cockpit page (deno, 7780) and its video (WebTransport over QUIC/UDP) both
@@ -80,14 +79,18 @@ WT_PORT=$(timeout 15 ssh $ROVER "d=\$(ls -td ~/.local/state/dimos/logs/*-vector-
 timeout 15 ssh $ROVER "cd ~/vector-dimos && nohup .venv/bin/python tools/udp_forward.py $RELAY_EXT 127.0.0.1 $WT_PORT 0.0.0.0 > /tmp/udp_forward_rover.log 2>&1 < /dev/null &"
 pkill -f "[u]dp_forward" 2>/dev/null; sleep 1
 nohup python3 "$(dirname "$0")/udp_forward.py" "$WT_PORT" 192.168.0.56 "$RELAY_EXT" 127.0.0.1 > /tmp/udp_forward_rig.log 2>&1 &
-for p in $(pgrep -f "[s]sh -fN -L 7780"); do kill "$p"; done 2>/dev/null
-timeout 15 ssh -fN -L 7780:127.0.0.1:7780 $ROVER
+# ONE tunnel for page + deck: 7780 (cockpit) and 8900 (/vol + panel). The
+# /vol page MUST be browsed as 127.0.0.1: WebTransport in the cockpit iframe
+# needs a secure context, and every ancestor frame must be localhost - the
+# LAN address gives "Not a secure context" (owner caught it, 26/08 21h55).
+for p in $(ss -tlnp 2>/dev/null | grep -oE "127.0.0.1:7780.*pid=[0-9]+" | grep -oE "pid=[0-9]+" | cut -d= -f2 | sort -u); do kill "$p"; done 2>/dev/null
+timeout 15 ssh -fN -L 7780:127.0.0.1:7780 -L 8900:127.0.0.1:8900 $ROVER
 sleep 2
 curl -sf -m 8 -o /dev/null "http://127.0.0.1:7780/" \
   || { echo "NO COCKPIT PAGE - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
-DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://127.0.0.1:7780/" >/dev/null 2>&1 &
-echo "cockpit page live (QUIC port $WT_PORT relayed) - reload the tab if 'connected' is missing;"
-echo "proven 26/08 21h01: color_image 5 fps in Firefox on the owner's screen"
+DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://127.0.0.1:8900/vol" >/dev/null 2>&1 &
+echo "flight deck opened: http://127.0.0.1:8900/vol (cockpit + organs + zones, one window)"
+echo "cockpit QUIC port $WT_PORT relayed - reload the page if 'connected' is missing"
 
 if [ "$DRY" = "1" ]; then
   echo "== 7/7 DRY: exploration NOT started =="
