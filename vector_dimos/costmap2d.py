@@ -3,7 +3,8 @@
 dimOS's CostMapper turns the 3D voxel map (a set that never forgets) into a
 terrain-slope map meant for a walking robot; measured on 23/08 with
 tools/mars/stages.py it erased table legs (erosion drops any cell whose four
-neighbours are unobserved). metrox's spec, from living with a Xiaomi vacuum:
+neighbours are unobserved). The spec, learned from sharing a flat with a
+robot vacuum:
 
   * the map must REINFORCE - but with a ceiling, or a ramp it struggled on
     becomes a wall after a day;
@@ -15,8 +16,7 @@ neighbours are unobserved). metrox's spec, from living with a Xiaomi vacuum:
   * two layers, because the sensors do not see the same things: what the
     lidar put down a lidar ray may clear; what the camera put down (a low box,
     under the 0.37 m scan plane) only the camera may clear - by seeing the
-    floor there, or by seeing THROUGH it at low height (`camera_rays`, metrox
-    26/08: "chaque fois que la RealSense passe dessus, ca corrige" - a
+    floor there, or by seeing THROUGH it at low height (`camera_rays` - a
     persistent map is good, but a ghost must never survive being looked at).
 
 A cell the camera JUST called an obstacle is deaf to floor samples for
@@ -29,7 +29,7 @@ in the next, so the leg never accumulated the two hits it needs. This is not a
 weakening of the unlearning: an object that is really gone stops being hit, and
 after 3 s of floor samples it fades exactly as before.
 
-Sensor doctrine (metrox, 25/08): only the lidar and the camera write here.
+Sensor doctrine: only the lidar and the camera write here.
 The sonar brakes and the contact switches protect - neither leaves a trace in
 the map. What the body drove over (body_clear) is still cleared: that one is a
 physical certainty, not a sensor reading.
@@ -67,14 +67,26 @@ OCCUPIED_AT = 2              # two hits from two places = an obstacle
 NEW_VIEWPOINT_M = 0.10       # a hit counts only if the rover moved this much since the cell's last hit
 LOW_HIT_PROTECT_S = 3.0      # after a camera obstacle hit, that cell's LOW layer ignores floor samples this long
 LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M)
-PUBLISH_EVERY = 5            # lidar revolutions between two costmap publications (10 Hz -> 2 Hz)
+LIDAR_WRITES_OBSTACLES = True   # doctrine switch: the lidar's job is anchoring the
+                                # map (SLAM), not obstacle detection - flip to False
+                                # once the camera proves its widened coverage in flight; the lidar
+                                # then only anchors kiss-icp and the camera is THE detector
+PUBLISH_EVERY = 5            # ~2 Hz MODE TOUR: en teleop le planeur dort et notre carte 2D lit les capteurs en direct - la seule bouche nourrie par cette cadence est LE VIEWER, qui coulait a 5 Hz (latence 9->30 s, 21h45). Les pleines cadences reviendront pour l autonomie AVEC le deport du pont. Ancien: Le 10 Hz (27/08 21h05) a noye les CONSOMMATEURS: 230 Ko
+                             # par grille x 10 Hz = 2,3 Mo/s a decoder par chaque abonne, et
+                             # l enregistreur ecrivait la carte x5 sur SD - charge 5,7 -> 11 en
+                             # 5 min (metrox: "on consomme plus qu avant"). La QUALITE de la
+                             # carte ne depend pas de cette cadence (l odometrie la fait);
+                             # 10 Hz ne servira qu a l autonomie, une fois le recorder decouple.
+                             # Ancien pansement:
+                             # le bridage a 5 (2 Hz) etait un pansement CPU d avant CUDA+zenoh
+                             # (27/08 20h58, metrox: "c etait ca l objectif de passer sur CUDA")
 RAY_MAX_M = 4.0              # rays are carved (misses) up to this range only: 12 m x 0.025 m steps cost 227 ms per revolution (2.3 cores at 10 Hz, 23/08 20:20)
 RAY_EVERY = 2                # carve on every other revolution; hits are taken on all
 CAMERA_HEIGHT_M = 0.56       # = lidar_odometry.CAMERA_XYZ_BASE[2] (rear mast, 24/08) - keep in sync
 CARVE_Z_BAND = (0.10, 0.45)  # a camera ray crossing a cell at this height proves nothing low stands
                              # there; a higher ray flies OVER boxes (0.9 m up says nothing about a
                              # 0.3 m box) and must not erase them
-CHECKPOINT_EVERY_S = 30.0    # metrox 23/08: 'when it crashes we lose everything - resume from a minute before'
+CHECKPOINT_EVERY_S = 30.0    # a crash must cost at most a minute of map
 CHECKPOINT_KEEP = 40         # 20 minutes of history
 CHECKPOINT_DIR = persistent_map.CHECKPOINT_DIR
 PROMOTE_EVERY_S = 300.0      # the persistent map is refreshed this often (and on a clean stop)
@@ -101,7 +113,7 @@ class ScoredGrid:
         # Runtime only, never saved: it protects a leg for 3 s, and a monotonic
         # clock means nothing in another process anyway.
         self._last_low_hit = np.full((self.n, self.n), -np.inf, dtype=np.float64)
-        self._cam_prev: frozenset = frozenset()   # camera obstacle cells of the PREVIOUS frame (moving-object gate)
+        self._cam_prev = np.zeros((self.n, self.n), dtype=bool)   # camera obstacle cells of the PREVIOUS frame (moving-object gate)
         self._keepout: np.ndarray | None = None   # cells the rover may never enter, whatever the layers say
 
     # ---- coordinates -------------------------------------------------------
@@ -144,10 +156,10 @@ class ScoredGrid:
         last = self._last_hit_xy[gy, gx]
         moved = np.isnan(last[:, 0]) | (np.hypot(last[:, 0] - from_xy[0], last[:, 1] - from_xy[1]) >= NEW_VIEWPOINT_M)
         cur = layer[gy, gx].astype(np.int16)
-        # An obstacle is REAL when it was seen from two viewpoints (owner,
-        # 26/08: a passer-by hammered from one parked spot must never become
-        # a wall - the evening flights were spent walled in by exactly such
-        # cells). From one viewpoint a cell rises to OCCUPIED_AT - 1 and no
+        # An obstacle is REAL when it was seen from two viewpoints: a
+        # passer-by hammered from one parked spot must never become a wall
+        # (whole flights were once spent walled in by exactly such cells).
+        # From one viewpoint a cell rises to OCCUPIED_AT - 1 and no
         # further; the second viewpoint (0.10 m of motion) makes it a wall.
         # Driving toward anything real crosses viewpoints within a metre, so
         # legs and furniture still map on approach.
@@ -188,27 +200,34 @@ class ScoredGrid:
         the cell is stamped - for the next LOW_HIT_PROTECT_S the floor beside it
         may not erase it (see the module docstring: the table leg of run B).
 
-        MOVING things are never written (owner, 27/08 11h55: "la RealSense ne
-        doit pas ecrire dans la carte si c'est un objet en mouvement"): a cell
+        MOVING things are never written into the map: a cell
         only takes a hit if the camera ALSO saw an obstacle there on the
         previous frame. At 5 Hz, a walking person or a rolling vacuum moves on
         before the second look; furniture repeats. One frame of latency on
         genuinely new static obstacles - the lidar layer covers the interval."""
         gx, gy = self.cell(pts_xy[:, 0], pts_xy[:, 1])
         if len(gx) == 0:
-            self._cam_prev = frozenset()
+            self._cam_prev[:] = False
             return
-        flat = np.unique(gy * self.n + gx)
-        cur = frozenset(int(v) for v in flat)
-        repeat = np.array(sorted(cur & self._cam_prev), dtype=np.int64)
-        self._cam_prev = cur
-        if len(repeat) == 0:
+        # NEIGHBOURHOOD repeat, not exact-cell repeat: a
+        # THIN standing leg re-projects a cell off between frames (5 cm of
+        # quantisation from a moving rover) - exact-cell repeat would filter
+        # it out like a mover. One cell of tolerance keeps every immobile
+        # thing; a walker or the vacuum still jumps further than 10 cm/frame.
+        prev_near = self._cam_prev.copy()
+        prev_near[:-1, :] |= self._cam_prev[1:, :]
+        prev_near[1:, :] |= self._cam_prev[:-1, :]
+        prev_near[:, :-1] |= prev_near[:, 1:]
+        prev_near[:, 1:] |= prev_near[:, :-1]
+        keep = prev_near[gy, gx]
+        self._cam_prev[:] = False
+        self._cam_prev[gy, gx] = True
+        if not keep.any():
             return
-        rgx, rgy = repeat % self.n, repeat // self.n
-        rx = self.ox + (rgx + 0.5) * self.res
-        ry = self.oy + (rgy + 0.5) * self.res
+        rx = self.ox + (gx[keep] + 0.5) * self.res
+        ry = self.oy + (gy[keep] + 0.5) * self.res
         self._hit(self.low, rx, ry, from_xy)
-        self._last_low_hit[rgy, rgx] = time.monotonic() if now is None else now
+        self._last_low_hit[gy[keep], gx[keep]] = time.monotonic() if now is None else now
 
     def camera_floor(self, pts_xy: np.ndarray, now: float | None = None) -> None:
         """The camera saw bare floor here: a miss on BOTH layers (the only way a
@@ -233,7 +252,7 @@ class ScoredGrid:
     def camera_rays(self, pts_xyz: np.ndarray, from_xy: tuple[float, float],
                     now: float | None = None) -> None:
         """The camera's rays carve the LOW layer, symmetric to the lidar's
-        (metrox, 26/08 20h20: the SLAM must correct the map every time the
+        (design rule: the SLAM must correct the map every time the
         RealSense passes over it - without this, a ghost lives until someone
         rebuilds the map by hand).
 
@@ -332,7 +351,7 @@ class ScoredGrid:
 
     def body_clear(self, pose: tuple) -> None:
         """The body IS here: every cell under the body footprint (0.625 x
-        0.46 m with the bumper bars - metrox 25/08 22h - exact, never wider,
+        0.46 m with the bumper bars - measured, exact, never wider,
         so a wall against the bumper survives)
         is certainly free. Both layers to the floor, seen. Born 25/08: the rover kept walling itself in with patches laid on
         cells it then drove over."""
@@ -372,7 +391,7 @@ class ScoredGrid:
         # keep-out slot __init__ would have given it.
         g._keepout = None
         g._last_low_hit = np.full((g.n, g.n), -np.inf, dtype=np.float64)
-        g._cam_prev = frozenset()
+        g._cam_prev = np.zeros((g.n, g.n), dtype=bool)
         return g
 
     # ---- output ------------------------------------------------------------
@@ -572,21 +591,35 @@ class VectorCostMap(Module):
         if len(pts) == 0:
             return
         is_lidar = np.abs(pts[:, 2] - LIDAR_Z_M) < 0.005
-        if is_lidar.all():
-            self._grid.lidar_revolution(pts[:, :2], self._pose_xy)
+        if not LIDAR_WRITES_OBSTACLES:
+            cam = pts[~is_lidar]
+            if len(cam):
+                self._grid.camera_obstacles(cam[:, :2], self._pose_xy)
+                self._grid.camera_rays(cam, self._pose_xy)
+            self._revolutions += int(is_lidar.any())
+            if self._revolutions % PUBLISH_EVERY == 0:
+                self._publish()
+            if time.monotonic() - self._last_ckpt >= CHECKPOINT_EVERY_S:
+                self._checkpoint()
+            return
+        # One path for pure and mixed clouds. The old split published only from
+        # the pure-lidar branch; once lidar_odometry began attaching camera
+        # points to EVERY revolution (the 15h30 anti-blink), no cloud was ever
+        # pure again and the costmap silently stopped publishing (found 27/08
+        # 16h20 by py-spy + bus listening: grid building in memory, zero out).
+        cam = pts[~is_lidar]
+        if len(cam):
+            # hits first: they stamp the 3 s protection, so a frame never
+            # carves the very cells it is confirming
+            self._grid.camera_obstacles(cam[:, :2], self._pose_xy)
+            self._grid.camera_rays(cam, self._pose_xy)
+        if is_lidar.any():
+            self._grid.lidar_revolution(pts[is_lidar][:, :2], self._pose_xy)
             self._revolutions += 1
             if self._revolutions % PUBLISH_EVERY == 0:
                 self._publish()
             if time.monotonic() - self._last_ckpt >= CHECKPOINT_EVERY_S:
                 self._checkpoint()
-        else:
-            cam = pts[~is_lidar]
-            # hits first: they stamp the 3 s protection, so a frame never
-            # carves the very cells it is confirming
-            self._grid.camera_obstacles(cam[:, :2], self._pose_xy)
-            self._grid.camera_rays(cam, self._pose_xy)
-            if is_lidar.any():
-                self._grid.lidar_revolution(pts[is_lidar][:, :2], self._pose_xy)
 
     def _checkpoint(self) -> None:
         assert self._grid is not None

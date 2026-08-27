@@ -3,7 +3,7 @@
 dimOS's ``_start_imu`` opens a SECOND ``rs.pipeline`` on the same camera.
 On our source-built RSUSB librealsense that second enumeration fails with
 "No device connected" (seen 23/08), which is why VECTOR ran without its IMU
-- and why wheel slip could drag the odometry (metrox's doctrine since day
+- and why wheel slip could drag the odometry (the doctrine since day
 one: dead reckoning = IMU + lidar + depth, never the wheels).
 
 This subclass starts the motion module through the sensor-level API on the

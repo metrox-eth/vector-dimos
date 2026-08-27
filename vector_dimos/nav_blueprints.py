@@ -19,15 +19,16 @@ from __future__ import annotations
 import os
 
 from dimos.core.coordination.blueprints import autoconnect
+from dimos.msgs.geometry_msgs.Twist import Twist
+from dimos.msgs.geometry_msgs.Vector3 import Vector3
 
 from vector_dimos.blueprints import VectorControlCoordinator, _coordinator_blueprint
 from vector_dimos.explorer2 import explorer_v2_enabled
 
 
 def stock_nav_enabled() -> bool:
-    """STOCK_NAV=1: Sunday's stack (owner, 27/08 12h05: "la nav a fonctionne
-    que dimanche avec un dimOS frais... tu inventes des methodes de navigation").
-    dimOS's own CostMapper (occupancy algo, the 23/08 workaround) + the stock
+    """STOCK_NAV=1: the plain dimOS stack.
+    dimOS's own CostMapper (occupancy algo) + the stock
     wavefront frontier explorer (VectorExplorer subclasses it for speed only).
     Our custom 2D map / explorer2 / persistent map go DORMANT - parked, not
     deleted. Stays: kiss-icp pose (gyro only), bump reflexes, the deck."""
@@ -35,7 +36,7 @@ def stock_nav_enabled() -> bool:
 
 def camera_mount():
     """base_link -> camera_link as mounted since 24/08 (bumper build): 0.20 m
-    BEHIND the lidar axis (metrox's tape), 0.56 m up (floor fit), nose 1.1 deg
+    BEHIND the lidar axis (tape-measured), 0.56 m up (floor fit), nose 1.1 deg
     down. Matches CAMERA_XYZ_BASE in lidar_odometry.py.
 
     Frame convention, read off dimOS 25/08: ``base_transform`` is
@@ -160,7 +161,7 @@ def camera_frustum_view(camera_info):
 # `keepout` is drawn as flat solid slabs, not as one point per cell: with the
 # 26/08 fences around the house the zones cover ~95k cells of a mapped crop -
 # two megabytes of points, 1-2 times a second, to say what a few labelled boxes
-# say better. A rectangle is one slab. A polygon (the owner draws his tilted
+# say better. A rectangle is one slab. A polygon (the operator draws a tilted
 # house with the mouse now) is one slab per horizontal run of its rasterised
 # mask - a few hundred for a room-sized zone, and stair-stepped at 5 cm on the
 # diagonals, which is exactly the shape the rover obeys.
@@ -355,20 +356,44 @@ def decision_costmap_view(grid):
     ]
 
 
+def flight_rerun_blueprint():
+    """Two tabs. "Map": only the PERSISTENT things (decision costmap + zones,
+    path, pose, goals) so the view is anchored on the map being built and
+    never pumps zoom with the sweeps (owner, 27/08 15h39). "Live": everything,
+    for when the raw sweeps are wanted. Module-level: pickled to the worker."""
+    import rerun as rr
+    import rerun.blueprint as rrb
+
+    def view(name, contents):
+        return rrb.Spatial3DView(
+            origin="world", name=name, contents=contents,
+            background=rrb.Background(kind="SolidColor", color=[0, 0, 0]),
+            line_grid=rrb.LineGrid3D(plane=rr.components.Plane3D.XY.with_distance(0.5)))
+
+    return rrb.Blueprint(rrb.Tabs(
+        view("Map", ["+ $origin/global_costmap/**", "+ $origin/path/**",
+                     "+ $origin/odom/**", "+ $origin/goal_request/**"]),
+        view("Live", ["+ $origin/**"]),
+    ))
+
+
 RERUN_CONFIG = {
+    "blueprint": flight_rerun_blueprint,
     # 512MB replay history instead of the 25% default: on the 8 GB Jetson that
     # default let the Rerun bridge grow to 2.7 GB (measured 24/08).
     "memory_limit": "512MB",
     "visual_override": {
-        "world/global_map": voxel_map_view,
+        # The voxel map is COSMETIC and never forgets (a passer-by is engraved
+        # forever ON SCREEN even where the decision map corrects). The owner
+        # watches the map the planner actually reads - only that one is shown.
+        "world/global_map": None,
         "world/global_costmap": decision_costmap_view,
         "world/camera_info": camera_frustum_view,
         # Aligned depth shares camera_color_optical_frame, so this is the same
         # frustum a second time - and it would stay pinned at the origin.
         "world/depth_camera_info": None,
-        # The camera IMAGES never go to Rerun (owner, 27/08: un-eyeing the RGB
-        # and depth streams by hand at every flight, "qui volent des
-        # ressources"). The cockpit is where the camera is watched; Rerun is
+        # The camera IMAGES never go to Rerun. The cockpit is where the
+        # camera is watched; Rerun is
         # the map. Suppressed at the bridge, so the Jetson does not even
         # encode them for the viewer. Both path spellings kept: the entity is
         # "world/<channel>" today, bare "<channel>" if the prefix ever moves.
@@ -376,6 +401,14 @@ RERUN_CONFIG = {
         "world/depth_image": None,
         "color_image": None,
         "depth_image": None,
+        # Transient floor samples (5.6 Hz, z=0) and the RAW lidar ring
+        # (redundant with world/lidar) kept making the view breathe
+        # vertically ("la map monte, elle descend", two hours of it).
+        # Display only - the mapper still consumes both streams.
+        "world/camera_floor": None,
+        "camera_floor": None,
+        "world/pointcloud": None,
+        "pointcloud": None,
     },
 }
 
@@ -399,24 +432,38 @@ def _nav_blueprint():
 
     return autoconnect(
         _coordinator_blueprint(),
-        VectorCamera.blueprint(width=640, height=480, fps=15,
+        # fps 15 -> 5 (27/08 17h45, MEASURED): the color stream's only consumer is the
+        # cockpit relay (shows 5.5 fps), depth's only consumer is lidar_odometry's
+        # camera points (outputs 5.8 Hz) - publishing 15 served nobody and the bus
+        # (serialize + every subscriber's deserialize) ate ~2 cores idle (profile
+        # py-spy: publish 100%, lcm loops 96/75/38%). 5 is a native D455 mode.
+        VectorCamera.blueprint(width=640, height=480, fps=5,
                                enable_depth=True, enable_pointcloud=False,
                                enable_imu=True, imu_hz=200,
                                base_transform=CAMERA_MOUNT),   # their 2nd (motion) pipeline fails on the RSUSB build: "No device connected"
         RPLidarC1.blueprint(),
         ReSpeakerMic.blueprint(stt_language="fr"),   # auto-detect mangles short utterances
-        # gyro prior OFF pending re-calibration (27/08 12h20): the IMU delivers
-        # in-stack (81 885 msgs on the bus) but the 12h05 map smeared into
-        # rainbow arcs - rotated copies of the room - and the axis ("-y") was
-        # calibrated 23/08 on the OLD front mast; the camera moved to the rear
-        # mast 24/08 and the sign was never re-validated. A wrong-sign gyro is
-        # worse than none. Constant-velocity drifts gently (-20-35 %/turn,
-        # measured) but never paints rainbows - the A/B that decides.
-        LidarOdometry.blueprint(use_gyro_prior=False),
-        VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
-        (CostMapper.blueprint(algo="occupancy") if stock_nav_enabled() else
-         VectorCostMap.blueprint()),   # STOCK_NAV=1 -> dimOS's CostMapper (occupancy algo, Sunday's
-                                       # config); else our 2D map (learns/unlearns, two layers)
+        # gyro prior ON - MEASURED correct on 27/08 13h07 (tools/gyro_sign_bench:
+        # +29.8 deg gyro vs +30.3 deg lidar, -31.2 vs -31.4, mapping "-y" exact
+        # on the rear mast). The rotation backbone of the classic indoor
+        # lidar+IMU recipe; the 12h05 rainbow smear was the 17-bump storm, not
+        # this axis (hypothesis killed by the bench, as benches are for).
+        LidarOdometry.blueprint(),
+        # emit_every=5: le chiffre du blueprint go2 (~2 Hz chez nous). Le bandage
+        # 10 (~1 Hz) datait d avant CUDA+zenoh - cadences restaurees 27/08 21h.
+        # Ancien commentaire: their
+        # Discord health norm is a ~7 Hz costmap; at 1 Hz the path-clearance
+        # sees obstacles up to 1 s late (unacceptable for autonomy). Raised
+        # from 3 because the full-map costmap recompute at 3.3 Hz ate two
+        # cores parked (load 41, 27/08 15h49). The real fix is lesh's answer.
+        VoxelGridMapper.blueprint(voxel_size=0.08, device="CUDA:0", frame_id="world", emit_every=10),
+        (CostMapper.blueprint() if stock_nav_enabled() else
+         VectorCostMap.blueprint()),   # STOCK_NAV=1 -> dimOS's CostMapper exactly as their go2 ships it
+                                       # (defaults; "occupancy" was an INVENTED registry key - valid keys are
+                                       # height_cost/general/simple, each map KeyError'd the Rx chain and
+                                       # global_costmap fell silent, found 27/08 16h). Default path = our 2D
+                                       # map: Sunday's PROVEN recipe (git 73cc2c6 ran VectorCostMap everywhere;
+                                       # their CostMapper had erased table legs on VECTOR)
         vis_module(viewer_backend=global_config.viewer, rerun_config=RERUN_CONFIG),
     ).remappings([
         (VectorControlCoordinator, "twist_command", "cmd_vel"),
@@ -466,7 +513,8 @@ def _explore_blueprint():
     from dimos.mapping.costmapper import CostMapper
     from dimos.mapping.voxels.module import VoxelGridMapper
     from vector_dimos.esp_sensors import EspSensors
-    from vector_dimos.memory import VectorMemory
+    from vector_dimos.memory import VectorMemory, VectorMemoryLight
+    from vector_dimos.relocalization import VectorRelocalization
     from dimos.navigation.movement_manager.movement_manager import MovementManager
     from vector_dimos.recovering_planner import RecoveringPlanner
     from dimos.visualization.vis_module import vis_module
@@ -474,49 +522,79 @@ def _explore_blueprint():
     from vector_dimos.rplidar_c1 import RPLidarC1
     from vector_dimos.respeaker import ReSpeakerMic
 
+    extra = []
+    if os.environ.get("GAMEPAD", "0") == "1":
+        # the day-one teleop module rides along: the owner drives on
+        # tele_cmd_vel while the SAME stack maps (the map-quality test).
+        from vector_dimos.gamepad import GamepadTeleop
+        extra = [GamepadTeleop.blueprint()]
     return autoconnect(
+        *extra,
         _coordinator_blueprint(),
-        VectorCamera.blueprint(width=640, height=480, fps=15,
+        # fps 15 -> 5 (27/08 17h45, MEASURED): the color stream's only consumer is the
+        # cockpit relay (shows 5.5 fps), depth's only consumer is lidar_odometry's
+        # camera points (outputs 5.8 Hz) - publishing 15 served nobody and the bus
+        # (serialize + every subscriber's deserialize) ate ~2 cores idle (profile
+        # py-spy: publish 100%, lcm loops 96/75/38%). 5 is a native D455 mode.
+        VectorCamera.blueprint(width=640, height=480, fps=5,
                                enable_depth=True, enable_pointcloud=False,
                                enable_imu=True, imu_hz=200,
                                base_transform=CAMERA_MOUNT),
         RPLidarC1.blueprint(),
         ReSpeakerMic.blueprint(stt_language="fr"),   # auto-detect mangles short utterances
-        # gyro prior OFF pending re-calibration (27/08 12h20): the IMU delivers
-        # in-stack (81 885 msgs on the bus) but the 12h05 map smeared into
-        # rainbow arcs - rotated copies of the room - and the axis ("-y") was
-        # calibrated 23/08 on the OLD front mast; the camera moved to the rear
-        # mast 24/08 and the sign was never re-validated. A wrong-sign gyro is
-        # worse than none. Constant-velocity drifts gently (-20-35 %/turn,
-        # measured) but never paints rainbows - the A/B that decides.
-        LidarOdometry.blueprint(use_gyro_prior=False),
+        # gyro prior ON - MEASURED correct on 27/08 13h07 (tools/gyro_sign_bench:
+        # +29.8 deg gyro vs +30.3 deg lidar, -31.2 vs -31.4, mapping "-y" exact
+        # on the rear mast). The rotation backbone of the classic indoor
+        # lidar+IMU recipe; the 12h05 rainbow smear was the 17-bump storm, not
+        # this axis (hypothesis killed by the bench, as benches are for).
+        LidarOdometry.blueprint(),
         # carve_columns=False: this voxel map is the Rerun visual only (navigation runs on costmap2d). True ('latest
         # observation wins') erased the camera's table tops on every lidar hit in the same column and the map lost its detail
-        # (metrox, 23/08 22:30). Cost of False: a passer-by leaves a ghost trail, until a health-based mapper replaces this one.
-        VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=10, carve_columns=False),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
+        # Cost of False: a passer-by leaves a ghost trail, until a health-based mapper replaces this one.
+        VoxelGridMapper.blueprint(voxel_size=0.08, device="CUDA:0", frame_id="world", emit_every=10, carve_columns=False),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
         # dimOS's height-cost defaults are for a quadruped (can_climb 0.15 m, pass
         # under 0.6 m): VECTOR climbs nothing (3 cm) and its camera top is ~0.85 m.
-        (CostMapper.blueprint(algo="occupancy") if stock_nav_enabled() else
-         VectorCostMap.blueprint()),   # STOCK_NAV=1 -> dimOS's CostMapper (occupancy algo, Sunday's
-                                       # config); else our 2D map (learns/unlearns, two layers)
+        (CostMapper.blueprint() if stock_nav_enabled() else
+         VectorCostMap.blueprint()),   # STOCK_NAV=1 -> dimOS's CostMapper exactly as their go2 ships it
+                                       # (defaults; "occupancy" was an INVENTED registry key - valid keys are
+                                       # height_cost/general/simple, each map KeyError'd the Rx chain and
+                                       # global_costmap fell silent, found 27/08 16h). Default path = our 2D
+                                       # map: Sunday's PROVEN recipe (git 73cc2c6 ran VectorCostMap everywhere;
+                                       # their CostMapper had erased table legs on VECTOR)
         # the rover is 54x46 cm but its corners sweep 0.71 m when it pivots and the
         # camera mast stands at the front bumper: give the planner a footprint with margin
         # width 0.46 + 4 cm: in discovery mode the rover drives along its length and turns in place,
-        # so its lateral clearance is what matters (metrox, 23/08: 'pas de crabe pendant qu'on mappe');
+        # so its lateral clearance is what matters (no strafing while mapping);
         # 0.62 (a disc for the corners) walled off every 60-70 cm gap - 11 'no path' from a 50 cm clearance
-        # 62.5 x 46 cm with the bumper bars (metrox 25/08): real diagonal 0.776, so 0.78 is honest.
+        # 62.5 x 46 cm with the bumper bars: real diagonal 0.776, so 0.78 is honest.
         # Measured 25/08 on the newest costmap checkpoint (20260825-221223/costmap_224656.npz, 19.4 m2
         # observed): 3084 observed free cells clear an inflation radius of 0.39 m, 3278 clear 0.36 m -
         # 0.78 costs 5.9 % of the goal-capable space, not the walling-off it was suspected of. Same
         # verdict on all 18 recorded runs (worst case 13.9 %), so the honest number stays.
         RecoveringPlanner.blueprint(robot_width=0.50, robot_rotation_diameter=0.78),
-        MovementManager.blueprint(),
+        MovementManager.blueprint(
+            # pass-through: the module's own ceilings are the guard now (the
+            # hidden halving made the pad crawl at 0.10 m/s, owner 15h09)
+            tele_cmd_vel_scaling=Twist(Vector3(1.0, 1.0, 0.0), Vector3(0.0, 0.0, 1.0))),
         _explorer_blueprint(),
         # contact corners + sonar via the ESP32 USB bridge. Neither writes the map (sensor
         # doctrine, 25/08): front bump = back off, rear bump = move forward, sonar = the forward
         # brake in adapter.py (creep under 0.55 m, stop under 0.30 m).
         EspSensors.blueprint(),
-        VectorMemory.blueprint(),    # every run recorded (dimOS memory): replay, draw, tune planners without the robot
+        # THEIR anti-doubling engine (chantier 27/08 22h, metrox: 'now'):
+        # matches the live voxel map against the saved reference every 2 s
+        # and publishes the map->world TF + fitness logs. RELOC_MAP unset =
+        # module dormant (their own no-map_file behaviour). First milestone:
+        # OBSERVE the measured drift; wiring the correction into consumers
+        # is the next step, designed against their go2 flow.
+        VectorRelocalization.blueprint(map_file=os.environ.get("RELOC_MAP") or None),
+        # every run recorded (dimOS memory): replay, draw, tune planners without
+        # the robot. RECORD_CLOUDS=0 = teleop-phase light recording (trajectory
+        # + costmap only, all run_autopsy needs): the raw clouds were the
+        # recorder's write volume and it ate a full core (measured 27/08,
+        # one sqlite commit per observation).
+        (VectorMemory.blueprint() if os.environ.get("RECORD_CLOUDS", "1") == "1"
+         else VectorMemoryLight.blueprint()),
         vis_module(viewer_backend=global_config.viewer, rerun_config=RERUN_CONFIG),
     ).remappings([
         (VectorControlCoordinator, "twist_command", "cmd_vel"),
@@ -524,3 +602,4 @@ def _explore_blueprint():
 
 
 explore_blueprint = _explore_blueprint()
+

@@ -1,6 +1,6 @@
 """ReplanningAStarPlanner that abandons a goal instead of fighting for it.
 
-Doctrine (metrox, 26/08/2026, after the guard-layer autopsy): the detectors
+Doctrine (after the guard-layer autopsy): the detectors
 tell the truth, the REFLEXES were the bug. The old blind 20 cm back-off on
 every stuck/slip walked the rover backwards across the flat in 20 cm steps
 until the rear wall (run 12h54: 38 blind reverses, 14 rear bumper hits, dead
@@ -40,7 +40,7 @@ from dimos.utils.logging_config import setup_logger
 
 logger = setup_logger()
 
-ESCAPE_DISTANCE_M = 0.20   # metrox: 'just enough to turn'
+ESCAPE_DISTANCE_M = 0.20   # just enough to turn
 ESCAPE_SPEED_MPS = 0.10
 ESCAPE_TIMEOUT_S = 5.0
 ESCAPE_PERIOD_S = 0.05  # base watchdog is 0.2 s; 10 Hz left gaps that stopped the wheels
@@ -330,7 +330,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             self._escaping = False
 
     # dimOS's default is 8 s / 0.4 m. "Stuck for eight seconds is already dead
-    # for a robot doing 0.3 m/s" (metrox, 23/08): 2.5 s, same 5 cm/s floor.
+    # for a robot doing 0.3 m/s": 2.5 s, same 5 cm/s floor.
     _stuck_time_window: float = 2.5
     _stuck_threshold: float = 0.12
 
@@ -347,7 +347,7 @@ class RecoveringPlanner(ReplanningAStarPlanner):
     motion) and a contact (``bump``/``bump_rear`` In: the physical switches,
     plus the explorer's born-cornered back-off on ``bump``) triggers the one
     scripted escape move away from the contact. The slip detectors and their
-    reflex are gone (metrox, 26/08: 'on a des switchs maintenant')."""
+    reflex are gone - the contact switches carry that role now."""
 
     bump: In[Bool]
     bump_rear: In[Bool]

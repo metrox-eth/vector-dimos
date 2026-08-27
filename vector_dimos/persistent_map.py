@@ -287,7 +287,7 @@ def zone_bounds(z: dict) -> tuple[float, float, float, float]:
 
     For a polygon this is the bounding box - what to draw a viewport around,
     never what to forbid: the whole point of a polygon is that its box is
-    wrong (metrox's house sits 5.75 deg off the map axes).
+    wrong (this house sits 5.75 deg off the map axes).
     """
     pts = zone_points(z)
     if pts is None:

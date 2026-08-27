@@ -57,7 +57,7 @@ What run B of 26/08 changed (recordings/courseB_explorer2.db, the first real
 run of this module, 10 goals in 6 min 33; tools/replay_decision.py replays any
 of its decisions through this function):
 
-  the owner watched it turn round and go back into the bedroom it had already
+  it was seen turning round and going back into the bedroom it had already
   mapped instead of pushing on. Replayed, goal 10 is unambiguous: the frontier
   at the bedroom wall scored 0.0160 against 0.0074 for the best unmapped-room
   cluster, and the two terms that did it were the ones that have nothing to do
@@ -89,7 +89,7 @@ Field additions, all measured on VECTOR (spec §7):
   §7.1  failed-target memory (0.6 m) that NEVER causes extinction and holds
         no clock: a failed spot stays excluded until the WORLD reopens it -
         the map around the goal changed, or the rover looks from a viewpoint
-        a metre from where it failed (owner, 26/08: triggers, never arbitrary
+        a metre from where it failed (rule: triggers, never arbitrary
         timers). When every cluster is excluded the function returns a WAIT
         directive, not None. Starvation escape (lived 26/08 17h40: rover
         motionless, 9/11 excluded, nothing left to change the world): after
@@ -269,7 +269,7 @@ class Tuning:
     observed_radius_m: float = 0.30   # the follower's arrival tolerance (0.25 m) + a cell
 
     # §7.1 failed-target memory. Radius as shipped in fast_explorer.py. The
-    # 60 s hold that came with it was an arbitrary clock (owner, 26/08): an
+    # 60 s hold that came with it was an arbitrary clock: an
     # exclusion now lifts on a TRIGGER instead - the unknown-cell signature
     # around the goal changed, or the rover stands this far from where it
     # failed (a new viewpoint on the same spot).
@@ -454,7 +454,7 @@ def _visible_unknown(unknown: np.ndarray, occupied: np.ndarray,
     being asked: how much of what I do not know would ONE revolution from that
     spot show me. A box filter over the unknown mask - what this used to be -
     counts the unknown on the far side of the wall the rover would be standing
-    against, and on the real flat that is most of it: at the decision the owner
+    against, and on the real flat that is most of it: at the decision a human
     objected to on 26/08 (recordings/courseB_explorer2.db, goal 10) the box gave
     the frontier at the bedroom wall 0.514 and the ray-cast gives it 0.327,
     against 0.70-0.78 for the frontiers that open onto the unmapped rooms.
@@ -929,7 +929,7 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
 
     # An exclusion whose reopening trigger fired is gone: the map around the
     # goal changed (unknown-cell signature moved), or the rover now stands a
-    # viewpoint away from where it failed. No clock anywhere (owner, 26/08).
+    # viewpoint away from where it failed. No clock anywhere.
     # §7.1 exists because the old loop counted exclusions as "no frontier"
     # and completed while ten clusters were waiting.
     moved2 = tuning.failed_goal_moved_m ** 2
@@ -1077,7 +1077,7 @@ def next_target(costmap: Any, pose: Any, state: ExploreState, *,
             score *= 1.0 + tuning.forward_bonus * align
 
         # Anti-revisit. Two changes on what shipped, both from the run the
-        # owner watched on 26/08 (his words: "re-visiting is only worth it once
+        # was watched live (the rule: "re-visiting is only worth it once
         # the other rooms are done"):
         #
         #   what counts   every place the rover has already SWEPT counts, not
