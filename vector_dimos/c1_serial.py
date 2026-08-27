@@ -35,15 +35,25 @@ class C1Scanner:
     # ── lifecycle ──────────────────────────────────────────────────────
     def open(self) -> None:
         self._ser = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
+        # Modem lines are LOAD-BEARING on this chain (measured 27/08 10h45,
+        # DTR/RTS matrix on the CP2102): the C1 answers with exactly ONE of
+        # DTR/RTS asserted and is MUTE with both low or both high. The cp210x
+        # keeps the last state across opens, so a killed stack can freeze the
+        # dead combo in place - that was the whole 26/08-evening "dead lidar"
+        # (reboots and even a night off power never fixed it: every open
+        # re-established DTR=False with RTS wherever the kill left it).
+        # DTR low + RTS high is the known-good state; set BOTH, always.
         self._ser.dtr = False
+        self._ser.rts = True
         self.stop()
         self._wake()
 
     def _wake(self) -> None:
         """Le C1 reste parfois engourdi apres un debranchement a chaud : sa
         liaison ne repond plus jusqu'a recevoir un deluge de requetes
-        (constate et resolu le 25/08). On sonde GET_INFO ; si silence, on
-        martele A5 50 et on re-sonde toutes les secondes.
+        (constate et resolu le 25/08). On sonde GET_INFO ; si silence, une
+        bascule RTS (front montant = le reset qui a ressuscite le lidar le
+        27/08 apres 12 h de silence), puis le marteau A5 50.
 
         6 s : la vraie torpeur s'est toujours reglee en 6 (metrox 27/08 -
         l'essai a 30 s du 26/08 au soir n'a rien reveille de plus, il ne
@@ -52,6 +62,16 @@ class C1Scanner:
             self.info()
             return
         except Exception:  # noqa: BLE001 - engourdi, on le reveille
+            pass
+        self._ser.rts = False
+        time.sleep(0.3)
+        self._ser.rts = True          # rising edge: the C1 reboots (banner) and listens again
+        time.sleep(2.5)
+        self._ser.reset_input_buffer()
+        try:
+            self.info()
+            return
+        except Exception:  # noqa: BLE001 - toujours rien, le deluge alors
             pass
         deadline = time.monotonic() + 6.0
         while time.monotonic() < deadline:

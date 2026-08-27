@@ -9,7 +9,7 @@ you see, what do you not see" in ten seconds, with the real port map:
     ttyUSB0  FTDI FT232R (Waveshare dongle)  ZLAC motor bus, 115200
     ttyUSB1  CH340                           PZEM-017 battery shunt, 9600 8N2
     ttyACM0  Espressif ESP32                 contact switches + sonar, 115200
-    ttyUSB2  CP2102 Silicon Labs              RPLIDAR C1, 460800
+    ttyACM1  FIREPHX FX2348N (rehabilite 27/08) RPLIDAR C1, 460800
 
 Read-only: nothing is enabled, written or moved.
 
@@ -40,7 +40,7 @@ def check_ports() -> None:
     from vector_dimos.esp_sensors import ESP_PORT
     from vector_dimos.rplidar_c1 import DEFAULT_PORT as LIDAR_PORT
     for label, path in (("moteurs (FTDI/Waveshare)", MOTOR_PORT),
-                        ("lidar C1 (CP2102)", LIDAR_PORT),
+                        ("lidar C1 (FIREPHX)", LIDAR_PORT),
                         ("ESP32 contacts+sonar", ESP_PORT),
                         ("shunt PZEM (CH340)", "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0")):
         verdict(Path(path).exists(), f"{label} enumere", path.rsplit('/', 1)[-1])

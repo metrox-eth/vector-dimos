@@ -33,7 +33,13 @@ logger = setup_logger()
 # VBUS cut, then mute forever - a full software-elimination ledger sits in
 # the palace note vector-hardware-ops. The owner's multimeter cleared the
 # wiring; the stick was the fault.
-DEFAULT_PORT = "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0"
+# The FIREPHX stick, rehabilitated and re-plugged by the owner 27/08 10h44
+# (unique serial FX2348N - no by-id collision with the PZEM's CH340). It
+# replaced the Silicon Labs CP2102 of 26/08 17h12. NOTE 27/08: the "dead
+# lidar" of 26/08 evening was never the hardware - the modem lines are
+# load-bearing (see c1_serial.open): a killed stack froze RTS in the mute
+# combo and every reopen kept it there.
+DEFAULT_PORT = "/dev/serial/by-id/usb-FIREPHX_USB_SER_FX2348N-if00"
 # 460800 is the C1's line rate. The reader is our own (c1_serial.py, plain
 # pyserial): rplidar-roboticia 0.9.5 answered "Descriptor length mismatch" on
 # this unit (2026-08-23) while the raw SLAMTEC protocol worked first try.
