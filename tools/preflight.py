@@ -17,6 +17,7 @@ Read-only: nothing is enabled, written or moved.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -145,6 +146,19 @@ def check_usb_devices() -> None:
         out = subprocess.run(["lsusb"], capture_output=True, text=True, timeout=10).stdout
         verdict("8086:0b5c" in out, "RealSense D455F presente")
         verdict("2886:" in out, "ReSpeaker 4-mic present")
+        # gamepad (owner order 27/08 14h50: au flight check). The pad speaks
+        # TWO USB identities depending on its mode (Xbox 045e:028e or shanwan
+        # Android HID) - the check is the JOYSTICK DEVICE, not a vendor id.
+        # Wake ritual (owner, 27/08 16h38): a silent pad only turns green when
+        # it TRANSMITS - press the button UNDER the pad (re-pair), then move a
+        # stick. Home alone does nothing; blue blinking does not block.
+        import os as _os
+        js = _os.path.exists("/dev/input/js0")
+        if os.environ.get("GAMEPAD", "0") == "1":
+            verdict(js, "manette (js0)", "presente - si muette: bouton SOUS le pad puis bouger un stick"
+                    if js else "ABSENTE - vol manette impossible")
+        else:
+            print(f"  {'OK ' if js else '.. '}manette (js0) - {'presente' if js else 'absente (pas requise)'}")
     except Exception as exc:  # noqa: BLE001
         verdict(False, "lsusb", str(exc))
 

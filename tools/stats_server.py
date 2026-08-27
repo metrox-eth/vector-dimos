@@ -31,6 +31,7 @@ SOC_V_FULL = 28.0
 PZEM_PORT = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
 
 _prev_cpu = None  # (idle, total)
+_prev_cores = None  # [(idle, total)] par coeur - vue par coeur (metrox 27/08 17h50)
 _pzem_port_cache = None
 
 
@@ -62,6 +63,35 @@ def cpu_percent():
     return round(100.0 * (1 - (idle1 - idle0) / dt), 1) if dt > 0 else 0.0
 
 
+def cpu_per_core():
+    """Per-core usage since the previous call - same delta method as cpu_percent.
+    Ordered cpu0..cpuN; the panel draws one small bar per core so a single
+    saturated worker reads differently from a spread load."""
+    global _prev_cores
+
+    def sample():
+        out = []
+        for line in _read("/proc/stat").splitlines()[1:]:
+            if not line.startswith("cpu"):
+                break
+            vals = [int(x) for x in line.split()[1:]]
+            idle = vals[3] + (vals[4] if len(vals) > 4 else 0)
+            out.append((idle, sum(vals)))
+        return out
+
+    if _prev_cores is None:
+        _prev_cores = sample()
+        time.sleep(0.2)
+    prev = _prev_cores
+    cur = sample()
+    _prev_cores = cur
+    res = []
+    for (i0, t0), (i1, t1) in zip(prev, cur):
+        dt = t1 - t0
+        res.append(round(100.0 * (1 - (i1 - i0) / dt), 1) if dt > 0 else 0.0)
+    return res
+
+
 def meminfo():
     info = {}
     for line in _read("/proc/meminfo").splitlines():
@@ -76,17 +106,41 @@ def meminfo():
     }
 
 
-def gpu_percent():
-    """Orin GPU load: /sys value is in tenths of a percent."""
+_gpu_samples = []   # (t, pct) - moyenne glissante 3 s (metrox 27/08 20h52:
+                    # la lecture instantanee ratait les rafales CUDA de 4 ms,
+                    # le panneau oscillait 0% / 13% sans sens)
+
+
+def _gpu_read_once():
+    """Orin GPU load: /sys value is in tenths of a percent. INSTANTANE."""
     for path in ("/sys/devices/platform/bus@0/17000000.gpu/load",
                  "/sys/devices/gpu.0/load"):
         raw = _read(path)
         if raw is not None:
             try:
-                return round(int(raw) / 10.0, 1)
+                return int(raw) / 10.0
             except ValueError:
                 pass
     return None
+
+
+def _gpu_sampler():
+    """20 Hz en continu: le duty-cycle d'un mapper qui travaille par rafales
+    de 4 ms n'existe que comme MOYENNE, jamais comme echantillon."""
+    while True:
+        v = _gpu_read_once()
+        now = time.time()
+        if v is not None:
+            _gpu_samples.append((now, v))
+            while _gpu_samples and now - _gpu_samples[0][0] > 3.0:
+                _gpu_samples.pop(0)
+        time.sleep(0.05)
+
+
+def gpu_percent():
+    if not _gpu_samples:
+        return _gpu_read_once()
+    return round(sum(v for _, v in _gpu_samples) / len(_gpu_samples), 1)
 
 
 def temps():
@@ -186,6 +240,7 @@ def collect():
         "hostname": socket.gethostname(),
         "uptime_s": int(uptime),
         "cpu_percent": cpu_percent(),
+        "cpu_per_core": cpu_per_core(),
         "gpu_percent": gpu_percent(),
         "load_1m": round(load_1m, 2),
         **meminfo(),
@@ -202,6 +257,28 @@ def collect():
 # topics fall silent and the panel says so honestly.
 
 _seen = {}          # family -> last wall time
+_reloc_state = ["?"]   # frame_id du dernier reloc_frame (reloc:persistent/fresh/searching)
+_watcher_last = [0.0]  # derniere requete /metrics?watcher=iris (la vigie d'Iris)
+_cuda_state = [None]   # {"torch": bool, "open3d": bool} - sonde une fois au demarrage
+
+
+def _probe_cuda() -> None:
+    """One-shot, in a thread: the imports cost seconds on the Jetson and the
+    answer cannot change while the process lives. Panel row ordered by the
+    owner 27/08 17h58 - the GPU sat at 0% for days while the CPU burned and
+    nobody could SEE that the wheels were CPU-only."""
+    state = {"torch": False, "open3d": False}
+    try:
+        import torch
+        state["torch"] = bool(torch.cuda.is_available())
+    except Exception:
+        pass
+    try:
+        import open3d.core as o3c
+        state["open3d"] = bool(o3c.cuda.is_available())
+    except Exception:
+        pass
+    _cuda_state[0] = state
 _counts = {}        # family -> msgs in the current window
 _FAMILIES = (("lidar_scan", ("pointcloud",)),
              ("odometry", ("/odom",)),
@@ -210,7 +287,30 @@ _FAMILIES = (("lidar_scan", ("pointcloud",)),
              ("costmap", ("global_costmap",)),
              ("drive", ("cmd_vel",)),
              ("switches", ("bump",)),
-             ("sonar", ("sonar_range",)))
+             ("sonar", ("sonar_range",)),
+             ("reloc", ("reloc_frame",)))
+GAMEPAD_DEV = "/dev/input/js0"
+_gamepad_last_input = [0.0]      # wall time of the last REAL pad event (radio proof)
+
+
+def _gamepad_listener():
+    """Reads js0 events (8-byte records) to timestamp real pad ACTIVITY.
+    The device existing only proves the DONGLE (owner, 27/08 15h01: "tu
+    parles du dongle ou du gamepad ?" - the organ was lying). Multiple
+    readers are fine on a joystick device."""
+    import struct
+    while True:
+        try:
+            with open(GAMEPAD_DEV, "rb") as f:
+                while True:
+                    ev = f.read(8)
+                    if not ev:
+                        break
+                    _t, _v, ev_type, _num = struct.unpack("IhBB", ev)
+                    if not (ev_type & 0x80):        # ignore init events
+                        _gamepad_last_input[0] = time.time()
+        except Exception:
+            time.sleep(3.0)
 
 
 def _family_of(channel):
@@ -220,22 +320,64 @@ def _family_of(channel):
     return None
 
 
+_bus_seen = {"lcm": 0.0, "zenoh": 0.0}   # dernier message vu par bus (migration zenoh 27/08)
+
+
+def _on_bus_message(bus, channel, data):
+    """Logique commune aux DEUX bus : familles d'organes + etat reloc."""
+    _bus_seen[bus] = time.time()
+    fam = _family_of(channel)
+    if fam:
+        _seen[fam] = time.time()
+        _counts[fam] = _counts.get(fam, 0) + 1
+    if "reloc_frame" in channel:
+        try:
+            from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
+            _reloc_state[0] = str(PoseStamped.lcm_decode(data).frame_id).replace("reloc:", "")
+        except Exception:
+            pass
+
+
 def _lcm_listener():
     try:
         import lcm as lcmlib
     except ImportError:
         return
-    def cb(channel, _data):
-        fam = _family_of(channel)
-        if fam:
-            _seen[fam] = time.time()
-            _counts[fam] = _counts.get(fam, 0) + 1
+    def cb(channel, data):
+        _on_bus_message("lcm", channel, data)
     while True:
         try:
             lc = lcmlib.LCM()
             lc.subscribe(".*", cb)
             while True:
                 lc.handle_timeout(1000)
+        except Exception:
+            time.sleep(3.0)
+
+
+def _zenoh_listener():
+    """Le panneau ecoute LES DEUX bus pendant la migration zenoh (27/08) :
+    quel que soit le transport du stack, les organes s'allument - pas de jour J.
+    Meme hote que le stack, la decouverte loopback par defaut suffit. La cle
+    zenoh est normalisee en nom de canal (slash de tete) pour que les memes
+    aiguilles d'organes matchent."""
+    try:
+        import zenoh
+    except ImportError:
+        return
+    def cb(sample):
+        try:
+            channel = "/" + str(sample.key_expr).lstrip("/")
+            data = bytes(sample.payload)
+        except Exception:
+            return
+        _on_bus_message("zenoh", channel, data)
+    while True:
+        try:
+            s = zenoh.open(zenoh.Config())
+            s.declare_subscriber("**", cb)
+            while True:
+                time.sleep(1.0)
         except Exception:
             time.sleep(3.0)
 
@@ -257,7 +399,7 @@ def sensors():
     now = time.time()
     out = {"stack_running": _stack_running(),
            "ports_plugged": sorted(os.path.basename(p) for p in glob.glob("/dev/serial/by-id/*")),
-           "sonar_note": "DISABLED in the stack (owner vote 26/08: bumper cushion incident)"}
+           "sonar_note": "disabled"}
     home = os.path.expanduser("~")
     pm = os.path.join(home, ".local/state/vector/persistent_map.npz")
     ko = os.path.join(home, ".local/state/vector/keepout.json")
@@ -268,6 +410,44 @@ def sensors():
             out["zones"] = len(json.load(open(ko)).get("zones", []))
         except Exception:
             pass
+    import glob as _glob
+    import os as _os
+    import subprocess as _sp
+    runs = sorted(_glob.glob(_os.path.expanduser("~/.local/state/dimos/logs/*-vector-dimos-explore")), key=_os.path.getmtime)
+    run_id = _os.path.basename(runs[-1]) if runs else None
+    try:
+        ss_out = _sp.run(["ss", "-tn", "state", "established", "( sport = :9877 )"],
+                         capture_output=True, text=True, timeout=3).stdout
+        rerun_connected = len([ln for ln in ss_out.splitlines() if ":9877" in ln]) > 0
+    except Exception:
+        rerun_connected = False
+    garde = any("garde_vitesse" in (open(f"/proc/{p}/cmdline", "rb").read().decode(errors="replace") if _os.path.isdir(f"/proc/{p}") else "")
+                for p in _os.listdir("/proc") if p.isdigit()) if _os.path.isdir("/proc") else False
+    out["software"] = {"stack_running": out.get("stack_running", False),
+                       "run_id": run_id,
+                       "rerun_connected": rerun_connected,
+                       "garde_vitesse": garde,
+                       "reloc_state": _reloc_state[0]}
+    # Owner's rule (27/08 15h57): the panel is Iris's instrument too - her vigil
+    # polls /metrics?watcher=iris and this row proves someone is actually watching.
+    w_last = _watcher_last[0]
+    w_age = (time.time() - w_last) if w_last else None
+    out["software"]["monitoring"] = {"alive": w_age is not None and w_age < 45.0,
+                                     "age_s": round(w_age, 1) if w_age is not None else None}
+    out["software"]["cuda"] = _cuda_state[0]
+    # quel bus porte le stack (migration zenoh): frais = message < 5 s
+    now_b = time.time()
+    lcm_ok = now_b - _bus_seen["lcm"] < 5.0
+    zen_ok = now_b - _bus_seen["zenoh"] < 5.0
+    out["software"]["bus"] = ("les deux" if lcm_ok and zen_ok else
+                              "zenoh" if zen_ok else
+                              "lcm" if lcm_ok else "aucun")
+    dongle = _os.path.exists(GAMEPAD_DEV)
+    last = _gamepad_last_input[0]
+    age = (time.time() - last) if last else None
+    out["gamepad"] = {"alive": bool(dongle and age is not None and age < 120.0),
+                      "age_s": round(age, 1) if age is not None else None,
+                      "msgs": 1 if dongle else 0}
     for fam, _needles in _FAMILIES:
         last = _seen.get(fam)
         out[fam] = {"alive": last is not None and now - last < 5.0,
@@ -289,7 +469,7 @@ def _panel_html():
     def dot(ok, warn=False):
         return f'<td style="font-size:3vh;padding-right:1.5vw">{"&#128994;" if ok else ("&#128992;" if warn else "&#128308;")}</td>'
     rows.append(f"<tr>{dot(d['stack_running'])}<td>stack dimOS</td><td>{'en vol' if d['stack_running'] else 'arretee'}</td></tr>")
-    labels = {"lidar_scan": "lidar C1", "odometry": "odometrie", "imu": "IMU (gyro)", "camera": "RealSense",
+    labels = {"lidar_scan": "lidar C1", "odometry": "odometrie", "imu": "IMU (gyro)", "gamepad": "manette", "camera": "RealSense",
               "costmap": "carte", "drive": "commandes roues", "switches": "switchs (contacts)"}
     for fam, label in labels.items():
         st = d[fam]
@@ -343,7 +523,9 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 body = f"<pre>panel error: {e}</pre>".encode()
             ctype = "text/html"
-        elif self.path == "/metrics":
+        elif self.path.startswith("/metrics"):
+            if "watcher=iris" in self.path:
+                _watcher_last[0] = time.time()
             try:
                 data = collect()
                 data["sensors"] = sensors()
@@ -367,5 +549,9 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     import threading
     threading.Thread(target=_lcm_listener, daemon=True).start()
+    threading.Thread(target=_zenoh_listener, daemon=True).start()
+    threading.Thread(target=_gpu_sampler, daemon=True).start()
+    threading.Thread(target=_gamepad_listener, daemon=True).start()
+    threading.Thread(target=_probe_cuda, daemon=True).start()
     print(f"VECTOR stats server on 0.0.0.0:{PORT} (/panel = organes, /metrics = JSON)", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
