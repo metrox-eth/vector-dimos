@@ -23,8 +23,13 @@ echo "== 0/7 rover REPOSITIONNE + no stack already flying =="
 # blank map 10 cm from the sofa; its first act was bumping it). Interactive:
 # ask and wait. Detached (Iris): REPOSITIONNE=1 required, given only after
 # his word.
+# Torque OFF before any repositioning (owner, 27/08 12h25: "il faut toujours
+# enlever la torque des moteurs, sinon je dois le trainer sur le sol - il
+# fait 26-27 kg"). The release is part of the gate itself, never goodwill.
 if [ "${REPOSITIONNE:-0}" != "1" ]; then
   if [ -t 0 ]; then
+    ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py' 2>/dev/null | tail -1
+    echo "Couple moteurs RELACHE - le rover se pousse a la main."
     read -r -p "Rover repositionne au point de depart ? [Entree pour confirmer] " _
   else
     echo "REFUS: lancement detache sans REPOSITIONNE=1 (le rover doit etre replace d'abord - regle 27/08)"
