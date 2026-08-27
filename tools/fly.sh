@@ -67,7 +67,11 @@ echo "== 5/7 the organ panel on the owner's screen (GATE) =="
 ssh $ROVER 'pgrep -f "[s]tats_server" >/dev/null || (cd ~/vector-dimos && nohup ./.venv/bin/python tools/stats_server.py >> /tmp/stats_server.log 2>&1 & sleep 2)'
 curl -sf -m 5 "http://192.168.0.56:8900/metrics" | grep -q '"sensors"' \
   || { echo "NO ORGAN PANEL - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
-echo "panel answering (the /vol page opens it - one window, next gate)"
+# The organs live in the REAL Robot Control Panel (VECTOR tab, Organs card).
+# Separate TABS, never iframes (owner 27/08: "pas de iframes ca affiche pas bien").
+DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://10.44.0.20:3000/vector" >/dev/null 2>&1 &
+DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://192.168.0.56:8902/" >/dev/null 2>&1 &
+echo "organ block answering - Control Panel VECTOR tab + zones map opened"
 
 echo "== 6/7 the camera cockpit on the owner's screen (GATE) =="
 # The cockpit page (deno, 7780) and its video (WebTransport over QUIC/UDP) both
@@ -94,9 +98,8 @@ timeout 15 ssh -fN -L 7780:127.0.0.1:7780 -L 8900:127.0.0.1:8900 $ROVER
 sleep 2
 curl -sf -m 8 -o /dev/null "http://127.0.0.1:7780/" \
   || { echo "NO COCKPIT PAGE - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
-DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://127.0.0.1:8900/vol" >/dev/null 2>&1 &
-echo "flight deck opened: http://127.0.0.1:8900/vol (cockpit + organs + zones, one window)"
-echo "cockpit QUIC port $WT_PORT relayed - reload the page if 'connected' is missing"
+DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://127.0.0.1:7780/" >/dev/null 2>&1 &
+echo "cockpit tab opened (QUIC port $WT_PORT relayed) - reload it if 'connected' is missing"
 
 if [ "$DRY" = "1" ]; then
   echo "== 7/7 DRY: exploration NOT started =="
