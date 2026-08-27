@@ -355,6 +355,16 @@ RERUN_CONFIG = {
         # Aligned depth shares camera_color_optical_frame, so this is the same
         # frustum a second time - and it would stay pinned at the origin.
         "world/depth_camera_info": None,
+        # The camera IMAGES never go to Rerun (owner, 27/08: un-eyeing the RGB
+        # and depth streams by hand at every flight, "qui volent des
+        # ressources"). The cockpit is where the camera is watched; Rerun is
+        # the map. Suppressed at the bridge, so the Jetson does not even
+        # encode them for the viewer. Both path spellings kept: the entity is
+        # "world/<channel>" today, bare "<channel>" if the prefix ever moves.
+        "world/color_image": None,
+        "world/depth_image": None,
+        "color_image": None,
+        "depth_image": None,
     },
 }
 

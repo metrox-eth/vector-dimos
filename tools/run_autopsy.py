@@ -179,7 +179,8 @@ def main() -> int:
     print(f"LE FILM -> {out}")
     print(f"  {mins:.1f} min, {dist:.1f} m parcourus")
     print(f"  buts: {n['goal']} choisis, {n['arrived']} atteints, "
-          f"{n['abandon']} abandonnes, {n['escape']} escapes contact, {n['bump']} chocs")
+          f"{n['abandon'] + n['escape']} abandonnes (stuck + contact: chaque escape annule son but), "
+          f"{n['escape']} escapes contact, {n['bump']} chocs")
     if n["backup"] or n["slip"]:
         print(f"  (log d'avant le 26/08: {n['backup']} reculs aveugles, {n['slip']} slips)")
     per_min = (n["abandon"] + n["backup"] + n["bump"]) / max(mins, 0.1)
