@@ -22,6 +22,17 @@ from dimos.core.coordination.blueprints import autoconnect
 
 from vector_dimos.blueprints import VectorControlCoordinator, _coordinator_blueprint
 from vector_dimos.explorer2 import explorer_v2_enabled
+
+
+def stock_nav_enabled() -> bool:
+    """STOCK_NAV=1: Sunday's stack (owner, 27/08 12h05: "la nav a fonctionne
+    que dimanche avec un dimOS frais... tu inventes des methodes de navigation").
+    dimOS's own CostMapper (occupancy algo, the 23/08 workaround) + the stock
+    wavefront frontier explorer (VectorExplorer subclasses it for speed only).
+    Our custom 2D map / explorer2 / persistent map go DORMANT - parked, not
+    deleted. Stays: kiss-icp pose (gyro only), bump reflexes, the deck."""
+    return os.environ.get("STOCK_NAV", "0") == "1"
+
 def camera_mount():
     """base_link -> camera_link as mounted since 24/08 (bumper build): 0.20 m
     BEHIND the lidar axis (metrox's tape), 0.56 m up (floor fit), nose 1.1 deg
@@ -379,6 +390,7 @@ def _nav_blueprint():
     from dimos.core.global_config import global_config
     from vector_dimos.camera import VectorCamera
     from vector_dimos.costmap2d import VectorCostMap
+    from dimos.mapping.costmapper import CostMapper
     from dimos.mapping.voxels.module import VoxelGridMapper
     from dimos.visualization.vis_module import vis_module
     from vector_dimos.lidar_odometry import LidarOdometry
@@ -399,7 +411,9 @@ def _nav_blueprint():
         # False and the prior falls back to constant-velocity on its own.
         LidarOdometry.blueprint(),
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
-        VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
+        (CostMapper.blueprint(algo="occupancy") if stock_nav_enabled() else
+         VectorCostMap.blueprint()),   # STOCK_NAV=1 -> dimOS's CostMapper (occupancy algo, Sunday's
+                                       # config); else our 2D map (learns/unlearns, two layers)
         vis_module(viewer_backend=global_config.viewer, rerun_config=RERUN_CONFIG),
     ).remappings([
         (VectorControlCoordinator, "twist_command", "cmd_vel"),
@@ -417,7 +431,7 @@ def _explorer_blueprint():
     mid-drive (4 goals, 0 reached, 25/08 21:31). min_frontier_perimeter=0.3 in
     both: 0.5 m of perimeter hid the doorway-sized frontiers in this flat.
     """
-    if explorer_v2_enabled():
+    if explorer_v2_enabled() and not stock_nav_enabled():
         from vector_dimos.explorer2 import Explorer2
         # No info_gain_threshold, no num_no_gain_attempts, no lookahead_distance,
         # no max_explored_distance: v2 has no self-stop and no distance-from-
@@ -446,6 +460,7 @@ def _explore_blueprint():
     from dimos.core.global_config import global_config
     from vector_dimos.camera import VectorCamera
     from vector_dimos.costmap2d import VectorCostMap
+    from dimos.mapping.costmapper import CostMapper
     from dimos.mapping.voxels.module import VoxelGridMapper
     from vector_dimos.esp_sensors import EspSensors
     from vector_dimos.memory import VectorMemory
@@ -475,7 +490,9 @@ def _explore_blueprint():
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=10, carve_columns=False),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
         # dimOS's height-cost defaults are for a quadruped (can_climb 0.15 m, pass
         # under 0.6 m): VECTOR climbs nothing (3 cm) and its camera top is ~0.85 m.
-        VectorCostMap.blueprint(),   # our 2D map (learns/unlearns, two layers) - dimOS's CostMapper erased table legs
+        (CostMapper.blueprint(algo="occupancy") if stock_nav_enabled() else
+         VectorCostMap.blueprint()),   # STOCK_NAV=1 -> dimOS's CostMapper (occupancy algo, Sunday's
+                                       # config); else our 2D map (learns/unlearns, two layers)
         # the rover is 54x46 cm but its corners sweep 0.71 m when it pivots and the
         # camera mast stands at the front bumper: give the planner a footprint with margin
         # width 0.46 + 4 cm: in discovery mode the rover drives along its length and turns in place,
