@@ -88,43 +88,47 @@ check(exported == "x11 dummy",
       f"(setdefault, not assignment): {exported!r}")
 
 # SDL: stick up = -1. Full forward + R2 held -> 0.6 * 2.0 = 1.2 m/s.
-check(twist_close(axes_to_twist(0.0, -1.0, 0.0, 1.0, CFG), (1.2, 0.0, 0.0)),
-      "stick fully forward + boost -> vx = 1.2 m/s")
-check(twist_close(axes_to_twist(0.0, -1.0, 0.0, -1.0, CFG), (0.6, 0.0, 0.0)),
-      "stick fully forward, trigger at rest -> vx = 0.6 m/s")
+check(twist_close(axes_to_twist(0.0, -1.0, 0.0, 1.0, CFG), (gp.CLAMP_LINEAR_MS, 0.0, 0.0)),
+      "stick fully forward + boost -> vx CLAMPED at 0.2 m/s (post-runaway ceiling)")
+check(twist_close(axes_to_twist(0.0, -1.0, 0.0, -1.0, CFG), (gp.CLAMP_LINEAR_MS, 0.0, 0.0)),
+      "stick fully forward -> vx CLAMPED at 0.2 m/s")
 check(twist_close(axes_to_twist(0.0, -0.5, 0.0, -1.0, CFG), (0.3, 0.0, 0.0)),
-      "stick half forward -> vx = 0.3 m/s")
-check(twist_close(axes_to_twist(0.0, 1.0, 0.0, -1.0, CFG), (-0.6, 0.0, 0.0)),
-      "stick fully back -> vx = -0.6 m/s")
+      "half stick forward -> vx = 0.3 m/s (proportional below the ceiling)")
+check(twist_close(axes_to_twist(0.0, 1.0, 0.0, -1.0, CFG), (-gp.CLAMP_LINEAR_MS, 0.0, 0.0)),
+      "stick fully back -> vx CLAMPED at -0.2 m/s")
 
-# Deadzone: 0.12. Below it the axis is dead, at/above it goes through unscaled.
+# Deadzone: 0.32 since the 27/08 15h20 feel tuning ("deadband toujours trop
+# faible"). Below it the axis is dead, above it goes through unscaled.
 check(twist_close(axes_to_twist(0.05, -0.10, 0.11, -1.0, CFG), (0.0, 0.0, 0.0)),
       "all sticks inside the deadzone -> 0.0 on every axis")
-check(twist_close(axes_to_twist(0.0, -0.20, 0.0, -1.0, CFG), (0.12, 0.0, 0.0)),
-      "stick just outside the deadzone -> vx = 0.12 m/s (no rescaling)")
-check(twist_close(axes_to_twist(0.0, -0.12, 0.0, -1.0, CFG), (0.072, 0.0, 0.0)),
-      "stick exactly at the deadzone -> vx = 0.072 m/s (passes)")
+check(twist_close(axes_to_twist(0.0, -0.20, 0.0, -1.0, CFG), (0.0, 0.0, 0.0)),
+      "0.20 is INSIDE the 0.32 deadzone now -> 0.0 (feel tuning 15h20)")
+check(twist_close(axes_to_twist(0.0, -0.35, 0.0, -1.0, CFG), (0.21, 0.0, 0.0)),
+      "0.35 just outside the deadzone -> vx = 0.21 m/s (no rescaling)")
 
 # Rotation: right stick right (+1) turns clockwise = negative wz.
-check(twist_close(axes_to_twist(0.0, 0.0, 1.0, -1.0, CFG), (0.0, 0.0, -1.2)),
-      "right stick X = +1 -> wz = -1.2 rad/s")
-check(twist_close(axes_to_twist(0.0, 0.0, 1.0, 1.0, CFG), (0.0, 0.0, -1.2)),
-      "boost does not touch rotation -> wz stays -1.2 rad/s")
+check(twist_close(axes_to_twist(0.0, 0.0, 1.0, -1.0, CFG), (0.0, 0.0, -gp.CLAMP_ANGULAR_RADS)),
+      "right stick X = +1 -> wz CLAMPED at -0.6 rad/s")
+check(twist_close(axes_to_twist(0.0, 0.0, 1.0, 1.0, CFG), (0.0, 0.0, -gp.CLAMP_ANGULAR_RADS)),
+      "boost does not touch rotation -> wz stays at the -0.6 ceiling")
 
 # Strafe: left stick left (-1) strafes to +y.
-check(twist_close(axes_to_twist(-1.0, 0.0, 0.0, -1.0, CFG), (0.0, 0.6, 0.0)),
-      "left stick X = -1 -> vy = +0.6 m/s (strafe left)")
-check(twist_close(axes_to_twist(1.0, 0.0, 0.0, -1.0, CFG), (0.0, -0.6, 0.0)),
-      "left stick X = +1 -> vy = -0.6 m/s (strafe right)")
-check(twist_close(axes_to_twist(-0.5, -1.0, 0.5, -1.0, CFG),
-                  (0.6, 0.3, -0.6)),
-      "diagonal + turn -> (0.6, 0.3, -0.6) m/s, m/s, rad/s")
+check(twist_close(axes_to_twist(-1.0, 0.0, 0.0, -1.0, CFG), (0.0, gp.CLAMP_LINEAR_MS, 0.0)),
+      "left stick X = -1 -> vy CLAMPED at +0.2 m/s (strafe left)")
+check(twist_close(axes_to_twist(1.0, 0.0, 0.0, -1.0, CFG), (0.0, -gp.CLAMP_LINEAR_MS, 0.0)),
+      "left stick X = +1 -> vy CLAMPED at -0.2 m/s (strafe right)")
+check(twist_close(axes_to_twist(-0.5, -0.5, 0.5, -1.0, CFG),
+                  (0.15, 0.15, -0.3)),
+      "diagonal + turn (half sticks: 0.3+0.3+0.5*0.6 = 0.9 m/s rim) -> wheel "
+      "envelope halves it to (0.15, 0.15, -0.3) - the '17h08 additive speeds' fix")
 
 # A non-default envelope must scale, nothing hard-coded.
 SLOW = TeleopConfig(linear_speed=0.25, angular_speed=0.5, deadzone=0.2,
                     boost_multiplier=3.0)
-check(twist_close(axes_to_twist(0.0, -1.0, -1.0, 1.0, SLOW), (0.75, 0.0, 0.5)),
-      "custom cfg (0.25 m/s, 0.5 rad/s, boost x3) -> (0.75, 0.0, 0.5)")
+vx, vy, wz = axes_to_twist(0.0, -1.0, -1.0, 1.0, SLOW)
+rim = abs(vx) + abs(vy) + gp.MECANUM_LEVER_M * abs(wz)
+check(abs(rim - gp.WHEEL_ENVELOPE_MS) < 1e-9 and abs(vx / wz - 0.45 / 0.5) < 1e-9,
+      "custom cfg full fwd+turn+boost -> rim held at the envelope, gesture proportions kept")
 
 
 # --- B. hot-plug cycle on a fake pygame -----------------------------------
@@ -136,8 +140,9 @@ class FakeError(Exception):
 
 
 class FakePad:
-    def __init__(self, name, axes):
+    def __init__(self, name, axes, buttons=8):
         self.name, self.axes = name, axes
+        self.buttons = [0] * buttons
 
     def init(self):
         pass
@@ -150,6 +155,12 @@ class FakePad:
 
     def get_axis(self, index):
         return self.axes[index]
+
+    def get_numbuttons(self):
+        return len(self.buttons)
+
+    def get_button(self, index):
+        return self.buttons[index]
 
 
 class FakeJoystickModule:
@@ -216,13 +227,29 @@ check(pad_module._thread.is_alive() and not published,
 check(spy.count("waiting for gamepad (index 0)") == 1,
       "the waiting line is logged ONCE, not once per scan")
 
-# 2. pad appears. Axis layout of a real pad: 0=LX 1=LY 2=L2 3=RX 4=RY 5=R2.
-# Sticks forward, both triggers at rest -> vx = 0.6 m/s and nothing else.
+# 2. pad appears WITH FULL-DEFLECTION AXES (the 13h42 runaway pattern):
+# the trust gate must hold everything at zero until neutral is seen.
 js.pad = FakePad("Fake DS4", [0.0, -1.0, -1.0, 0.0, 0.0, -1.0])
 check(wait_for(lambda: spy.count("Gamepad connected: Fake DS4") == 1, 5.0),
       "pad plugged in -> logs its name")
-check(wait_for(lambda: published and close(published[-1].linear.x, 0.6), 3.0),
-      f"publishes vx = 0.6 m/s (got {published[-1].linear.x if published else None})")
+time.sleep(0.3)
+check(all(close(t.linear.x, 0.0) for t in published[-10:]) if published else True,
+      "full deflection at connection -> ZEROS only (trust gate holds)")
+# neutral seen once -> trust earned. Axis 2 IS the rotation stick since the
+# 15h21 measurement - its rest is 0.0, not the old axis-3-era -1.0.
+js.pad.axes = [0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
+check(wait_for(lambda: spy.count("axes seen at neutral") == 1, 3.0),
+      "sticks at rest -> trust earned (logged once)")
+# deadman NOT held: still zeros even with a deflected stick (axis 2 = the
+# rotation stick since 15h21: at rest 0.0, or the pose commands a full turn)
+js.pad.axes = [0.0, -1.0, 0.0, 0.0, 0.0, -1.0]
+time.sleep(0.3)
+check(all(close(t.linear.x, 0.0) for t in published[-5:]),
+      "stick forward WITHOUT the deadman held -> still zeros")
+# deadman held -> motion, CLAMPED at the ceiling
+js.pad.buttons[gp.DEADMAN_BUTTON] = 1
+check(wait_for(lambda: published and close(published[-1].linear.x, gp.CLAMP_LINEAR_MS), 3.0),
+      f"deadman held + stick forward -> vx = 0.2 m/s CEILING (got {published[-1].linear.x if published else None})")
 check(close(published[-1].linear.y, 0.0) and close(published[-1].angular.z, 0.0),
       "and vy = 0.0 m/s, wz = 0.0 rad/s on the other axes")
 
@@ -239,25 +266,36 @@ check(pad_module._thread.is_alive(), "loop survives the unplug")
 check(spy.count("waiting for gamepad (index 0)") == 2,
       "goes back to the waiting state")
 
-# 4. pad comes back: forward + right stick right + R2 held.
-js.pad = FakePad("Fake DS5", [0.0, -1.0, -1.0, 1.0, 0.0, 1.0])
+# 4. pad comes back: trust must be RE-EARNED at neutral, then deadman,
+# then boost + turn - both CLAMPED at the ceilings.
+js.pad = FakePad("Fake DS5", [0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
 check(wait_for(lambda: spy.count("Gamepad connected: Fake DS5") == 1, 5.0),
       "pad plugged back in -> logs the new name")
-check(wait_for(lambda: close(published[-1].linear.x, 1.2), 3.0),
-      f"publishes vx = 1.2 m/s with boost (got {published[-1].linear.x})")
-check(close(published[-1].angular.z, -1.2),
-      f"and wz = -1.2 rad/s, unboosted (got {published[-1].angular.z})")
+check(wait_for(lambda: spy.count("axes seen at neutral") == 2, 3.0),
+      "re-connection re-earns trust at neutral")
+js.pad.buttons[gp.DEADMAN_BUTTON] = 1
+js.pad.axes = [0.0, -1.0, 1.0, 0.0, 0.0, 1.0]   # full fwd + full turn (axis 2) + boost
+expected_k = gp.WHEEL_ENVELOPE_MS / (gp.CLAMP_LINEAR_MS + gp.MECANUM_LEVER_M * gp.CLAMP_ANGULAR_RADS)
+check(wait_for(lambda: published and close(published[-1].linear.x, gp.CLAMP_LINEAR_MS * expected_k), 3.0),
+      f"boost + full turn -> vx enveloped to {gp.CLAMP_LINEAR_MS * expected_k:.3f} "
+      f"(the rim, not each axis, is the ceiling; got {published[-1].linear.x if published else None})")
+check(close(published[-1].angular.z, -gp.CLAMP_ANGULAR_RADS * expected_k),
+      f"... and wz enveloped with the SAME factor (proportions of the gesture kept)")
 
 # 5. a pad that has no R2 axis at all must read as "no boost", not crash.
 js.pad = None
 check(wait_for(lambda: spy.count("waiting for gamepad (index 0)") == 3, 4.0),
       "pad pulled again -> waiting")
-js.pad = FakePad("Fake 4-axis", [0.0, -1.0, 0.0, 0.0])
+js.pad = FakePad("Fake 4-axis", [0.0, 0.0, 0.0, 0.0])
 check(wait_for(lambda: spy.count("Gamepad connected: Fake 4-axis") == 1, 5.0),
       "4-axis pad (no R2) accepted")
-check(wait_for(lambda: close(published[-1].linear.x, 0.6), 3.0)
+check(wait_for(lambda: spy.count("axes seen at neutral") == 3, 3.0),
+      "4-axis pad earns trust at neutral")
+js.pad.buttons[gp.DEADMAN_BUTTON] = 1
+js.pad.axes = [0.0, -1.0, 0.0, 0.0]
+check(wait_for(lambda: close(published[-1].linear.x, gp.CLAMP_LINEAR_MS), 3.0)
       and pad_module._thread.is_alive(),
-      "missing R2 reads as no boost -> vx = 0.6 m/s, loop alive")
+      f"missing R2 = no boost; full stick -> the {gp.CLAMP_LINEAR_MS} ceiling, loop alive")
 
 t0 = time.monotonic()
 pad_module.stop()
@@ -294,3 +332,46 @@ else:
 
 print("\nTEST " + ("PASSED" if ok else "FAILED"))
 raise SystemExit(0 if ok else 1)
+
+
+print("F. les filets du 27/08 (emballement 13h42)")
+from vector_dimos.gamepad import (
+    CLAMP_ANGULAR_RADS, CLAMP_LINEAR_MS, TeleopConfig, axes_neutral, axes_to_twist, clamp_twist,
+)
+
+cfg = TeleopConfig()
+# axes non initialises a pleine deflexion : le neutre n'a jamais ete vu
+check("pleine deflexion = PAS neutre (la porte de confiance la refuse)",
+      axes_neutral(1.0, -1.0, 1.0, cfg.deadzone) is False)
+check("repos manette = neutre (la porte s'ouvre)",
+      axes_neutral(0.01, -0.02, 0.0, cfg.deadzone) is True)
+# plafonds absolus : meme un config fou ne depasse jamais
+folle = TeleopConfig(linear_speed=5.0, angular_speed=9.0, boost_multiplier=4.0)
+vx, vy, wz = axes_to_twist(-1.0, -1.0, 1.0, 1.0, folle)
+check(f"plein stick + boost + config folle -> |vx| <= {CLAMP_LINEAR_MS}", abs(vx) <= CLAMP_LINEAR_MS + 1e-9)
+check(f"... et |vy| <= {CLAMP_LINEAR_MS}", abs(vy) <= CLAMP_LINEAR_MS + 1e-9)
+check(f"... et |wz| <= {CLAMP_ANGULAR_RADS}", abs(wz) <= CLAMP_ANGULAR_RADS + 1e-9)
+# depuis le 27/08 17h15 clamp_twist finit par l'enveloppe roue (mecanum: les
+# commandes s'ADDITIONNENT a la jante - vecu du 1er tour pilote)
+from vector_dimos.gamepad import MECANUM_LEVER_M, WHEEL_ENVELOPE_MS
+vx, vy, wz = clamp_twist(9.0, -9.0, 9.0)
+check("clamp_twist pur: 9 m/s partout -> jante exactement a l'enveloppe",
+      abs(abs(vx) + abs(vy) + MECANUM_LEVER_M * abs(wz) - WHEEL_ENVELOPE_MS) < 1e-9)
+# un seul stick a fond ne perd RIEN (l'enveloppe = le feel d'un stick seul)
+check("avance pure 0.45 -> inchangee", clamp_twist(0.45, 0.0, 0.0) == (0.45, 0.0, 0.0))
+check("rotation pure 0.8 -> inchangee (jante 0.40 < 0.45)", clamp_twist(0.0, 0.0, 0.8) == (0.0, 0.0, 0.8))
+# le mix vecu au tour 17h08: avance pleine + rotation pleine
+vx, vy, wz = clamp_twist(0.45, 0.0, 0.8)
+rim = abs(vx) + MECANUM_LEVER_M * abs(wz)
+check(f"mix avance+rotation -> jante {rim:.3f} = enveloppe {WHEEL_ENVELOPE_MS} (avant: 0.85)",
+      abs(rim - WHEEL_ENVELOPE_MS) < 1e-9)
+check("... et les proportions du geste sont gardees (vx/wz constant)",
+      abs(vx / wz - 0.45 / 0.8) < 1e-9)
+
+
+print("G. la rampe teleop (patinage du 27/08 15h17)")
+from vector_dimos.gamepad import SLEW_LINEAR_MS2, slew
+check("pas de saut: 0 -> plein stick limite a 0.06 m/s par pas de 0.1 s",
+      abs(slew(0.0, 0.45, 0.1) - 0.06) < 1e-9)
+check("descente aussi limitee (0.45 -> 0)", abs(slew(0.45, 0.0, 0.1) - 0.39) < 1e-9)
+check("cible proche atteinte exactement", slew(0.05, 0.06, 0.1) == 0.06)

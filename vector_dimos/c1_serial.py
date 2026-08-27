@@ -55,9 +55,8 @@ class C1Scanner:
         bascule RTS (front montant = le reset qui a ressuscite le lidar le
         27/08 apres 12 h de silence), puis le marteau A5 50.
 
-        6 s : la vraie torpeur s'est toujours reglee en 6 (metrox 27/08 -
-        l'essai a 30 s du 26/08 au soir n'a rien reveille de plus, il ne
-        faisait que retarder le verdict)."""
+        6 s: real numbness has always cleared within 6; a 30 s trial woke
+        nothing more, it only delayed the verdict."""
         try:
             self.info()
             return
