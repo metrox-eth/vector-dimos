@@ -52,6 +52,12 @@ pkill -f dimos-viewer 2>/dev/null
 sleep 1
 DISPLAY="${DISPLAY:-:1}" nohup "$VIEWER" "rerun+http://192.168.0.56:9877/proxy" >/tmp/dimos_viewer.log 2>&1 &
 sleep 8
+# The owner should never have to grab, move and resize the map window (27/08:
+# "une petite fenetre... a chaque run la mettre sur l'autre ecran"). Park it
+# fullscreen on the LEFT monitor (DP-1, 0,0) - the panel lives on the right.
+WID=$(DISPLAY="${DISPLAY:-:1}" xdotool search --sync --name "Rerun Viewer" 2>/dev/null | head -1)
+[ -n "$WID" ] && DISPLAY="${DISPLAY:-:1}" xdotool windowmove "$WID" 0 0 windowsize "$WID" 3840 2160 2>/dev/null
+[ -n "$WID" ] && echo "map window parked fullscreen on the left monitor" || echo "(map window not found by name - place it by hand this once)" 
 ssh $ROVER "ss -tn state established \"( sport = :9877 )\" | grep -q ." \
   || { echo "NO LIVE MAP CONNECTION - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
 echo "viewer CONNECTED to this run - the map is live"
@@ -101,6 +107,9 @@ fi
 
 echo "== 7/8 exploration =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py start'
+# the speed watchdog flies with every flight (26/08 it was armed by hand)
+ssh $ROVER 'pgrep -f "[g]arde_vitesse" >/dev/null || (cd ~/vector-dimos && nohup .venv/bin/python tools/garde_vitesse.py > /tmp/garde_vitesse.log 2>&1 < /dev/null &)'
+echo "speed watchdog armed (kills exploration beyond 0.35 m/s)"
 
 echo "== 8/8 the rover must understand WHERE IT IS (GATE) =="
 # Owner (26/08 21h49): as soon as it maps, it must understand where it is and
@@ -118,7 +127,9 @@ else
     V=$(timeout 15 ssh $ROVER "d=\$(ls -td ~/.local/state/dimos/logs/*-vector-dimos-explore/ | head -1); grep -oE 'CONTINUING the persistent map|relocalized late - dropping|resumed in the persistent frame|relocalization: gave up' \"\$d/main.jsonl\" | tail -1")
     case "$V" in
       "CONTINUING the persistent map"|"relocalized late - dropping"|"resumed in the persistent frame")
-        RELOC_OK=1; echo "relocalized (${i}x15 s) - grid aligned, keep-out zones ACTIVE"; break ;;
+        RELOC_OK=1; echo "relocalized (${i}x15 s) - grid aligned, keep-out zones ACTIVE"
+        timeout 15 ssh $ROVER "d=\$(ls -td ~/.local/state/dimos/logs/*-vector-dimos-explore/ | head -1); grep -oE 'prior: gyro=[A-Za-z]+[^\"]{0,30}' \"\$d/main.jsonl\" | tail -1" | sed 's/^/  rotation /'
+        break ;;
       "relocalization: gave up")
         break ;;
       *) [ $((i % 4)) -eq 0 ] && echo "  still finding itself... ($((i * 15)) s)" ;;

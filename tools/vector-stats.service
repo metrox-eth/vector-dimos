@@ -1,0 +1,24 @@
+# The rover's organ + battery server, always up: /metrics (JSON, consumed by
+# the Robot Control Panel's VECTOR tab and fly.sh's gate 5) and /panel (the
+# on-rover fallback page). Passive: LCM listener + the PZEM battery shunt,
+# never another serial port. Died at every Jetson reboot until 27/08 (two
+# mornings of restarting it by hand); now systemd owns it, like the zones UI.
+#
+# Install (on the Jetson):
+#   sudo cp tools/vector-stats.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now vector-stats
+#   systemctl status vector-stats ; journalctl -u vector-stats -f
+
+[Unit]
+Description=VECTOR stats server (organes + batterie, port 8900)
+After=network.target
+
+[Service]
+User=metrox
+WorkingDirectory=/home/metrox/vector-dimos
+ExecStart=/home/metrox/vector-dimos/.venv/bin/python tools/stats_server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
