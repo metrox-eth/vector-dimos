@@ -9,7 +9,7 @@ Bus topology (from the first robot code by Sam, proven on the chassis):
   - LEFT ports (FL, BL) are inverted: negative RPM = forward.
 
 Wheel radius: 0.085 m - the built mecanum wheel MEASURED on the chassis
-(metrox, 2026-08-22): 17 cm diameter, roller tips included. Two other numbers
+(measured on the wheel): 17 cm diameter, roller tips included. Two other numbers
 exist in the first robot code and both are wrong for this wheel: 0.0635 m is
 the bare 5" tire before the mecanum was built around it, and 0.105 m (R_Wheel)
 was a dead constant that never fed the mecanum path. Until 2026-08-22 this
@@ -32,7 +32,7 @@ BODY_FLIPPED = True
 @dataclass(frozen=True)
 class MecanumGeometry:
     wheel_radius_m: float = 0.085    # measured: 17 cm diameter (2026-08-22). Confirm via odometry roundtrip.
-    half_wheelbase_m: float = 0.15   # measured 2026-08-23 (metrox, tape): axle to axle 30 cm
+    half_wheelbase_m: float = 0.15   # tape-measured: axle to axle 30 cm
     half_track_m: float = 0.185      # measured 2026-08-23: 37 cm between the ground contact points (v1 said 0.40 - never measured)
 
     @property

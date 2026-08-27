@@ -31,15 +31,32 @@ logger = setup_logger()
 # CP2102 Silicon Labs, swapped in 26/08 17h12. Its predecessor (FIREPHX
 # USB-TTL, bought 25/08) died the same day: answered exactly once after each
 # VBUS cut, then mute forever - a full software-elimination ledger sits in
-# the palace note vector-hardware-ops. The owner's multimeter cleared the
+# the hardware log. A multimeter cleared the
 # wiring; the stick was the fault.
-# The FIREPHX stick, rehabilitated and re-plugged by the owner 27/08 10h44
+# The FIREPHX stick, rehabilitated and re-plugged
 # (unique serial FX2348N - no by-id collision with the PZEM's CH340). It
 # replaced the Silicon Labs CP2102 of 26/08 17h12. NOTE 27/08: the "dead
 # lidar" of 26/08 evening was never the hardware - the modem lines are
 # load-bearing (see c1_serial.open): a killed stack froze RTS in the mute
 # combo and every reopen kept it there.
-DEFAULT_PORT = "/dev/serial/by-id/usb-FIREPHX_USB_SER_FX2348N-if00"
+# The lidar has lived on two USB-TTL sticks (both known-good silicon); after
+# every shock-and-swap episode the plugged one changes. Resolve whichever is
+# present instead of hardcoding - the owner swaps, the code follows.
+_KNOWN_STICKS = (
+    "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0",
+    "/dev/serial/by-id/usb-FIREPHX_USB_SER_FX2348N-if00",
+)
+
+
+def _resolve_port() -> str:
+    import os
+    for cand in _KNOWN_STICKS:
+        if os.path.exists(cand):
+            return cand
+    return _KNOWN_STICKS[0]
+
+
+DEFAULT_PORT = _resolve_port()
 # 460800 is the C1's line rate. The reader is our own (c1_serial.py, plain
 # pyserial): rplidar-roboticia 0.9.5 answered "Descriptor length mismatch" on
 # this unit (2026-08-23) while the raw SLAMTEC protocol worked first try.
@@ -82,7 +99,7 @@ def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
 
 
 # The camera mast stands in the scan plane: only its horizontal bar, 50 mm
-# wide at 225 mm from the lidar centre (metrox, 23/08) = +-6.3 deg. Masked
+# wide at 225 mm from the lidar centre (measured) = +-6.3 deg. Masked
 # with margin: +-12 deg, under 0.30 m. The +-45 deg / 0.50 m wedge shipped
 # before blinded a 90 deg sector right where the rover hits things.
 MAST_MASK_DEG: tuple[tuple[float, float], ...] = ((348.0, 12.0),)   # wraps past 360
@@ -91,7 +108,7 @@ MASK_RANGE_M = 0.30
 # cables on the lid: 0.25 m returns mapped as obstacles that followed the
 # rover around on 2026-08-23). The chassis is ~0.45 m long, the lidar is at
 # its centre.
-MIN_RANGE_M = 0.15  # metrox 26/08: the 2D lidar sits at the TOP of the rover - its scan plane
+MIN_RANGE_M = 0.15  # the 2D lidar sits at the TOP of the rover - its scan plane
                     # crosses exactly ONE own part, the mast (handled by the directional mask).
                     # The 23/08 "e-stop/cable echoes" that justified a 0.40 blanket cut were an
                     # unverified inference; the cut blinded the pivot annulus and the table legs

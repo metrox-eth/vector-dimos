@@ -6,7 +6,7 @@ The ESP firmware (firmware/esp32_sonar/) prints:
     SW a b c d     on every debounced change + 500 ms heartbeat (1 = pressed)
     SONAR <m>      at 10 Hz (-1 = no echo)
 
-Sensor doctrine (metrox, 25/08): this module does NOT write the map. The
+Sensor doctrine: this module does NOT write the map. The
 lidar is the backbone of localization and mapping; the RealSense camera is
 the only other sensor allowed to put obstacles down. The switches and the
 sonar are reflexes:
@@ -19,7 +19,7 @@ sonar are reflexes:
 
 Corner map (validated live 25/08 17h37): SW order = GPIO 1,2,3,4 =
 avant-gauche, arriere-gauche, arriere-droit, avant-droit.
-Sonar: front centre of the bumper, usable range measured by metrox = 66 cm
+Sonar: front centre of the bumper, usable range measured on the robot = 66 cm
 -> trust cap 0.55 m (regle du monde 17). Median of 3, spread < 0.10 m.
 """
 
@@ -60,7 +60,7 @@ ESP_PORT = "/dev/serial/by-id/usb-Espressif_Systems_Espressif_Device_80b54ee3252
 ESP_BAUD = 115200
 
 # SW index -> (name, body position (x, y), rear?)
-CORNERS = (   # body 62.5 x 46 cm with the bumper bars (metrox 25/08 22h)
+CORNERS = (   # body 62.5 x 46 cm with the bumper bars (measured)
     ("avant-gauche",  (0.31,  0.23), False),
     ("arriere-gauche", (-0.31, 0.23), True),
     ("arriere-droit", (-0.31, -0.23), True),

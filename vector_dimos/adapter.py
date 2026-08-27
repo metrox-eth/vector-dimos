@@ -296,7 +296,7 @@ class VectorBaseAdapter:
             self._sonar_t = time.monotonic()
 
     def _brake_vx(self, vx: float) -> float:
-        """The sonar INFORMS, it no longer brakes (owner, 26/08 19h37).
+        """The sonar INFORMS, it no longer brakes (design decision).
 
         The brake was supposed to die with the guard rip this morning and did
         not; it then spent the whole evening clamping every forward command to

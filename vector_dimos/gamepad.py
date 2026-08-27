@@ -41,7 +41,7 @@ logger = setup_logger()
 
 DEFAULT_LINEAR_SPEED = 0.6    # m/s at full stick
 DEFAULT_ANGULAR_SPEED = 1.2   # rad/s at full stick
-DEFAULT_DEADZONE = 0.12
+DEFAULT_DEADZONE = 0.32
 DEFAULT_RATE_HZ = 50.0
 DEFAULT_BOOST = 2.0
 RESCAN_PERIOD_S = 2.0         # how often we re-scan SDL for a pad
@@ -49,7 +49,7 @@ RESCAN_PERIOD_S = 2.0         # how often we re-scan SDL for a pad
 # SDL axis indices on a standard dual-stick pad (DS4/DS5, Xbox, 8BitDo).
 AXIS_LEFT_X = 0
 AXIS_LEFT_Y = 1
-AXIS_RIGHT_X = 3
+AXIS_RIGHT_X = 2   # MEASURED 27/08 15h21: right-stick X sweeps axis 2 full travel on this pad/mode (axis 3 is its vertical leakage - the random rotation)
 AXIS_R2 = 5
 
 
@@ -70,6 +70,58 @@ def apply_deadzone(value: float, deadzone: float) -> float:
     gives a small command, which is what you want for fine positioning.
     """
     return 0.0 if abs(value) < deadzone else value
+
+
+# Absolute ceilings, applied LAST, regardless of config or boost. Born of the
+# 27/08 13h42 runaway: a fresh xboxdrv delivered full-deflection uninitialised
+# axes straight into tele_cmd_vel (priority channel, no guard anywhere) and
+# the rover left at 1200 W. No teleop output may ever exceed these.
+CLAMP_LINEAR_MS = 0.45
+SLEW_LINEAR_MS2 = 0.6     # max change of linear command per second: full stick
+                          # reaches the ceiling in ~0.75 s instead of one step -
+                          # the mecanum wheelspin fix, on top of the 400 ms ZLAC
+                          # ramps the adapter writes (the era tuning)
+CLAMP_ANGULAR_RADS = 0.8
+# Mecanum wheels ADD the commands: rim speed = |vx| + |vy| + (Lx+Ly)|wz|.
+# The owner felt it on the first lap (27/08 17h08): stick + rotation mixed and
+# "tout a coup il va tres vite" - each axis was under its own clamp while the
+# wheels ran near double. Envelope = the fastest single-stick feel (0.45).
+MECANUM_LEVER_M = 0.50    # Lx+Ly: half wheelbase 0.27 + half track 0.23 (54x46 cm chassis)
+WHEEL_ENVELOPE_MS = 0.45  # max rim speed however the sticks are mixed
+DEADMAN_BUTTON = 7        # MEASURED 27/08 14h56: the owner pressed his chosen deadman 21x -> index 7 (shanwan pad, Android mode). Held = commands allowed; released = zeros, always
+# NOTE (27/08 17h20, owner: "il faut que ce soit proportionne"): when this
+# pad's radio dies mid-drive (sleep, battery - lived on the 17h05 lap), the
+# rover STOPS cleanly - observed behaviour, no radio watchdog needed. Revisit
+# ONLY if a radio death ever leaves a non-zero command running.
+
+
+def slew(prev: float, target: float, dt: float) -> float:
+    """Rate-limit a linear command - pure, cold-testable."""
+    step = SLEW_LINEAR_MS2 * dt
+    return max(prev - step, min(prev + step, target))
+
+
+def clamp_twist(vx: float, vy: float, wz: float) -> tuple[float, float, float]:
+    """The last gate before the bus - pure, cold-testable. Per-axis clamps,
+    then the mecanum wheel envelope: translation and rotation ADD at the rim,
+    so a mixed command is scaled down proportionally (the feel is preserved,
+    the top speed is not exceeded)."""
+    lim = CLAMP_LINEAR_MS
+    vx = max(-lim, min(lim, vx))
+    vy = max(-lim, min(lim, vy))
+    wz = max(-CLAMP_ANGULAR_RADS, min(CLAMP_ANGULAR_RADS, wz))
+    rim = abs(vx) + abs(vy) + MECANUM_LEVER_M * abs(wz)
+    if rim > WHEEL_ENVELOPE_MS:
+        k = WHEEL_ENVELOPE_MS / rim
+        vx, vy, wz = vx * k, vy * k, wz * k
+    return (vx, vy, wz)
+
+
+def axes_neutral(ax0: float, ax1: float, ax3: float, deadzone: float) -> bool:
+    """True when every drive axis rests inside the deadzone - the trust gate:
+    a pad (or a userspace driver) must be SEEN at neutral once before a single
+    non-zero command is believed. Uninitialised axes never pass this."""
+    return abs(ax0) < deadzone and abs(ax1) < deadzone and abs(ax3) < deadzone
 
 
 def axes_to_twist(ax0: float, ax1: float, ax3: float, ax5: float,
@@ -93,7 +145,7 @@ def axes_to_twist(ax0: float, ax1: float, ax3: float, ax5: float,
     vx = -apply_deadzone(ax1, cfg.deadzone) * cfg.linear_speed * boost
     vy = -apply_deadzone(ax0, cfg.deadzone) * cfg.linear_speed * boost
     wz = -apply_deadzone(ax3, cfg.deadzone) * cfg.angular_speed
-    return vx, vy, wz
+    return clamp_twist(vx, vy, wz)
 
 
 class GamepadTeleop(Module):
@@ -173,6 +225,8 @@ class GamepadTeleop(Module):
         pygame.joystick.init()
         period = 1.0 / self.rate_hz
         pad = None
+        trusted = False            # neutral-first trust gate (13h42 runaway)
+        prev_vx = prev_vy = 0.0    # slew-limiter state
         waiting_logged = False
         try:
             while not self._stop_event.is_set():
@@ -186,19 +240,46 @@ class GamepadTeleop(Module):
                         self._stop_event.wait(RESCAN_PERIOD_S)
                         continue
                     waiting_logged = False
-                    logger.info("Gamepad connected: %s", pad.get_name())
+                    trusted = False   # every (re)connection re-earns trust at neutral
+                    logger.info("Gamepad connected: %s - waiting to see the sticks at NEUTRAL "
+                                "before trusting a single command", pad.get_name())
                 try:
                     pygame.event.pump()
                     axes = (_axis(pad, AXIS_LEFT_X), _axis(pad, AXIS_LEFT_Y),
                             _axis(pad, AXIS_RIGHT_X), _axis(pad, AXIS_R2))
+                    deadman = bool(pad.get_button(DEADMAN_BUTTON)) if pad.get_numbuttons() > DEADMAN_BUTTON else False
                     if pygame.joystick.get_count() <= self.joystick_index:
                         raise pygame.error("joystick disappeared")
                 except pygame.error as exc:
                     pad = None
+                    trusted = False
                     self._publish(0.0, 0.0, 0.0)  # one zero Twist, then wait
                     logger.warning("Gamepad lost (%s) - back to waiting", exc)
                     continue
-                self._publish(*axes_to_twist(*axes, self.cfg))
+                # TRUST GATE (the 13h42 runaway): until the sticks have been
+                # SEEN at neutral once, this pad's words are worth nothing.
+                if not trusted:
+                    if axes_neutral(axes[0], axes[1], axes[2], self.cfg.deadzone):
+                        trusted = True
+                        logger.info("Gamepad axes seen at neutral - commands now trusted "
+                                    "(hold the deadman button to drive)")
+                    else:
+                        self._publish(0.0, 0.0, 0.0)
+                        time.sleep(period)
+                        continue
+                # DEADMAN: no held button, no motion - ever.
+                if not deadman:
+                    self._publish(0.0, 0.0, 0.0)
+                    time.sleep(period)
+                    continue
+                vx, vy, wz = axes_to_twist(*axes, self.cfg)
+                vx = slew(prev_vx, vx, period)
+                vy = slew(prev_vy, vy, period)
+                prev_vx, prev_vy = vx, vy
+                # envelope AFTER the slew too: while vx decays and wz is
+                # instant, the mix could transiently exceed the rim ceiling
+                vx, vy, wz = clamp_twist(vx, vy, wz)
+                self._publish(vx, vy, wz)
                 time.sleep(period)
         finally:
             try:
