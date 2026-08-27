@@ -20,7 +20,7 @@ Hard-won hardware lesson kept from Sam: on a fresh Jetson boot the XVF3800
 often initialises into a humming state; a DFU detach (= pressing RST) fixes
 it, so we reset on start by default.
 
-Acoustics lesson (metrox, live test 24/08, front-right at 3 m): the DOA is
+Acoustics lesson (live test 2026-08-24, front-right at 3 m): the DOA is
 tight (+/-3 deg) when the speaker FACES the rover; speaking away from it
 yields wall reflections (readings drifted 273 -> 258, one 175 outlier).
 Fine in practice: people face a robot when talking to it.

@@ -6,7 +6,7 @@ across sessions:
 
   ~/.local/state/vector/persistent_map.npz          the map to come back to
   ~/.local/state/vector/persistent_map.<stamp>.npz  the previous generations
-  ~/.local/state/vector/keepout.json                the zones the owner drew on the map
+  ~/.local/state/vector/keepout.json                the keep-out zones drawn on the map
   ~/.local/state/vector/checkpoints/<run>/*.npz     what a live run writes (costmap2d)
 
 The map file IS a costmap checkpoint: `ScoredGrid.save()` already writes
@@ -24,7 +24,7 @@ Switches (environment, read at each call so a test can flip them):
                             coordinates in the persistent frame.
 
 Zones (keepout.json, written by the drawing UI `tools/zone_server.py`, by
-`tools/keepout.py`, or by the owner's hand):
+`tools/keepout.py`, or by hand):
 
     {"frame": "<which map these coordinates belong to>",
      "zones": [{"label": ..., "type": ..., "x0":, "y0":, "x1":, "y1":, "note": ...},
@@ -33,9 +33,9 @@ Zones (keepout.json, written by the drawing UI `tools/zone_server.py`, by
 A zone has one of two shapes, and both are read everywhere a zone is read:
 
   rectangle  x0/y0/x1/y1, axis-aligned - what the CLI writes, and every zone
-             written before 26/08.
+             written before 2026-08-26.
   polygon    `points`, at least 3 vertices in metres, in the persistent frame -
-             what the owner draws with the mouse. The house is tilted 5.75 deg
+             what a user draws with the mouse. The house is tilted 5.75 deg
              in the map frame, so its keep-out edges are not axis-aligned and
              an enclosing rectangle either eats the corridor or leaks the
              corner. `points` wins if a zone somehow carries both shapes.
@@ -46,7 +46,7 @@ One type:
                   layer: nothing erases them and the planner never enters.
                   (The toilets: a 3 cm step at the door.)
 
-(`no_slip_reflex` zones died with the slip detectors on 26/08 - the contact
+(`no_slip_reflex` zones died with the slip detectors on 2026-08-26 - the contact
 switches replaced them; an old zone file may still carry some, they are
 ignored.)
 
@@ -218,16 +218,16 @@ def keepout_frame(path: str = KEEPOUT_PATH) -> str:
 
 def save_keepouts(zones: list[dict], path: str = KEEPOUT_PATH, frame: str | None = None,
                   backup: bool = False) -> None:
-    """Write the zones back, keeping the `frame` note the owner wrote.
+    """Write the zones back, keeping the `frame` note already in the file.
 
     Atomic, and in that order on purpose: the whole document is serialised
     first (a zone that will not serialise raises here, before anything on disk
     has moved), then the previous file is copied aside as `<path>.bak` if
     `backup`, then the new one lands with a single `os.replace`. A reader never
     sees a half-written zone file, and a refused write leaves the live one
-    exactly as it was. The UI saves with `backup=True`: the owner redraws his
-    house with the mouse, and the version before the last save stays one `cp`
-    away.
+    exactly as it was. The UI saves with `backup=True`: a whole house gets
+    redrawn by mouse in one sitting, and the version before the last save stays
+    one `cp` away.
     """
     os.makedirs(os.path.dirname(path), exist_ok=True)
     doc = {"frame": frame if frame is not None else keepout_frame(path), "zones": zones}
@@ -298,8 +298,8 @@ def zone_bounds(z: dict) -> tuple[float, float, float, float]:
 
 
 def polygon_area(points) -> float:
-    """Shoelace, in square metres. Sign dropped: winding order is the owner's
-    mouse, not a decision."""
+    """Shoelace, in square metres. Sign dropped: the winding order is whatever
+    the drawing produced, not a decision carrying meaning."""
     pts = _clean_points(points)
     a = 0.0
     for i, (x1, y1) in enumerate(pts):

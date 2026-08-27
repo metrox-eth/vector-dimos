@@ -71,15 +71,15 @@ LIDAR_WRITES_OBSTACLES = True   # doctrine switch: the lidar's job is anchoring 
                                 # map (SLAM), not obstacle detection - flip to False
                                 # once the camera proves its widened coverage in flight; the lidar
                                 # then only anchors kiss-icp and the camera is THE detector
-PUBLISH_EVERY = 5            # ~2 Hz MODE TOUR: en teleop le planeur dort et notre carte 2D lit les capteurs en direct - la seule bouche nourrie par cette cadence est LE VIEWER, qui coulait a 5 Hz (latence 9->30 s, 21h45). Les pleines cadences reviendront pour l autonomie AVEC le deport du pont. Ancien: Le 10 Hz (27/08 21h05) a noye les CONSOMMATEURS: 230 Ko
-                             # par grille x 10 Hz = 2,3 Mo/s a decoder par chaque abonne, et
-                             # l enregistreur ecrivait la carte x5 sur SD - charge 5,7 -> 11 en
-                             # 5 min (metrox: "on consomme plus qu avant"). La QUALITE de la
-                             # carte ne depend pas de cette cadence (l odometrie la fait);
-                             # 10 Hz ne servira qu a l autonomie, une fois le recorder decouple.
-                             # Ancien pansement:
-                             # le bridage a 5 (2 Hz) etait un pansement CPU d avant CUDA+zenoh
-                             # (27/08 20h58, metrox: "c etait ca l objectif de passer sur CUDA")
+PUBLISH_EVERY = 5            # ~2 Hz in PILOTED mode: in teleop the planner sleeps and this 2D map reads the sensors live - the only consumer fed by this rate is THE VIEWER, which drowned at 5 Hz (latency 9 -> 30 s). Full rates come back for autonomy TOGETHER with moving the bridge off-board. Earlier note: 10 Hz (2026-08-27) drowned the CONSUMERS: 230 KB
+                             # per grid x 10 Hz = 2.3 MB/s to decode for every subscriber, and
+                             # the recorder wrote the map 5x to SD - load 5.7 -> 11 in
+                             # 5 min (measurably more CPU burned than before). The map QUALITY
+                             # does not depend on this rate (odometry gives it);
+                             # 10 Hz will only serve autonomy, once the recorder is decoupled.
+                             # Earlier stopgap:
+                             # capping at 5 (2 Hz) was a CPU stopgap from before CUDA+zenoh
+                             # (2026-08-27 - removing it was the point of moving to CUDA)
 RAY_MAX_M = 4.0              # rays are carved (misses) up to this range only: 12 m x 0.025 m steps cost 227 ms per revolution (2.3 cores at 10 Hz, 23/08 20:20)
 RAY_EVERY = 2                # carve on every other revolution; hits are taken on all
 CAMERA_HEIGHT_M = 0.56       # = lidar_odometry.CAMERA_XYZ_BASE[2] (rear mast, 24/08) - keep in sync
@@ -125,7 +125,7 @@ class ScoredGrid:
 
     # ---- keep-out zones ----------------------------------------------------
     def set_keepouts(self, zones: list[dict]) -> int:
-        """The `forbidden` zones the owner drew once on the persistent map.
+        """The `forbidden` zones drawn once, by hand, on the persistent map.
 
         They are NOT a score, they are a decision - so they are applied in
         `occupancy()`, after every layer. Nothing writes them away: not a
@@ -559,8 +559,8 @@ class VectorCostMap(Module):
                        "keep-out zones do NOT apply to it - they are coordinates in the persistent frame.")
 
     def _reload_keepouts(self) -> None:
-        """Pick up an edit of keepout.json without a restart - the stack is not
-        something the owner can restart on a whim."""
+        """Pick up an edit of keepout.json without a restart - restarting the
+        whole stack to change a zone is not a reasonable ask mid-session."""
         if self._frame != "persistent" or self._grid is None:
             return
         try:

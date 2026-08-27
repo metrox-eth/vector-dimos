@@ -49,18 +49,18 @@ class C1Scanner:
         self._wake()
 
     def _wake(self) -> None:
-        """Le C1 reste parfois engourdi apres un debranchement a chaud : sa
-        liaison ne repond plus jusqu'a recevoir un deluge de requetes
-        (constate et resolu le 25/08). On sonde GET_INFO ; si silence, une
-        bascule RTS (front montant = le reset qui a ressuscite le lidar le
-        27/08 apres 12 h de silence), puis le marteau A5 50.
+        """The C1 sometimes stays numb after a hot unplug: its link answers
+        nothing until it receives a flood of requests (seen and fixed
+        2026-08-25). Probe GET_INFO; on silence, toggle RTS (the rising edge is
+        the reset that revived the lidar on 2026-08-27 after 12 h of silence),
+        then the A5 50 hammer.
 
         6 s: real numbness has always cleared within 6; a 30 s trial woke
         nothing more, it only delayed the verdict."""
         try:
             self.info()
             return
-        except Exception:  # noqa: BLE001 - engourdi, on le reveille
+        except Exception:  # noqa: BLE001 - numb: go wake it up
             pass
         self._ser.rts = False
         time.sleep(0.3)
@@ -70,7 +70,7 @@ class C1Scanner:
         try:
             self.info()
             return
-        except Exception:  # noqa: BLE001 - toujours rien, le deluge alors
+        except Exception:  # noqa: BLE001 - still nothing: the flood, then
             pass
         deadline = time.monotonic() + 6.0
         while time.monotonic() < deadline:
@@ -82,7 +82,7 @@ class C1Scanner:
             try:
                 self.info()
                 return
-            except Exception:  # noqa: BLE001 - toujours engourdi, on insiste
+            except Exception:  # noqa: BLE001 - still numb: keep insisting
                 pass
         raise RuntimeError("lidar muet meme apres le reveil-rafale")
 

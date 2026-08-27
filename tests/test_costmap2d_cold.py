@@ -1,4 +1,4 @@
-"""Cold bench for ScoredGrid - metrox's two Xiaomi stories in numbers.
+"""Cold bench for ScoredGrid - the field failure stories, written as numbers.
 
 Known input -> known output, in metres:
   1. a table leg at (1.0, 0) seen from two places -> occupied; the floor along
@@ -9,7 +9,7 @@ Known input -> known output, in metres:
      change nothing; the camera seeing floor there 5 times -> free
   5. the ceiling: 30 hits from 30 places -> score 10, then 13 misses -> free
      (bounded unlearning, never a wall for a day)
-  6. the table leg of run B (26/08): thinner than a cell, seen ten times, found
+  6. the table leg of run B (2026-08-26): thinner than a cell, seen ten times, found
      at low = -3 - the floor sampled on its own cell in the NEXT frame erased
      every hit. A cell hit by the camera is deaf to floor samples for
      LOW_HIT_PROTECT_S; past that window it is forgotten exactly as before.
@@ -29,7 +29,7 @@ def fresh() -> ScoredGrid:
 
 
 def test_leg_needs_two_viewpoints_and_ray_is_free() -> None:
-    """Owner's rule (26/08 evening): an obstacle is REAL when seen from two
+    """Rule under test (2026-08-26): an obstacle is REAL when seen from two
     viewpoints. A passer-by hammered from one parked spot must never become a
     wall - the evening flights were spent walled in by exactly such cells."""
     g = fresh()
@@ -91,13 +91,13 @@ def test_low_object_only_the_camera_can_forget() -> None:
 
 
 def test_thin_leg_survives_the_floor_sampled_beside_it() -> None:
-    """Run B, 26/08: a table leg thinner than a 5 cm cell, seen ten times, sat
+    """Run B, 2026-08-26: a table leg thinner than a 5 cm cell, seen ten times, sat
     at low = -3. The camera calls the cell an obstacle in one frame and bare
     floor in the next (5 cm of quantisation), and the two cancel forever."""
     g = fresh()
     leg = np.array([[1.0, 0.0]])
     t = 1000.0                                     # an injected clock, in seconds
-    g.camera_obstacles(leg, (0.0, 0.00), now=t - 0.1)   # amorce (porte anti-mobiles)
+    g.camera_obstacles(leg, (0.0, 0.00), now=t - 0.1)   # seed frame (the anti-moving-object gate)
     g.camera_obstacles(leg, (0.0, 0.00), now=t)
     g.camera_obstacles(leg, (0.0, 0.15), now=t + 0.1)
     gx, gy = g.cell(np.array([1.0]), np.array([0.0]))
@@ -143,12 +143,12 @@ def test_checkpoint_roundtrip(tmp_path=None) -> None:
 
 
 def test_ghost_dies_when_the_camera_sees_through_it() -> None:
-    """metrox 26/08 20h20: the map must correct itself every time the
+    """Requirement (2026-08-26): the map must correct itself every time the
     RealSense passes over it. A ghost low cell at 2.0 m, no longer confirmed,
     dies as soon as the camera looks through that spot at low height."""
     g = fresh()
     t0 = 100.0
-    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # amorce (porte anti-mobiles)
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # seed frame (the anti-moving-object gate)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)   # second viewpoint
     assert g.value_at(2.0, 0.0) == 100, "the ghost starts as a real-looking obstacle"
@@ -163,7 +163,7 @@ def test_ghost_dies_when_the_camera_sees_through_it() -> None:
 def test_high_ray_never_erases_a_low_box() -> None:
     g = fresh()
     t0 = 100.0
-    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # amorce (porte anti-mobiles)
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # seed frame (the anti-moving-object gate)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
     later = t0 + LOW_HIT_PROTECT_S + 1.0
@@ -177,7 +177,7 @@ def test_high_ray_never_erases_a_low_box() -> None:
 def test_fresh_hits_are_protected_from_carving() -> None:
     g = fresh()
     t0 = 100.0
-    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # amorce (porte anti-mobiles)
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # seed frame (the anti-moving-object gate)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
     # 1 s later (inside LOW_HIT_PROTECT_S): a real thing is re-hit every
@@ -193,7 +193,7 @@ def test_floor_ray_carves_the_low_corridor() -> None:
     band between 0.59 m and 2.46 m of range."""
     g = fresh()
     t0 = 100.0
-    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # amorce (porte anti-mobiles)
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # seed frame (the anti-moving-object gate)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
     later = t0 + LOW_HIT_PROTECT_S + 1.0
@@ -214,7 +214,7 @@ def test_camera_rays_never_touch_the_lidar_layer() -> None:
 
 
 def test_moving_object_never_writes_the_map() -> None:
-    """Owner, 27/08 11h55: the RealSense must not write moving things. A cell
+    """Requirement (2026-08-27): the RealSense must not write moving things. A cell
     only takes a camera hit if the PREVIOUS frame also saw an obstacle there -
     a rolling vacuum or a walking person moves on before the second look."""
     g = fresh()
@@ -233,7 +233,7 @@ def test_moving_object_never_writes_the_map() -> None:
 
 
 def test_walled_in_map_is_measured_as_a_prison() -> None:
-    """26/08 evening: a run that starts surrounded by ghost cells must never
+    """2026-08-26 evening: a run that starts surrounded by ghost cells must never
     hand its prison over as the persistent map. The gate reads the reachable
     free area around the rover."""
     g = fresh()

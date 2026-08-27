@@ -1,7 +1,7 @@
 """Draw the FILM of a run: trajectory + every event, on the map it built.
 
-Born 26/08 (owner: "tu n'arrives pas a voir ce que fait le robot"): reading a
-log as event counters hides the behaviour. Three sessions read "35 stuck, 22
+Born 2026-08-26, because nobody could actually see what the robot was doing:
+reading a log as event counters hides the behaviour. Three sessions read "35 stuck, 22
 bumps" without seeing the story - the rover walking backwards across the flat
 in 20 cm steps into the rear wall. One picture showed it in five seconds.
 

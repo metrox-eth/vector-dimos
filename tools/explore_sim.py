@@ -15,9 +15,9 @@ What is simulated, and how faithful each piece is:
   lidar          360 rays, 12 m (RPLIDAR C1), ray-cast on the ground truth from
                  the simulated pose, revealing cells into a discovered map.
                  One scan per SCAN_EVERY_M of travel, plus one on arrival.
-  keep-outs      the owner's zones, applied to the discovered map exactly as
+  keep-outs      the operator-drawn zones, applied to the discovered map exactly as
                  costmap2d does - forced to 100 after every layer, seen or not.
-  planner        tonight's planner, ported: dimOS's voronoi_gradient + our
+  planner        the live planner, ported: dimOS's voronoi_gradient + our
                  clearance_cost_map (lethal from a distance transform at
                  0.30 m, 4th-power pivot penalty over the 0.39 m band) and a
                  search with min_cost_astar's exact cost rule - blocked at
@@ -110,8 +110,8 @@ MAX_IMPACTS_PER_GOAL = 3        # after three contacts on one goal the planner g
 
 ROBOT_WIDTH_M = 0.50            # recovering_planner.ROBOT_WIDTH_M (0.46 body + 4 cm)
 BODY_HALF_WIDTH_M = 0.23        # the real body: 62.5 x 46 cm with the bumper bars
-                                # (metrox, 25/08). What stops the rover is the body,
-                                # not the planning margin.
+                                # (measured 2026-08-25). What stops the rover is the
+                                # body, not the planning margin.
 CONTROL_MARGIN_M = 0.05
 LETHAL_CLEARANCE_M = ROBOT_WIDTH_M / 2 + CONTROL_MARGIN_M    # 0.30
 PIVOT_CLEARANCE_M = 0.78 / 2                                  # 0.39

@@ -357,7 +357,7 @@ def replay(rec: Recording, events: list[LogEvent], tuning: Tuning,
     run actually published (from the log) and the poses it actually decided
     from (from the odometry). Feeding the replay its own choices would be a
     different run after the first divergence, and then decision N would no
-    longer be the decision the owner watched. The scoring under test therefore
+    longer be the decision that was actually observed. The scoring under test therefore
     always answers the question the rover was really asked.
 
     Yields (index, LogEvent, costmap, pose, state_before, target).

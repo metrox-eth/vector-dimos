@@ -326,7 +326,7 @@ class LidarOdometry(Module):
         """Sparse obstacle cloud from the depth image, in `world`, onto `lidar`.
 
         The 2D lidar misses thin black table legs (2026-08-23: the rover
-        touched Vita's stage). The D455F sees them: every DEPTH_STRIDE-th pixel
+        drove into a low stage it never saw). The D455F sees them: every DEPTH_STRIDE-th pixel
         is back-projected, placed in the world with the current pose, cropped
         to the rover's height band, voxel-deduplicated and published on the
         same `lidar` channel the mapper consumes."""
@@ -388,9 +388,9 @@ class LidarOdometry(Module):
         self._depth_pts_last = len(pts)
         # attached to EVERY lidar revolution until replaced (0.5 s cap): the
         # 10 Hz lidar vs 7.5 Hz depth beat left one revolution in four without
-        # camera points - the tall points blinked at ~2.5 Hz ("la RealSense
-        # clignote", 27/08 15h28). The viewpoint gate absorbs the repeats on
-        # the mapping side.
+        # camera points - the tall points blinked at ~2.5 Hz, visible in the
+        # viewer as the RealSense flickering (2026-08-27). The viewpoint gate
+        # absorbs the repeats on the mapping side.
         self._pending_cam_pts = (pts, time.monotonic())
 
     def _pose_at(self, ts: float) -> tuple[float, float, float]:

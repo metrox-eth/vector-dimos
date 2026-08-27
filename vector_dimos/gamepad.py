@@ -83,16 +83,16 @@ SLEW_LINEAR_MS2 = 0.6     # max change of linear command per second: full stick
                           # ramps the adapter writes (the era tuning)
 CLAMP_ANGULAR_RADS = 0.8
 # Mecanum wheels ADD the commands: rim speed = |vx| + |vy| + (Lx+Ly)|wz|.
-# The owner felt it on the first lap (27/08 17h08): stick + rotation mixed and
-# "tout a coup il va tres vite" - each axis was under its own clamp while the
+# Felt on the very first piloted lap (2026-08-27): mixing stick and rotation
+# made the rover suddenly take off - each axis was under its own clamp while the
 # wheels ran near double. Envelope = the fastest single-stick feel (0.45).
 MECANUM_LEVER_M = 0.50    # Lx+Ly: half wheelbase 0.27 + half track 0.23 (54x46 cm chassis)
 WHEEL_ENVELOPE_MS = 0.45  # max rim speed however the sticks are mixed
-DEADMAN_BUTTON = 7        # MEASURED 27/08 14h56: the owner pressed his chosen deadman 21x -> index 7 (shanwan pad, Android mode). Held = commands allowed; released = zeros, always
-# NOTE (27/08 17h20, owner: "il faut que ce soit proportionne"): when this
-# pad's radio dies mid-drive (sleep, battery - lived on the 17h05 lap), the
-# rover STOPS cleanly - observed behaviour, no radio watchdog needed. Revisit
-# ONLY if a radio death ever leaves a non-zero command running.
+DEADMAN_BUTTON = 7        # MEASURED 2026-08-27: the chosen deadman button was pressed 21x -> index 7 (shanwan pad, Android mode). Held = commands allowed; released = zeros, always
+# NOTE (2026-08-27): when this pad's radio dies mid-drive (sleep, battery -
+# observed on a piloted lap), the rover STOPS cleanly - observed behaviour, no
+# radio watchdog needed. Revisit ONLY if a radio death ever leaves a non-zero
+# command running.
 
 
 def slew(prev: float, target: float, dt: float) -> float:

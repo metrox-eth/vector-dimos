@@ -1,9 +1,9 @@
 """WavefrontFrontierExplorer with a numpy frontier search and no dead time.
 
-Measured 23/08 on the real map (35 774 cells seen): dimOS's pure-Python
+Measured 2026-08-23 on the real map (35 774 cells seen): dimOS's pure-Python
 wavefront BFS took 16.5 s offline and 20-42 s live on the Jetson, growing
-with the map - the rover stood still between every two goals ("il reflechit",
-measured live). The same search with scipy.ndimage takes milliseconds. Semantics
+with the map - the rover visibly stood still "thinking" between every two goals
+(measured live). The same search with scipy.ndimage takes milliseconds. Semantics
 reproduced exactly: start at the nearest FREE cell to the robot; reachable =
 8-connected region of FREE + UNKNOWN cells from there; a frontier point is an
 UNKNOWN cell with a FREE 8-neighbour and no occupied (> occupancy_threshold)

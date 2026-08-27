@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Live sonar readout on :8903 - a big number in the browser, refreshed twice
 a second, straight from the ESP32 serial stream. For tape-measure checks
-(owner, 26/08: the sonar read 0.08 m for two hours and nobody could SEE it).
+(2026-08-26: the sonar read 0.08 m for two hours and nobody could SEE it).
 Run with the dimos stack STOPPED (it owns the ESP port otherwise)."""
 import re, threading, time
 from http.server import BaseHTTPRequestHandler, HTTPServer

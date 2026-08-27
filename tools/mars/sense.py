@@ -41,7 +41,7 @@ cam = {"L": BLIND, "C": BLIND, "R": BLIND}; valid_pct = 0.0
 # --- camera: full 3D check. Every 4th depth pixel -> point in the ROVER frame
 # (camera 0.80 m up, 0.21 m ahead of the lidar, level; optical x right, y down,
 # z forward). Floor removed by geometry (z < FLOOR_Z), everything else up to
-# the mast top counts, whatever its height (metrox 14h12: "toutes les hauteurs").
+# the mast top counts, whatever its height - every height, not a selected band.
 CAM_H, CAM_X = 0.80, 0.30; FLOOR_Z, TOP_Z = 0.04, 0.90; HALF_W = 0.33   # rover 54x46 cm, camera at the front bumper, highest point
 if "depth_image" in last:
     K = list(last["camera_info"].K) if "camera_info" in last else [386.6, 0, 320.6, 0, 386.0, 245.0, 0, 0, 1]   # measured 2026-08-23

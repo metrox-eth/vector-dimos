@@ -1,5 +1,5 @@
-"""Cold bench: a table is a block (metrox, 23/08 - 'the safest path, not the
-shortest; I walk around tables, not under them').
+"""Cold bench: a table is a block (2026-08-23 - the safest path, not the
+shortest: the rover goes around tables, never under them).
 
 Base-frame depth points in metres -> which become obstacles, which floor:
   * a table top at 0.75 m over the cell 1.0 m ahead -> obstacle (was ignored above 0.70)

@@ -97,8 +97,8 @@ check(twist_close(axes_to_twist(0.0, -0.5, 0.0, -1.0, CFG), (0.3, 0.0, 0.0)),
 check(twist_close(axes_to_twist(0.0, 1.0, 0.0, -1.0, CFG), (-gp.CLAMP_LINEAR_MS, 0.0, 0.0)),
       "stick fully back -> vx CLAMPED at -0.2 m/s")
 
-# Deadzone: 0.32 since the 27/08 15h20 feel tuning ("deadband toujours trop
-# faible"). Below it the axis is dead, above it goes through unscaled.
+# Deadzone: 0.32 since the 2026-08-27 feel tuning - the previous deadband was
+# consistently too small. Below it the axis is dead, above it goes through unscaled.
 check(twist_close(axes_to_twist(0.05, -0.10, 0.11, -1.0, CFG), (0.0, 0.0, 0.0)),
       "all sticks inside the deadzone -> 0.0 on every axis")
 check(twist_close(axes_to_twist(0.0, -0.20, 0.0, -1.0, CFG), (0.0, 0.0, 0.0)),
@@ -340,27 +340,27 @@ from vector_dimos.gamepad import (
 )
 
 cfg = TeleopConfig()
-# axes non initialises a pleine deflexion : le neutre n'a jamais ete vu
+# axes uninitialised at full deflection: neutral was never observed
 check("pleine deflexion = PAS neutre (la porte de confiance la refuse)",
       axes_neutral(1.0, -1.0, 1.0, cfg.deadzone) is False)
 check("repos manette = neutre (la porte s'ouvre)",
       axes_neutral(0.01, -0.02, 0.0, cfg.deadzone) is True)
-# plafonds absolus : meme un config fou ne depasse jamais
+# absolute ceilings: even an insane config never exceeds them
 folle = TeleopConfig(linear_speed=5.0, angular_speed=9.0, boost_multiplier=4.0)
 vx, vy, wz = axes_to_twist(-1.0, -1.0, 1.0, 1.0, folle)
 check(f"plein stick + boost + config folle -> |vx| <= {CLAMP_LINEAR_MS}", abs(vx) <= CLAMP_LINEAR_MS + 1e-9)
 check(f"... et |vy| <= {CLAMP_LINEAR_MS}", abs(vy) <= CLAMP_LINEAR_MS + 1e-9)
 check(f"... et |wz| <= {CLAMP_ANGULAR_RADS}", abs(wz) <= CLAMP_ANGULAR_RADS + 1e-9)
-# depuis le 27/08 17h15 clamp_twist finit par l'enveloppe roue (mecanum: les
-# commandes s'ADDITIONNENT a la jante - vecu du 1er tour pilote)
+# since 2026-08-27 clamp_twist ends with the wheel envelope (mecanum: the
+# commands ADD UP at the rim - learned on the first piloted lap)
 from vector_dimos.gamepad import MECANUM_LEVER_M, WHEEL_ENVELOPE_MS
 vx, vy, wz = clamp_twist(9.0, -9.0, 9.0)
 check("clamp_twist pur: 9 m/s partout -> jante exactement a l'enveloppe",
       abs(abs(vx) + abs(vy) + MECANUM_LEVER_M * abs(wz) - WHEEL_ENVELOPE_MS) < 1e-9)
-# un seul stick a fond ne perd RIEN (l'enveloppe = le feel d'un stick seul)
+# a single stick at full travel loses NOTHING (the envelope = the feel of one stick alone)
 check("avance pure 0.45 -> inchangee", clamp_twist(0.45, 0.0, 0.0) == (0.45, 0.0, 0.0))
 check("rotation pure 0.8 -> inchangee (jante 0.40 < 0.45)", clamp_twist(0.0, 0.0, 0.8) == (0.0, 0.0, 0.8))
-# le mix vecu au tour 17h08: avance pleine + rotation pleine
+# the mix experienced on the piloted lap: full forward + full rotation
 vx, vy, wz = clamp_twist(0.45, 0.0, 0.8)
 rim = abs(vx) + MECANUM_LEVER_M * abs(wz)
 check(f"mix avance+rotation -> jante {rim:.3f} = enveloppe {WHEEL_ENVELOPE_MS} (avant: 0.85)",

@@ -1,6 +1,6 @@
-"""Cold bench for RecoveringGlobalPlanner after the 26/08 guard rip.
+"""Cold bench for RecoveringGlobalPlanner after the 2026-08-26 guard rip.
 
-Doctrine under test (metrox): stuck = goal abandoned, NO recovery motion of
+Doctrine under test: stuck = goal abandoned, NO recovery motion of
 any kind - the blind 20 cm reverse walked the rover into the rear wall 38
 times in one run. The only scripted move left is the contact escape (bumper
 switches), and a second contact aborts it dead instead of being dropped.

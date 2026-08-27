@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Speed watchdog: tails newest dimos run log, computes speed from lidar odom
-lines, and kills exploration if the body exceeds the envelope. Iris runs this
-whenever the rover explores unattended (rule 19)."""
+lines, and kills exploration if the body exceeds the envelope. It must be
+running whenever the rover explores unattended."""
 import glob, math, os, re, subprocess, sys, time
 
 LIMIT_MS = 0.35        # hard envelope: cap 0.149 + margin; beyond = runaway
