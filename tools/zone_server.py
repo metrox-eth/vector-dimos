@@ -4,10 +4,10 @@
     http://<rover>:8902
 
 Before this, a zone was four numbers read off the Rerun map by hovering it, and
-every zone was an axis-aligned rectangle. metrox's house sits 5.75 deg off the
+every zone was an axis-aligned rectangle. The test flat sits 5.75 deg off the
 map axes, so the fences drawn that way either ate a corridor or leaked a corner,
-and each attempt cost a round of type-and-look. His order, 26/08: "fais-moi une
-UI ou je peux dessiner les limites."
+and each attempt cost a round of type-and-look. Requirement (2026-08-26): a UI
+where the limits can be drawn directly.
 
 So: the persistent map is rendered as a PNG, the browser draws it on a canvas,
 and a click puts down a polygon vertex in world metres. What comes out is the

@@ -298,11 +298,11 @@ class VectorBaseAdapter:
     def _brake_vx(self, vx: float) -> float:
         """The sonar INFORMS, it no longer brakes (design decision).
 
-        The brake was supposed to die with the guard rip this morning and did
+        The brake was supposed to die with the guard rip on 2026-08-26 and did
         not; it then spent the whole evening clamping every forward command to
-        zero on a sonar stuck at 0.08 m ("on avait dit qu'on enlevait le frein
-        de securite - c'est une indication, plus une securite"). The contact
-        switches are the safety. The latch still tracks the level so the log
+        zero on a sonar stuck at 0.08 m. The safety brake was explicitly
+        removed: the sonar reading is an indication, not a safety device. The
+        contact switches are the safety. The latch still tracks the level so the log
         keeps saying what the sonar WOULD have done - information, no action.
         """
         age = (SONAR_MAX_AGE_S + 1.0 if self._sonar_t is None

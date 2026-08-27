@@ -301,7 +301,7 @@ check("heading +y -> back-off is 0.22 m in -y",
 # ===========================================================================
 print("E. keep-out: a forbidden block is never targeted (7.2)")
 
-# The room's only door leads into a corridor the owner declared forbidden.
+# The room's only door leads into a corridor marked forbidden by a keep-out zone.
 # costmap2d forces those cells to 100 before the explorer ever sees the map.
 g = door(room(), "east", 70, 24)
 keep = np.zeros_like(g, dtype=bool)

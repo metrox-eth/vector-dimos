@@ -27,11 +27,11 @@ SOC_V_FULL = 28.0
 # The ONE port the PZEM lives on. The old code scanned every by-id port with
 # MODBUS frames (motor bus, ESP, even the new lidar stick - its exclusion
 # hint named the DEAD CP2102N): bus contention sprayed on every /metrics
-# poll, all day on 26/08. Fixed port, never scan.
+# poll, all day on 2026-08-26. Fixed port, never scan.
 PZEM_PORT = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
 
 _prev_cpu = None  # (idle, total)
-_prev_cores = None  # [(idle, total)] par coeur - vue par coeur (metrox 27/08 17h50)
+_prev_cores = None  # [(idle, total)] per core - per-core view (added 2026-08-27)
 _pzem_port_cache = None
 
 
@@ -106,9 +106,9 @@ def meminfo():
     }
 
 
-_gpu_samples = []   # (t, pct) - moyenne glissante 3 s (metrox 27/08 20h52:
-                    # la lecture instantanee ratait les rafales CUDA de 4 ms,
-                    # le panneau oscillait 0% / 13% sans sens)
+_gpu_samples = []   # (t, pct) - 3 s sliding average (measured 2026-08-27: the
+                    # instantaneous read missed the 4 ms CUDA bursts and the
+                    # panel oscillated between 0% and 13% with no meaning)
 
 
 def _gpu_read_once():
@@ -125,8 +125,8 @@ def _gpu_read_once():
 
 
 def _gpu_sampler():
-    """20 Hz en continu: le duty-cycle d'un mapper qui travaille par rafales
-    de 4 ms n'existe que comme MOYENNE, jamais comme echantillon."""
+    """Continuous 20 Hz sampling: the duty cycle of a mapper that works in 4 ms
+    bursts only exists as an AVERAGE, never as a single sample."""
     while True:
         v = _gpu_read_once()
         now = time.time()
@@ -250,23 +250,23 @@ def collect():
     }
 
 
-# --- sensor liveness (owner, 26/08: "une UI qui me montre TOUT sur le robot") ---
+# --- sensor liveness: one view showing EVERYTHING on the robot at once -------
 #
 # PASSIVE only: we listen to the LCM bus and read /proc & /dev - never a
-# serial port (the day taught what contention costs). When no stack runs the
-# topics fall silent and the panel says so honestly.
+# serial port (a day of bus contention taught what that costs). When no stack
+# runs the topics fall silent and the panel says so honestly.
 
 _seen = {}          # family -> last wall time
-_reloc_state = ["?"]   # frame_id du dernier reloc_frame (reloc:persistent/fresh/searching)
-_watcher_last = [0.0]  # derniere requete /metrics?watcher=iris (la vigie d'Iris)
-_cuda_state = [None]   # {"torch": bool, "open3d": bool} - sonde une fois au demarrage
+_reloc_state = ["?"]   # frame_id of the last reloc_frame (reloc:persistent/fresh/searching)
+_watcher_last = [0.0]  # last /metrics?watcher=iris request (the monitoring vigil)
+_cuda_state = [None]   # {"torch": bool, "open3d": bool} - probed once at startup
 
 
 def _probe_cuda() -> None:
     """One-shot, in a thread: the imports cost seconds on the Jetson and the
-    answer cannot change while the process lives. Panel row ordered by the
-    owner 27/08 17h58 - the GPU sat at 0% for days while the CPU burned and
-    nobody could SEE that the wheels were CPU-only."""
+    answer cannot change while the process lives. The panel row exists because
+    the GPU sat at 0% for days while the CPU burned and nobody could SEE that
+    the wheels were CPU-only (2026-08-27)."""
     state = {"torch": False, "open3d": False}
     try:
         import torch
@@ -282,7 +282,7 @@ def _probe_cuda() -> None:
 _counts = {}        # family -> msgs in the current window
 _FAMILIES = (("lidar_scan", ("pointcloud",)),
              ("odometry", ("/odom",)),
-             ("imu", ("imu",)),          # the rotation prior since 26/08 - an organ now (owner 21h55)
+             ("imu", ("imu",)),          # the rotation prior since 2026-08-26 - a monitored organ now
              ("camera", ("color_image", "depth_image")),
              ("costmap", ("global_costmap",)),
              ("drive", ("cmd_vel",)),
@@ -295,9 +295,9 @@ _gamepad_last_input = [0.0]      # wall time of the last REAL pad event (radio p
 
 def _gamepad_listener():
     """Reads js0 events (8-byte records) to timestamp real pad ACTIVITY.
-    The device existing only proves the DONGLE (owner, 27/08 15h01: "tu
-    parles du dongle ou du gamepad ?" - the organ was lying). Multiple
-    readers are fine on a joystick device."""
+    The device existing only proves the DONGLE is plugged in, not that a pad is
+    paired and talking - the row used to go green on the dongle alone and lied
+    (2026-08-27). Multiple readers are fine on a joystick device."""
     import struct
     while True:
         try:
@@ -320,11 +320,11 @@ def _family_of(channel):
     return None
 
 
-_bus_seen = {"lcm": 0.0, "zenoh": 0.0}   # dernier message vu par bus (migration zenoh 27/08)
+_bus_seen = {"lcm": 0.0, "zenoh": 0.0}   # last message seen per bus (zenoh migration, 2026-08-27)
 
 
 def _on_bus_message(bus, channel, data):
-    """Logique commune aux DEUX bus : familles d'organes + etat reloc."""
+    """Logic shared by BOTH buses: organ families + relocalization state."""
     _bus_seen[bus] = time.time()
     fam = _family_of(channel)
     if fam:
@@ -356,11 +356,11 @@ def _lcm_listener():
 
 
 def _zenoh_listener():
-    """Le panneau ecoute LES DEUX bus pendant la migration zenoh (27/08) :
-    quel que soit le transport du stack, les organes s'allument - pas de jour J.
-    Meme hote que le stack, la decouverte loopback par defaut suffit. La cle
-    zenoh est normalisee en nom de canal (slash de tete) pour que les memes
-    aiguilles d'organes matchent."""
+    """The panel listens on BOTH buses during the zenoh migration (2026-08-27):
+    whichever transport the stack uses, the organ rows light up - no flag day.
+    Same host as the stack, so default loopback discovery is enough. The zenoh
+    key is normalised into a channel name (leading slash) so the same organ
+    needles match on either bus."""
     try:
         import zenoh
     except ImportError:
@@ -428,14 +428,15 @@ def sensors():
                        "rerun_connected": rerun_connected,
                        "garde_vitesse": garde,
                        "reloc_state": _reloc_state[0]}
-    # Owner's rule (27/08 15h57): the panel is Iris's instrument too - her vigil
-    # polls /metrics?watcher=iris and this row proves someone is actually watching.
+    # The panel is also the monitoring agent's instrument: whoever operates the
+    # stack must be able to see what it is doing. The vigil polls
+    # /metrics?watcher=iris and this row proves someone is actually watching.
     w_last = _watcher_last[0]
     w_age = (time.time() - w_last) if w_last else None
     out["software"]["monitoring"] = {"alive": w_age is not None and w_age < 45.0,
                                      "age_s": round(w_age, 1) if w_age is not None else None}
     out["software"]["cuda"] = _cuda_state[0]
-    # quel bus porte le stack (migration zenoh): frais = message < 5 s
+    # which bus carries the stack (zenoh migration): fresh = message < 5 s
     now_b = time.time()
     lcm_ok = now_b - _bus_seen["lcm"] < 5.0
     zen_ok = now_b - _bus_seen["zenoh"] < 5.0
@@ -489,16 +490,17 @@ def _panel_html():
     return _PANEL % ("".join(rows), extra, ", ".join(d["ports_plugged"]))
 
 
-# One URL for the whole flight deck (owner, 26/08 21h10: "a chaque fois je
-# dois tout lancer, reorganiser les fenetres... au pire une url avec les
-# iframes"). The iframe sources resolve in the BROWSER on the rig: the
-# cockpit through its 127.0.0.1:7780 tunnel, the rest straight over the LAN.
-# Rerun (the 3D map) stays its own native window - fly.sh opens it.
+# One URL for the whole flight deck, so a run does not start with launching
+# four things and rearranging windows. The iframe sources resolve in the
+# BROWSER on the rig: the cockpit through its 127.0.0.1:7780 tunnel, the rest
+# straight over the LAN. Rerun (the 3D map) stays its own native window -
+# fly.sh opens it.
 #
 # OPEN THIS PAGE AS http://127.0.0.1:8900/vol (through the SSH tunnel), never
 # by the LAN address: WebTransport in the cockpit iframe requires a SECURE
 # CONTEXT, and an iframe is only secure if every ANCESTOR is - localhost
-# qualifies, 192.168.0.56 does not ("Not a secure context", owner 21h55).
+# qualifies, 192.168.0.56 does not ("Not a secure context", observed
+# 2026-08-26 21:55).
 _VOL = """<!doctype html><html><head><meta charset="utf-8"><title>VECTOR - vol</title>
 <style>
  body{margin:0;background:#111;color:#ddd;font:13px sans-serif;height:100vh;display:flex;flex-direction:column}

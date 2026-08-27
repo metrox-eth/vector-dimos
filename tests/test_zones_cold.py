@@ -1,4 +1,4 @@
-"""Cold bench for polygon keep-out zones: the shape the owner draws with a mouse.
+"""Cold bench for polygon keep-out zones: the shape a user draws with a mouse.
 
 Rule #2: a known input gives a known output, in physical units. Groups:
 
@@ -70,7 +70,7 @@ def poly(label, points, kind=FORBIDDEN, note=""):
 
 
 def tilted(cx, cy, half_w, half_h, deg):
-    """A rectangle turned by `deg` about (cx, cy) - metrox's house is 5.75 deg
+    """A rectangle turned by `deg` about (cx, cy) - the test flat sits 5.75 deg
     off the map axes, which is the whole reason polygons exist."""
     c, s = math.cos(math.radians(deg)), math.sin(math.radians(deg))
     return [[cx + c * x - s * y, cy + s * x + c * y]

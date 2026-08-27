@@ -1,7 +1,7 @@
 """Frontier exploration as a pure, replayable function.
 
-Shape asked for upstream in dimensionalOS/dimos#1255 and written down in
-`showrobotics/docs/dimos_explorer_spec.md` §3:
+Shape asked for upstream in dimensionalOS/dimos#1255 (design notes
+in this docstring)
 
     next_target(costmap, pose, state) -> PoseStamped | None
 

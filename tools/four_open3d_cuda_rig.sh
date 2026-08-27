@@ -1,9 +1,9 @@
 #!/bin/bash
-# Four open3d-CUDA jumeau, sur le RIG sous qemu-aarch64 (idee metrox 27/08:
-# "on ne va pas compiler un truc sur un Jetson, le rig dort") - tourne DANS
-# le conteneur officiel nvcr.io/nvidia/l4t-jetpack:r36.4.0 (CUDA 12.6 aarch64
-# inclus). Le rover compile en natif en parallele: le premier four qui sort
-# une roue cp312 gagne. Lance par docker run, /work = ~/open3d_four_rig monte.
+# Twin open3d-CUDA build oven, on the RIG under qemu-aarch64 - compiling this
+# on a Jetson is slow while a much bigger idle machine is available. Runs INSIDE
+# the official nvcr.io/nvidia/l4t-jetpack:r36.4.0 container (CUDA 12.6 aarch64
+# included). The rover compiles natively in parallel: the first oven to produce
+# a cp312 wheel wins. Started by docker run, /work = ~/open3d_four_rig mounted.
 set -uo pipefail
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 export DEBIAN_FRONTEND=noninteractive
@@ -23,8 +23,8 @@ log "ETAPE 2/4: dependances Open3D (leur script officiel)"
 cd /work/Open3D
 SUDO=" " bash util/install_deps_ubuntu.sh assume-yes > ../deps.log 2>&1 \
   || { log "ECHEC deps (deps.log)"; exit 1; }
-# python3-pip d'apt = le pip du 3.10 systeme; le 3.12 deadsnakes doit
-# recevoir le sien (echec 18h20: cmake introuvable car jamais installe)
+# apt's python3-pip is the system 3.10 pip; the deadsnakes 3.12 needs its own
+# (failure observed: cmake not found, because it was never installed for 3.12)
 python3.12 -m ensurepip --upgrade >> ../deps.log 2>&1
 python3.12 -m pip install -q "cmake>=3.24,<4" ninja setuptools wheel >> ../deps.log 2>&1 \
   || { log "ECHEC pip cmake (deps.log)"; exit 1; }
@@ -39,7 +39,7 @@ cmake -DBUILD_CUDA_MODULE=ON -DCMAKE_CUDA_ARCHITECTURES=87 -DBUILD_GUI=OFF -DBUI
       -DPython3_EXECUTABLE=$(which python3.12) -DCMAKE_BUILD_TYPE=Release .. > ../../cmake.log 2>&1 \
   || { log "ECHEC cmake (cmake.log)"; exit 1; }
 
-log "ETAPE 4/4: make -j6 pip-package (qemu: lent, plafonne pour ne pas gener Vita)"
+log "ETAPE 4/4: make -j6 pip-package (qemu: lent, plafonne pour ne pas starve other workloads)"
 make -j6 pip-package > ../../make.log 2>&1 \
   || { log "ECHEC make (make.log, dernieres lignes:)"; tail -5 ../../make.log; exit 1; }
 

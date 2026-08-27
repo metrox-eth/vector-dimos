@@ -17,10 +17,12 @@ sonar are reflexes:
   forward brake (adapter.brake_forward). A reading is a speed limit for the
   next second, never a fact about the world.
 
-Corner map (validated live 25/08 17h37): SW order = GPIO 1,2,3,4 =
-avant-gauche, arriere-gauche, arriere-droit, avant-droit.
+Corner map (validated live 2026-08-25): SW order = GPIO 1,2,3,4 =
+avant-gauche, arriere-gauche, arriere-droit, avant-droit (the firmware's own
+labels: front-left, rear-left, rear-right, front-right).
 Sonar: front centre of the bumper, usable range measured on the robot = 66 cm
--> trust cap 0.55 m (regle du monde 17). Median of 3, spread < 0.10 m.
+-> trust cap 0.55 m, i.e. the measured range minus a margin. Median of 3,
+spread < 0.10 m.
 """
 
 from __future__ import annotations
@@ -66,27 +68,28 @@ CORNERS = (   # body 62.5 x 46 cm with the bumper bars (measured)
     ("arriere-droit", (-0.31, -0.23), True),
     ("avant-droit",   (0.31, -0.23), False),
 )
-SONAR_MAX_TRUSTED = 0.55        # regle du monde 17 (66 cm measured, margin)
+SONAR_MAX_TRUSTED = 0.55        # 66 cm measured on the robot, minus a margin
 SONAR_MEDIAN = 3
 SONAR_SPREAD_MAX = 0.10
 CONTACT_COOLDOWN_S = 1.0
 BUMP_HOLD_S = 0.10        # a corner must stay closed this long to be a CONTACT.
-                          # 27/08 11h40: both FRONT corners closed 104 ms apart
-                          # on a STANDING rover, then more on every acceleration
-                          # - the bumper bar (much softer springs since 26/08)
+                          # measured 2026-08-27: both FRONT corners closed 104 ms
+                          # apart on a STANDING rover, then more on every
+                          # acceleration - the bumper bar (much softer springs
+                          # since 2026-08-26)
                           # flutters and closes its own switches. A real
                           # collision keeps pressing until the escape; a flutter
                           # releases within the window (the ESP sends a state
                           # line on EVERY change, measured). 0.10 s = 1.5 cm of
                           # push at cruise - inside the bar's spring travel.
 SONAR_PUBLISH_PERIOD_S = 0.2    # <= 5 Hz on sonar_range
-# Owner's vote, 26/08 19h45, after the bumper cushion lifted a few millimetres
-# and sat in front of the sonar for two hours (0.08 m readings, every drive
-# clamped before the brake itself was ripped out): NO sonar at all - "on
-# eteint les capteurs qui nous posent probleme jusqu'a ce qu'on sache s'en
-# servir". The switches stay: they are the safety. The preflight still reads
-# the raw ESP stream and fails loudly under 0.30 m ("coussinet ?"), so a
-# blocked sonar is caught at every flight even while nothing consumes it.
+# Decided 2026-08-26, after the bumper cushion lifted a few millimetres and sat
+# in front of the sonar for two hours (0.08 m readings, every drive clamped
+# before the brake itself was ripped out): NO sonar at all. A sensor we do not
+# yet know how to use stays off until we do. The switches stay: they are the
+# safety. The preflight still reads the raw ESP stream and fails loudly under
+# 0.30 m ("coussinet ?"), so a blocked sonar is caught at every flight even
+# while nothing consumes it.
 SONAR_ENABLED = False
 SONAR_CLEAR_AFTER_S = 1.0       # nothing believable for this long = the way is clear
 SONAR_CLEAR_PERIOD_S = 1.0      # heartbeat rate while clear

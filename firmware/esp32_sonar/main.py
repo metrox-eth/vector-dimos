@@ -4,8 +4,9 @@
 #   1 ms impact click is captured even while the sonar ping blocks the
 #   loop (v2 polled every 5 ms with a 20 ms debounce and the 30 ms
 #   time_pulse_us made it deaf 30% of the time: finger presses passed,
-#   real collision clicks never did - owner heard them, logs stayed empty,
-#   26/08). The receiving module has its own 1 s cooldown, so switch
+#   real collision clicks never did - they were audible in the room while
+#   the logs stayed empty, 2026-08-26). The receiving module has its own
+#   1 s cooldown, so switch
 #   bounce costs nothing here.
 #   Lines: "SW a b c d" on every latched hit and on state change (1 =
 #   pressed) + a 500 ms heartbeat of the steady state.

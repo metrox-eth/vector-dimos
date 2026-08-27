@@ -4,12 +4,12 @@ Rule #2: a known input must give a known output, in physical units (metres,
 m/s). Groups:
   A. parse_line   - real ESP serial lines
   B. SonarFilter  - median of 3, spread gate, 0.55 m trust cap
-  C. CORNERS      - the switch map validated live on 25/08
+  C. CORNERS      - the switch map validated live on 2026-08-25
   D'. brake_forward  - metres in, forward m/s out (vector_dimos.adapter)
   D''. sonar_publication - what goes on the sonar_range stream, and when
   D'''. the same brake through the adapter, in wheel RPM on a mock bus
 
-The ESP module writes nothing into the map any more (sensor doctrine, 25/08),
+The ESP module writes nothing into the map any more (sensor doctrine, 2026-08-25),
 so there is no patch geometry left to test here.
 
 Run:  .venv/bin/python3 tests/test_esp_sensors_cold.py
@@ -110,7 +110,7 @@ print("D''. sonar_publication (what reaches the sonar_range stream)")
 p = sonar_publication(0.42, 0.0, 0.25)
 check("fresh median, 0.25 s since last -> publish 0.42 m", p == 0.42, f"{p}")
 from vector_dimos.esp_sensors import SONAR_ENABLED
-check("le sonar est DESACTIVE dans la stack (vote metrox 26/08: coussinet)", SONAR_ENABLED is False)
+check("le sonar est DESACTIVE dans la stack (decision 26/08: coussinet)", SONAR_ENABLED is False)
 p = sonar_publication(0.42, 0.0, 0.10)
 check("same median 0.10 s later -> None (5 Hz cap)", p is None, f"{p}")
 p = sonar_publication(None, 1.2, 1.0)
@@ -150,7 +150,7 @@ creep = wheel_rpm(free, fbus, (0.05, 0.0, 0.0))
 check("no sonar: 0.20 m/s -> 22 RPM per wheel", full == [(2, (22, -22)), (1, (22, -22))], f"{full}")
 check("no sonar: 0.05 m/s -> 6 RPM per wheel", creep == [(2, (6, -6)), (1, (6, -6))], f"{creep}")
 
-braked.note_sonar_range(0.42)   # owner, 26/08 19h37: the sonar INFORMS, it never brakes
+braked.note_sonar_range(0.42)   # decided 2026-08-26: the sonar INFORMS, it never brakes
 got = wheel_rpm(braked, bbus, (0.2, 0.0, 0.0))
 check("sonar 0.42 m: 0.20 m/s asked -> UNBRAKED 22 RPM (info only)", got == full, f"{got}")
 braked.note_sonar_range(0.25)

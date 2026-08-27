@@ -1,9 +1,9 @@
 #!/bin/bash
-# Four open3d-CUDA EXPRESS sur ARM loue (vast.ai GB10, 20 coeurs Grace natifs)
-# - idee metrox 27/08 18h48 ("on a du credit sur vast.ai"). Tourne DANS le
-# conteneur nvcr.io/nvidia/cuda:12.6-devel arm64 de l'instance: nvcc 12.6
-# cible sm_87 (Orin) sans avoir besoin du GPU local. ~$0.33/h, detruite
-# sitot la roue cp312 sortie. Les fours rover+rig restent en filet.
+# EXPRESS open3d-CUDA build oven on rented ARM (vast.ai GB10, 20 native Grace
+# cores), added 2026-08-27. Runs INSIDE the instance's
+# nvcr.io/nvidia/cuda:12.6-devel arm64 container: nvcc 12.6 targets sm_87 (Orin)
+# without needing the local GPU. ~$0.33/h, instance destroyed as soon as the
+# cp312 wheel is out. The rover and rig ovens stay up as a fallback.
 set -uo pipefail
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 export DEBIAN_FRONTEND=noninteractive
@@ -22,8 +22,8 @@ log "python: $(python3.12 --version)"
 log "ETAPE 2/4: sources v0.19.0 + dependances Open3D"
 [ -d Open3D ] || git clone --depth 1 --branch v0.19.0 https://github.com/isl-org/Open3D.git > clone.log 2>&1
 cd Open3D
-# patch Pair CUDA (bug Jetson connu, isl-org/Open3D#6885): le constructeur
-# fourni rend le tableau __shared__ non-trivial, nvcc recent refuse (20054)
+# Pair CUDA patch (known Jetson bug, isl-org/Open3D#6885): the supplied
+# constructor makes the __shared__ array non-trivial and recent nvcc rejects it (20054)
 sed -i 's|constexpr __device__ inline Pair() {}|Pair() = default;|' cpp/open3d/core/nns/kernel/Pair.cuh
 grep -q "Pair() = default" cpp/open3d/core/nns/kernel/Pair.cuh || { log "ECHEC patch Pair"; exit 1; }
 SUDO=" " bash util/install_deps_ubuntu.sh assume-yes > ../deps.log 2>&1 \
@@ -37,10 +37,10 @@ log "cmake: $(cmake --version | head -1)"
 
 log "ETAPE 3/4: configuration (CUDA sm_87 Orin, sans GUI/WebRTC/tests)"
 rm -rf build && mkdir -p build && cd build
-# CUDA_RUNTIME_LIBRARY=Shared: le cudart STATIQUE injecte un segment TLS
-# 48 Ko aligne 4096 dans le module python, et la glibc 2.35 du rover ne
-# sait pas le placer au dlopen (mesure 27/08 19h40: tunables sans effet,
-# mini-repro nvcc: -cudart shared = plus de segment TLS du tout).
+# CUDA_RUNTIME_LIBRARY=Shared: the STATIC cudart injects a 48 KB TLS segment
+# aligned to 4096 into the python module, and the rover's glibc 2.35 cannot
+# place it at dlopen time (measured 2026-08-27: tunables had no effect;
+# minimal nvcc repro: -cudart shared removes the TLS segment entirely).
 cmake -DBUILD_CUDA_MODULE=ON -DCMAKE_CUDA_ARCHITECTURES=87 -DBUILD_GUI=OFF -DBUILD_WEBRTC=OFF \
       -DCMAKE_CUDA_RUNTIME_LIBRARY=Shared \
       -DBUILD_EXAMPLES=OFF -DBUILD_UNIT_TESTS=OFF -DBUILD_PYTHON_MODULE=ON \

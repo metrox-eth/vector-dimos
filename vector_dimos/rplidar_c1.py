@@ -35,13 +35,13 @@ logger = setup_logger()
 # wiring; the stick was the fault.
 # The FIREPHX stick, rehabilitated and re-plugged
 # (unique serial FX2348N - no by-id collision with the PZEM's CH340). It
-# replaced the Silicon Labs CP2102 of 26/08 17h12. NOTE 27/08: the "dead
-# lidar" of 26/08 evening was never the hardware - the modem lines are
+# replaced the Silicon Labs CP2102 on 2026-08-26. NOTE 2026-08-27: the "dead
+# lidar" of 2026-08-26 evening was never the hardware - the modem lines are
 # load-bearing (see c1_serial.open): a killed stack froze RTS in the mute
 # combo and every reopen kept it there.
 # The lidar has lived on two USB-TTL sticks (both known-good silicon); after
 # every shock-and-swap episode the plugged one changes. Resolve whichever is
-# present instead of hardcoding - the owner swaps, the code follows.
+# present instead of hardcoding - the hardware gets swapped, the code follows.
 _KNOWN_STICKS = (
     "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0",
     "/dev/serial/by-id/usb-FIREPHX_USB_SER_FX2348N-if00",

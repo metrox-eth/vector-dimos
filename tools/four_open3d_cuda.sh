@@ -1,10 +1,10 @@
 #!/bin/bash
-# Four open3d-CUDA, natif sur l'Orin - lance le 27/08 au soir (mandat metrox :
-# le mapper dimOS demande CUDA par defaut, nos paquets sont CPU-only, aucune
-# roue open3d-CUDA Jetson n'existe en telechargement - verifie, sources dans
-# ORDRES). Tourne detache, ecrit tout dans ~/open3d_four/four.log.
-# Prerequis poses par Iris avant lancement : clone Open3D v0.19.0 dans
-# ~/open3d_four/Open3D, swapfile 8 Go actif, stack VECTOR eteint.
+# open3d-CUDA build oven ("four"), native on the Orin - first run 2026-08-27
+# evening. Why: the dimOS mapper asks for CUDA by default, our packages are
+# CPU-only, and no prebuilt open3d-CUDA Jetson wheel exists to download
+# (checked). Runs detached, writes everything to ~/open3d_four/four.log.
+# Prerequisites, to put in place before launching: Open3D v0.19.0 cloned into
+# ~/open3d_four/Open3D, an 8 GB swapfile active, the VECTOR stack stopped.
 set -uo pipefail
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 cd ~/open3d_four
