@@ -216,6 +216,13 @@ $ python tests/test_rplidar_cold.py        # polar -> metres, sensor hot-plug an
 $ python tests/test_blueprints_cold.py     # the three blueprints resolve through dimOS
 ```
 
+Those six are the didactic ones; the bench is nineteen files strong. The same
+`known value in -> known value out` discipline covers the costmap, the zones,
+the planar relocalizer, both frontier explorers, the recovering planner, the
+cost gradient, the ESP sensors and their serial layer, the ReSpeaker reader,
+the A/B bench itself and the table-leg regression - every `tests/test_*_cold.py`
+runs on a bare checkout, no robot.
+
 The same mock bus carries the real dimOS runtime: with `VECTOR_MOCK_BUS=1` the
 adapter binds to the in-memory MODBUS mock instead of opening the serial port,
 so the pipeline — coordinator, control ticks, twist to per-wheel RPM, feedback,
@@ -317,6 +324,10 @@ $ python tools/keepout.py add toilettes 0.55 -9.95 2.65 -6.65
 $ python tools/keepout.py add rampe -3.0 -8.2 -1.95 -7.75 --type no_slip_reflex
 $ python tools/keepout.py rm toilettes            # works on polygons too
 ```
+
+The whole custom layer is itself an A/B switch: `STOCK_NAV=1` parks it (map,
+zones, custom explorer) and runs dimOS's stock costmapper + frontier explorer
+instead, so the two navigations are directly comparable on the same rover.
 
 `PERSISTENT_MAP=0` turns the whole thing off: no relocalization, no saved map,
 no zones. `PERSISTENT_MAP_REBASE=1` lets a run that did NOT relocalize replace
