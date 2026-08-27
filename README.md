@@ -1,6 +1,6 @@
 # vector-dimos
 
-![VECTOR, 2026-08-23: mecanum wheels on hub motors, RealSense D455F on the folding mast, RPLIDAR C1 on the lid, e-stop, Jetson Orin Nano inside](docs/images/vector.jpg)
+![VECTOR — an open source holonomic rover on dimOS](docs/images/vector_banner.jpg)
 
 [VECTOR](docs/hardware.md) is a custom-designed holonomic mobile platform, built from
 scratch: four mecanum wheels on brushless hub motors, a steel chassis, and enough
@@ -10,6 +10,43 @@ torque to carry a robot arm. It handles gravel, grass, tiles and ramps.
 This package integrates VECTOR into [dimOS](https://github.com/dimensionalOS/dimos)
 as an **external blueprint package** — no fork, no patches. dimOS discovers it
 through Python entry points and composes our blueprints with its own.
+
+## Status — work in progress
+
+![The flat, mapped by VECTOR: lidar + depth camera fused into a height-coloured voxel grid, built on the Jetson's GPU, watched live in Rerun](docs/images/voxel_map.jpg)
+
+What runs today, all of it on a Jetson Orin Nano 8GB unless said otherwise:
+
+- **Holonomic teleop** with a per-wheel envelope law — mixed stick inputs can
+  never saturate a wheel — plus cold benches for every layer (kinematics,
+  adapter, gamepad, lidar reader, blueprints).
+- **Lidar odometry** (kiss-icp scan-to-map with a gyro prior) feeding a 2D
+  costmap that learns and unlearns, with persistent maps and keep-out zones
+  (documented below).
+- **Voxel mapping on the GPU.** Stock aarch64 open3d has no CUDA, so this repo
+  carries reproducible build recipes (`tools/four_open3d_cuda*.sh` — native on
+  the Orin, cross via qemu, or on a rented cloud box) with every trap encoded:
+  the nvcc `Pair()` patch, cmake pinned below 4, cudart linked shared so the
+  wheel survives `dlopen` on JetPack 6.x, and the `GLIBC_TUNABLES` static-TLS
+  dose the runtime needs. The resulting wheel puts dimOS's `VoxelBlockGrid`
+  path on the GPU.
+- **zenoh transport.** The same stack on dimOS's zenoh bus instead of LCM took
+  the system load from ~24 to ~6.4 on the Nano.
+- **Distributed relocalization.** dimOS's reference-map anchoring runs on a
+  second machine over the same zenoh mesh (`vector-dimos.reloc-rig`, with a
+  namespaced coordinator so both machines keep their own `dimos stop`). A match
+  that costs 45–113 s on the Nano lands in 12–15 s there, and the merged
+  reference map flows back to the stock costmapper on the robot.
+- **Flight tooling**: a gated launch sequence (`tools/fly.sh` — piloted flight
+  is the default, `EXPLORE=1` arms autonomy), a bi-bus organ panel
+  (`tools/stats_server.py`, LCM and zenoh at once), and a state-transition
+  vigil that only speaks on change.
+
+Where it stops today: the anchored lap — driving the flat against a saved
+reference map and confirming the map comes out as one room, not two — is wired
+end to end and verified on the bus, but the validation lap itself hasn't been
+driven yet. Next after that: the gyro prior recalibration on the new mast, and
+a JetPack 7.2 / CUDA 13 rebuild of the wheel.
 
 ## How it plugs in
 
@@ -234,7 +271,19 @@ vector_dimos/
   persistent_map.py  # the saved map, its generations, and the zone file
   stuck_guard.py     # wheels turn, world does not -> slip (quiet inside a no_slip_reflex zone)
   imu_slip.py        # the body as witness: slip in 0.2-0.5 s (same zone rule)
+  nav_blueprints.py  # the full nav/explore blueprints (voxel mapper on CUDA, costmapper, recorder)
+  relocalization.py  # dimOS's RelocalizationModule with one threshold adapted to planar maps
+  rig_blueprints.py  # import-light blueprints meant to run on a second machine (reloc-rig)
+  memory.py          # recorder configs: full replay vs a light odom+costmap teleop recording
 tools/
+  fly.sh           # the gated launch sequence (piloted default; EXPLORE=1 arms autonomy)
+  stats_server.py  # bi-bus organ panel (LCM + zenoh), JSON + /panel
+  vigie_iris.py    # state-transition vigil over the panel: one line per real change
+  rig_runner.py    # run dimos on a second machine with a namespaced coordinator
+  zenoh_rendezvous.py   # a pure introduction peer so both machines' sessions gossip
+  four_open3d_cuda.sh          # open3d CUDA bake, native on the Orin
+  four_open3d_cuda_rig.sh      # same bake, cross via qemu in l4t-jetpack
+  four_open3d_cuda_vast.sh     # same bake, on a rented aarch64 cloud box
   keepout.py       # declare the zones, in metres, in the persistent frame (CLI)
   zone_server.py   # the same zones, drawn with the mouse on the map: http://<rover>:8902
   zone_ui.html     # the page it serves (vanilla canvas, no CDN, no build step)
