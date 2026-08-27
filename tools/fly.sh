@@ -55,7 +55,9 @@ sleep 8
 # The owner should never have to grab, move and resize the map window (27/08:
 # "une petite fenetre... a chaque run la mettre sur l'autre ecran"). Park it
 # fullscreen on the LEFT monitor (DP-1, 0,0) - the panel lives on the right.
-WID=$(DISPLAY="${DISPLAY:-:1}" xdotool search --sync --name "Rerun Viewer" 2>/dev/null | head -1)
+# BOUNDED (11h43: --sync waited forever on a title mismatch and froze the
+# whole sequence at gate 4 - the exact mute-hang sin this file exists to kill)
+WID=$(DISPLAY="${DISPLAY:-:1}" timeout 10 xdotool search --onlyvisible --name "[Rr]erun" 2>/dev/null | head -1)
 [ -n "$WID" ] && DISPLAY="${DISPLAY:-:1}" xdotool windowmove "$WID" 0 0 windowsize "$WID" 3840 2160 2>/dev/null
 [ -n "$WID" ] && echo "map window parked fullscreen on the left monitor" || echo "(map window not found by name - place it by hand this once)" 
 ssh $ROVER "ss -tn state established \"( sport = :9877 )\" | grep -q ." \
