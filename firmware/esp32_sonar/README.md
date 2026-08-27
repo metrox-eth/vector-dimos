@@ -1,28 +1,28 @@
-# Capteurs de contact + sonar sur ESP32-S3 (MicroPython)
+# Contact sensors + sonar on ESP32-S3 (MicroPython)
 
-## Carte des coins (passe validée 25/08 17h37, déterministe du premier coup)
+## Corner map (validated 2026-08-25, deterministic on the first pass)
 
-| Coin | GPIO | patte |
+| Corner | GPIO | leg |
 |---|---|---|
-| avant-gauche | 1 | actif bas (COM chaînés sur GND, rappels internes) |
-| arrière-gauche | 2 | idem |
-| arrière-droit | 3 | idem |
-| avant-droit | 4 | idem |
+| front-left | 1 | active low (COMs chained to GND, internal pull-ups) |
+| rear-left | 2 | same |
+| rear-right | 3 | same |
+| front-right | 4 | same |
 
-Sortie série : `SW a b c d` (ordre GPIO 1,2,3,4 ; 1 = appuyé) à chaque
-changement + battement 500 ms. Les résistances du peigne ont été CLIPPÉES
-(elles combattaient les rappels internes).
+Serial output: `SW a b c d` (GPIO order 1,2,3,4; 1 = pressed) on every change
+plus a 500 ms heartbeat. The comb's resistors were CLIPPED (they were fighting
+the internal pull-ups).
 
-Né le 25/08/2026, après le verdict TXB0108 (docs/verdict_museau_20260825.md) :
-le sonar ne pouvait pas vivre sur le 40-pin du Jetson ; sur l'ESP32-S3 il a
-marché du premier coup, en 3,3 V, ZÉRO résistance.
+Born 2026-08-25, after the TXB0108 verdict (docs/verdict_museau_20260825.md):
+the sonar could not live on the Jetson's 40-pin header; on the ESP32-S3 it
+worked on the first try, at 3.3 V, with ZERO resistors.
 
-- Câblage : VCC→3V3, TRIG→GPIO5, ECHO→GPIO6, GND→GND (hardware/bumper/schema_esp32.png)
-- Firmware : MicroPython v1.25.0 (ESP32_GENERIC_S3) + ce main.py
-- Sortie : "SONAR <mètres>" à 10 Hz sur l'USB natif (-1 = pas d'écho)
-- Port Jetson : /dev/serial/by-id/usb-Espressif_Systems_Espressif_Device_80b54ee325280000-if00
-- Flash : esptool erase_flash + write_flash 0 (BOOT enfoncé + RST pour entrer
-  en bootloader), puis mpremote cp main.py :main.py
-- Validé : main à ~30 cm → lectures 0,24-0,30 m ; fond de scène stable à 1,074 m.
-- **Portée utile MESURÉE par metrox (monté, 3,3 V) : 66 cm max → seuil de
-  confiance logiciel = 0,55 m.** Au-delà : « hors de portée », jamais « libre ».
+- Wiring: VCC→3V3, TRIG→GPIO5, ECHO→GPIO6, GND→GND (hardware/bumper/schema_esp32.png)
+- Firmware: MicroPython v1.25.0 (ESP32_GENERIC_S3) + this main.py
+- Output: "SONAR <metres>" at 10 Hz on the native USB (-1 = no echo)
+- Jetson port: /dev/serial/by-id/usb-Espressif_Systems_Espressif_Device_80b54ee325280000-if00
+- Flash: esptool erase_flash + write_flash 0 (hold BOOT + tap RST to enter the
+  bootloader), then mpremote cp main.py :main.py
+- Validated: hand at ~30 cm → readings 0.24–0.30 m; stage backdrop stable at 1.074 m.
+- **Useful range MEASURED mounted at 3.3 V: 66 cm max → software confidence
+  threshold = 0.55 m.** Beyond that: "out of range", never "clear".

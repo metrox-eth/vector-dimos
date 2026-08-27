@@ -83,6 +83,100 @@ D455F sits on VECTOR's mast). Localization doctrine — why wheel odometry is ne
 the reference on mecanum, and how the point cloud and the lidar split the job —
 is in [docs/localization.md](docs/localization.md).
 
+## Architecture
+
+```mermaid
+flowchart TD
+
+subgraph group_runtime["dimOS runtime"]
+  node_entrypoints{{"Deployable entry points<br/>Python entry points"}}
+  node_blueprints["Blueprint registration<br/>blueprints<br/>[blueprints.py]"]
+  node_rig_blueprints["Rig blueprints<br/>[rig_blueprints.py]"]
+  node_coordinator["dimOS coordinators<br/>lifecycle and command channels"]
+  node_gamepad["Gamepad teleop<br/>input publisher<br/>[gamepad.py]"]
+  node_lidar["RPLIDAR C1<br/>PointCloud2 source<br/>[rplidar_c1.py]"]
+  node_sensors["ESP sensors<br/>sensor integration<br/>[esp_sensors.py]"]
+  node_zenoh["Shared zenoh mesh<br/>distributed transport"]
+  node_reloc_rig["Remote relocation rig<br/>reference-map workload<br/>[rig_runner.py]"]
+end
+
+subgraph group_motion["Motion hardware"]
+  node_base_adapter["Vector base adapter<br/>TwistBaseAdapter<br/>[adapter.py]"]
+  node_kinematics["Mecanum kinematics<br/>twist-to-wheel mixer<br/>[kinematics.py]"]
+  node_motor_drivers["ZLAC8015D drivers<br/>dual motor controllers<br/>[zlac8015d.py]"]
+  node_rs485["RS485 MODBUS bus<br/>hardware boundary"]
+  node_rover["Mecanum rover<br/>physical hardware"]
+end
+
+subgraph group_mapping["Mapping and navigation"]
+  node_nav_blueprints["Navigation blueprints<br/>[nav_blueprints.py]"]
+  node_lidar_odom["Lidar odometry<br/>scan-to-map localization<br/>[lidar_odometry.py]"]
+  node_costmap["2D costmap<br/>decision map<br/>[costmap2d.py]"]
+  node_persistent_map[("Persistent map and zones<br/>versioned map store<br/>[persistent_map.py]")]
+  node_relocalize2d["Planar relocalizer<br/>global scan matcher<br/>[relocalize2d.py]"]
+  node_autonomy["Exploration and recovery<br/>navigation pipeline<br/>[explorer2.py]"]
+end
+
+subgraph group_operations["Operations"]
+  node_flight_ops["Flight and visibility<br/>operations tooling<br/>[fly.sh]"]
+  node_zone_service["Zone editor service<br/>HTTP and systemd service<br/>[zone_server.py]"]
+end
+
+node_entrypoints -->|"loads"| node_blueprints
+node_blueprints -->|"assembles"| node_coordinator
+node_nav_blueprints -->|"assembles"| node_autonomy
+node_rig_blueprints -->|"deploys"| node_reloc_rig
+node_gamepad -->|"publishes twist"| node_coordinator
+node_coordinator -->|"command channel"| node_base_adapter
+node_base_adapter -->|"3-DOF twist"| node_kinematics
+node_kinematics -->|"wheel velocities"| node_motor_drivers
+node_motor_drivers -->|"MODBUS RTU"| node_rs485
+node_rs485 -->|"drives and reads feedback"| node_rover
+node_lidar -->|"planar scans"| node_lidar_odom
+node_sensors -->|"gyro prior"| node_lidar_odom
+node_lidar_odom -->|"pose"| node_costmap
+node_lidar -->|"obstacle evidence"| node_costmap
+node_persistent_map -->|"keep-out overlay"| node_costmap
+node_persistent_map -->|"saved 2D map"| node_relocalize2d
+node_lidar -->|"startup/move scans"| node_relocalize2d
+node_relocalize2d -->|"accepted frame"| node_lidar_odom
+node_costmap -->|"decision map"| node_autonomy
+node_coordinator -->|"robot namespace"| node_zenoh
+node_reloc_rig -->|"rig namespace"| node_zenoh
+node_flight_ops -->|"launches"| node_coordinator
+node_zone_service -->|"reads and writes"| node_persistent_map
+
+click node_blueprints "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/blueprints.py"
+click node_nav_blueprints "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/nav_blueprints.py"
+click node_rig_blueprints "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/rig_blueprints.py"
+click node_base_adapter "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/adapter.py"
+click node_kinematics "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/kinematics.py"
+click node_motor_drivers "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/zlac8015d.py"
+click node_gamepad "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/gamepad.py"
+click node_lidar "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/rplidar_c1.py"
+click node_sensors "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/esp_sensors.py"
+click node_lidar_odom "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/lidar_odometry.py"
+click node_costmap "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/costmap2d.py"
+click node_persistent_map "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/persistent_map.py"
+click node_relocalize2d "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/relocalize2d.py"
+click node_autonomy "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/explorer2.py"
+click node_reloc_rig "https://github.com/metrox-eth/vector-dimos/blob/main/tools/rig_runner.py"
+click node_flight_ops "https://github.com/metrox-eth/vector-dimos/blob/main/tools/fly.sh"
+click node_zone_service "https://github.com/metrox-eth/vector-dimos/blob/main/tools/zone_server.py"
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+class node_entrypoints,node_blueprints,node_rig_blueprints,node_coordinator,node_gamepad,node_lidar,node_sensors,node_zenoh,node_reloc_rig toneBlue
+class node_base_adapter,node_kinematics,node_motor_drivers,node_rs485,node_rover toneAmber
+class node_nav_blueprints,node_lidar_odom,node_costmap,node_persistent_map,node_relocalize2d,node_autonomy toneMint
+class node_flight_ops,node_zone_service toneRose
+```
+
 ## Install
 
 ```console
@@ -275,8 +369,6 @@ vector_dimos/
                      # an obstacle ignores floor samples for 3 s), checkpoints, keep-out cells
   relocalize2d.py    # global 2D relocalization: a scan back onto a saved map (numpy only)
   persistent_map.py  # the saved map, its generations, and the zone file
-  stuck_guard.py     # wheels turn, world does not -> slip (quiet inside a no_slip_reflex zone)
-  imu_slip.py        # the body as witness: slip in 0.2-0.5 s (same zone rule)
   nav_blueprints.py  # the full nav/explore blueprints (voxel mapper on CUDA, costmapper, recorder)
   relocalization.py  # dimOS's RelocalizationModule with one threshold adapted to planar maps
   rig_blueprints.py  # import-light blueprints meant to run on a second machine (reloc-rig)
