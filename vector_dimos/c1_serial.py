@@ -45,15 +45,15 @@ class C1Scanner:
         (constate et resolu le 25/08). On sonde GET_INFO ; si silence, on
         martele A5 50 et on re-sonde toutes les secondes.
 
-        30 s, pas 6 : doctrine metrox (26/08 22h19, la enieme fois) - « il ne
-        demarre pas a froid, ce truc, tu dois lui lancer une salve ». Une
-        salve qui abandonne trop tot a le meme visage qu'un lidar mort."""
+        6 s : la vraie torpeur s'est toujours reglee en 6 (metrox 27/08 -
+        l'essai a 30 s du 26/08 au soir n'a rien reveille de plus, il ne
+        faisait que retarder le verdict)."""
         try:
             self.info()
             return
         except Exception:  # noqa: BLE001 - engourdi, on le reveille
             pass
-        deadline = time.monotonic() + 30.0
+        deadline = time.monotonic() + 6.0
         while time.monotonic() < deadline:
             burst_until = time.monotonic() + 1.0
             while time.monotonic() < burst_until:
@@ -65,7 +65,7 @@ class C1Scanner:
                 return
             except Exception:  # noqa: BLE001 - toujours engourdi, on insiste
                 pass
-        raise RuntimeError("lidar muet meme apres 30 s de reveil-rafale")
+        raise RuntimeError("lidar muet meme apres le reveil-rafale")
 
     def close(self) -> None:
         if self._ser is not None:
