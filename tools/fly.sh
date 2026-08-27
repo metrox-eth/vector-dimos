@@ -9,13 +9,29 @@
 # vois pas d'ou ca vient, ca va de nouveau etre le drame".
 #
 # Runs on the RIG (the machine with the screen), not on the rover:
-#     tools/fly.sh          full flight
-#     DRY=1 tools/fly.sh    everything up and displayed, exploration NOT started
+#     tools/fly.sh              piloted flight (DEFAULT): everything up, exploration NOT armed
+#     EXPLORE=1 tools/fly.sh    autonomous exploration flight (gates 7/8 + 8/8 run)
 set -u
 ROVER=metrox@192.168.0.56
 VIEWER=/home/openclaw/miniconda3/envs/lerobot052/bin/dimos-viewer
 RELAY_EXT=45817          # fixed rover-side UDP port relaying to the run's dynamic QUIC port
-DRY="${DRY:-0}"
+# The piloted lap is the DEFAULT (28/08 00h: DRY was forgotten twice at midnight,
+# autonomous exploration armed itself into a piloted evening and the flight then
+# hung on gate 8/8 - the owner lost his run to a switch. The common case must be
+# the default; the autonomous case is the explicit exception.)
+if [ "${EXPLORE:-0}" = "1" ]; then DRY=0; else DRY="${DRY:-1}"; fi
+
+echo "== SYNC code rig -> rover =="
+# The rover has NO git clone - this rsync IS the deployment (found 27/08 16h:
+# nothing else ships code, so rig and rover can silently diverge). Gate, not
+# goodwill: a flight on stale code is a flight on unknown code.
+SYNC_OUT=$(rsync -ai --exclude .venv --exclude .git --exclude __pycache__ --exclude "*.log" \
+  ~/vector-dimos/ "${ROVER}":vector-dimos/) \
+  || { echo "SYNC FAILED - no flight (le code rig/rover divergerait)"; exit 1; }
+if echo "$SYNC_OUT" | grep -q "stats_server.py"; then
+  ssh $ROVER 'for p in $(pgrep -f "[s]tats_server"); do kill "$p"; done' 2>/dev/null
+  echo "stats_server change: ancien processus tue (la porte 5 relance le neuf)"
+fi
 
 echo "== 0/7 rover REPOSITIONNE + no stack already flying =="
 # Owner's rule (27/08 12h20): NEVER launch without the rover repositioned by
@@ -54,7 +70,18 @@ ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight_nav.py' || { e
 
 echo "== 3/7 stack =="
 LAUNCH_MARK=$(ssh $ROVER 'date +%s')
-ssh $ROVER 'cd ~/vector-dimos && ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null'
+# the mode flags MUST cross the ssh boundary (27/08 13h38: STOCK_NAV and
+# GAMEPAD were set on the rig and never reached the rover - the midday
+# "stock" flights were not stock)
+# PERSISTENT_MAP=0 = Sunday's world: no relocalization, no freeze, fresh frame
+# (the feature's own off-switch - its doc says "exactly as before this
+# existed"). Default stays 1; 0 is the teleop-lap escape after the 27/08 16h40
+# deadlock (weak-score checkpoint never matchable -> frozen map -> reference
+# expired -> no exit).
+# GLIBC_TUNABLES: la roue open3d-CUDA maison porte un TLS de 41 Ko que la
+# reserve dlopen par defaut (~1,6 Ko) ne loge pas - 256 Ko la met au large
+# (mesure 27/08 20h: sans = "cannot allocate memory in static TLS block").
+ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=${TRANSPORT:-lcm} STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1} ODOM_GUARDS=${ODOM_GUARDS:-1} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
 sleep 12
 # the run dir must POSTDATE this launch: on 26/08 a failed launch over a live
 # stack passed the lidar check against the PREVIOUS run's log (false IN FLIGHT)
@@ -84,14 +111,27 @@ echo "viewer CONNECTED to this run - the map is live"
 
 echo "== 5/7 the organ panel on the owner's screen (GATE) =="
 # stats_server: passive LCM listener + battery meter, port 8900 on the LAN.
-ssh $ROVER 'pgrep -f "[s]tats_server" >/dev/null || (cd ~/vector-dimos && nohup ./.venv/bin/python tools/stats_server.py >> /tmp/stats_server.log 2>&1 & sleep 2)'
+# A running stats_server OLDER than its file is stale code lying with a live
+# port (bitten 27/08 16h25: the old process 404'd ?watcher= and the vigil went
+# blind). Compare process start vs file mtime; restart when stale.
+ssh $ROVER 'F=~/vector-dimos/tools/stats_server.py
+P=$(pgrep -f "[s]tats_server" | head -1)
+if [ -n "$P" ] && [ "$(stat -c %Y "$F")" -gt "$(stat -c %Y "/proc/$P")" ]; then kill "$P"; sleep 1; P=""; fi
+[ -n "$P" ] || (cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 nohup ./.venv/bin/python tools/stats_server.py >> /tmp/stats_server.log 2>&1 & sleep 6)'
 curl -sf -m 5 "http://192.168.0.56:8900/metrics" | grep -q '"sensors"' \
   || { echo "NO ORGAN PANEL - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
-# The organs live in the REAL Robot Control Panel (VECTOR tab, Organs card).
-# Separate TABS, never iframes (owner 27/08: "pas de iframes ca affiche pas bien").
-DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://10.44.0.20:3000/vector" >/dev/null 2>&1 &
-DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://192.168.0.56:8902/" >/dev/null 2>&1 &
-echo "organ block answering - Control Panel VECTOR tab + zones map opened"
+# Owner's rule (27/08 15h57): every monitor Iris runs joins the flight check and
+# the panel ("Software > Monitoring"). Her vigil (tools/vigie_iris.py, on the
+# rig) polls /metrics?watcher=iris; loud warning if nobody is watching.
+curl -sf -m 5 "http://192.168.0.56:8900/metrics" | python3 -c '
+import json, sys
+m = json.load(sys.stdin).get("sensors", {}).get("software", {}).get("monitoring", {})
+sys.exit(0 if m.get("alive") else 1)' 2>/dev/null \
+  || echo "!! VIGIE IRIS ABSENTE (Software > Monitoring rouge) - lancer tools/vigie_iris.py"
+# NO tab is ever opened by the flight (owner 27/08 13h20: "a chaque fois tu
+# m'ouvres des nouveaux onglets, j'en avais 15"). He keeps two pinned tabs -
+# Control Panel and cockpit - and the zones UI only when he edits zones.
+echo "organ block answering (your pinned Control Panel tab shows it)"
 
 echo "== 6/7 the camera cockpit on the owner's screen (GATE) =="
 # The cockpit page (deno, 7780) and its video (WebTransport over QUIC/UDP) both
@@ -115,11 +155,16 @@ nohup python3 "$(dirname "$0")/udp_forward.py" "$WT_PORT" 192.168.0.56 "$RELAY_E
 # LAN address gives "Not a secure context" (owner caught it, 26/08 21h55).
 for p in $(ss -tlnp 2>/dev/null | grep -oE "127.0.0.1:7780.*pid=[0-9]+" | grep -oE "pid=[0-9]+" | cut -d= -f2 | sort -u); do kill "$p"; done 2>/dev/null
 timeout 15 ssh -fN -L 7780:127.0.0.1:7780 -L 8900:127.0.0.1:8900 $ROVER
-sleep 2
-curl -sf -m 8 -o /dev/null "http://127.0.0.1:7780/" \
-  || { echo "NO COCKPIT PAGE - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
-DISPLAY="${DISPLAY:-:1}" firefox --new-tab "http://127.0.0.1:7780/" >/dev/null 2>&1 &
-echo "cockpit tab opened (QUIC port $WT_PORT relayed) - reload it if 'connected' is missing"
+# the deno cockpit server sometimes takes longer than one probe (fly25 and
+# fly28 were refused on a single 2 s-late curl): bounded retry, 10 x 3 s.
+COCKPIT_OK=0
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  curl -sf -m 5 -o /dev/null "http://127.0.0.1:7780/" && { COCKPIT_OK=1; break; }
+  sleep 3
+done
+[ "$COCKPIT_OK" = "1" ] \
+  || { echo "NO COCKPIT PAGE (30 s de retries) - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
+echo "cockpit relayed on QUIC port $WT_PORT - RELOAD your pinned cockpit tab (address never changes)"
 
 if [ "$DRY" = "1" ]; then
   echo "== 7/7 DRY: exploration NOT started =="
