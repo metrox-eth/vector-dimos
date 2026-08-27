@@ -405,11 +405,14 @@ def _nav_blueprint():
                                base_transform=CAMERA_MOUNT),   # their 2nd (motion) pipeline fails on the RSUSB build: "No device connected"
         RPLidarC1.blueprint(),
         ReSpeakerMic.blueprint(stt_language="fr"),   # auto-detect mangles short utterances
-        # gyro prior ON: probed alive 26/08 21h55 (20/20 frames, direct
-        # pyrealsense2) - the 25/08 'No device connected' note was stale. If
-        # the stack's motion pipeline still delivers nothing, _gyro_seen stays
-        # False and the prior falls back to constant-velocity on its own.
-        LidarOdometry.blueprint(),
+        # gyro prior OFF pending re-calibration (27/08 12h20): the IMU delivers
+        # in-stack (81 885 msgs on the bus) but the 12h05 map smeared into
+        # rainbow arcs - rotated copies of the room - and the axis ("-y") was
+        # calibrated 23/08 on the OLD front mast; the camera moved to the rear
+        # mast 24/08 and the sign was never re-validated. A wrong-sign gyro is
+        # worse than none. Constant-velocity drifts gently (-20-35 %/turn,
+        # measured) but never paints rainbows - the A/B that decides.
+        LidarOdometry.blueprint(use_gyro_prior=False),
         VoxelGridMapper.blueprint(voxel_size=0.05, device="CPU:0", frame_id="world", emit_every=3),
         (CostMapper.blueprint(algo="occupancy") if stock_nav_enabled() else
          VectorCostMap.blueprint()),   # STOCK_NAV=1 -> dimOS's CostMapper (occupancy algo, Sunday's
@@ -479,11 +482,14 @@ def _explore_blueprint():
                                base_transform=CAMERA_MOUNT),
         RPLidarC1.blueprint(),
         ReSpeakerMic.blueprint(stt_language="fr"),   # auto-detect mangles short utterances
-        # gyro prior ON: probed alive 26/08 21h55 (20/20 frames, direct
-        # pyrealsense2) - the 25/08 'No device connected' note was stale. If
-        # the stack's motion pipeline still delivers nothing, _gyro_seen stays
-        # False and the prior falls back to constant-velocity on its own.
-        LidarOdometry.blueprint(),
+        # gyro prior OFF pending re-calibration (27/08 12h20): the IMU delivers
+        # in-stack (81 885 msgs on the bus) but the 12h05 map smeared into
+        # rainbow arcs - rotated copies of the room - and the axis ("-y") was
+        # calibrated 23/08 on the OLD front mast; the camera moved to the rear
+        # mast 24/08 and the sign was never re-validated. A wrong-sign gyro is
+        # worse than none. Constant-velocity drifts gently (-20-35 %/turn,
+        # measured) but never paints rainbows - the A/B that decides.
+        LidarOdometry.blueprint(use_gyro_prior=False),
         # carve_columns=False: this voxel map is the Rerun visual only (navigation runs on costmap2d). True ('latest
         # observation wins') erased the camera's table tops on every lidar hit in the same column and the map lost its detail
         # (metrox, 23/08 22:30). Cost of False: a passer-by leaves a ghost trail, until a health-based mapper replaces this one.
