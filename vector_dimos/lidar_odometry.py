@@ -60,6 +60,7 @@ from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.geometry_msgs.Quaternion import Quaternion
 from dimos.msgs.geometry_msgs.Transform import Transform
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
+from dimos.msgs.std_msgs.Bool import Bool
 from dimos.msgs.sensor_msgs.CameraInfo import CameraInfo
 from dimos.msgs.sensor_msgs.Image import Image
 from dimos.msgs.sensor_msgs.Imu import Imu
@@ -82,9 +83,11 @@ LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (metrox, 2026-08-23:
 CAMERA_XYZ_BASE = (-0.20, 0.0, 0.56)  # camera moved to the REAR mast 24/08 (bumper build): 20 cm behind the lidar axis (metrox's tape), 0.56 m up, floor-plane fit; sees the floor from ~0.95 m ahead, its own body not at all
 CAMERA_PITCH_RAD = math.radians(1.1)  # looks 1.1 deg DOWN (floor fit 24/08); roll -0.1 ignored
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
-DEPTH_EVERY = 3                # one depth frame in three (15 fps -> 5 Hz)
+DEPTH_EVERY = 2                # one depth frame in two (15 fps -> 7.5 Hz; was 3, widened 27/08 - the camera is becoming THE detector)
 DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
-OBSTACLE_MAX_M = 1.8            # 25/08 23h42: camera low-obstacle layer RE-ENABLED to 1.8 m. The 'marble
+OBSTACLE_MAX_M = 3.0            # was 1.8 (marble reflections armed phantom cells, 25/08) - widened
+                                # 27/08 12h00: the three ghost defenses now stand (two-viewpoint rule,
+                                # camera-ray carving, moving-object gate). Watch the marble on replay.
                                 # ghosts' were the lidar layer rotated 180 deg (fixed in rplidar_c1.py):
                                 # the camera was right all along. 1.8 m cap kept for far-range depth noise.
                                 # WAS suspended 22h with this note: Even under
@@ -110,6 +113,14 @@ BOOT_GRACE_S = 600.0           # after a refused boot attempt, keep trying this 
                                # success at any point in the grace.
                                # (see the class docstring: a standing rover has one viewpoint)
 CARRY_RESIDUAL_M = 0.35        # the body outran the wheels by this much in CARRY_WINDOW_S: it was carried
+ANCHOR_EVERY_S = 25.0          # continuous SLAM anchor (owner, 27/08 12h16: "il faut absolument que
+                               # chaque mesure se remette sur les murs... il ne faut pas que la carte
+                               # se decale"): every 25 s of driving, the current revolutions are
+                               # matched against the freshest checkpoint; accepted -> the pose snaps
+                               # back onto the walls; rejected -> map writes stay FROZEN and the
+                               # search repeats until re-anchored. Slow rotational poison (the 12h05
+                               # rainbow arcs) gets caught within one period instead of never.
+ANCHOR_MIN_TRAVEL_M = 1.0      # no anchor check while parked - nothing has changed
 CARRY_WINDOW_S = 1.0
 CARRY_COOLDOWN_S = 15.0
 LOST_SIGMA_M = 1.0             # kiss-icp's adaptive threshold above this...
@@ -152,6 +163,8 @@ def split_floor_and_obstacles(bx: np.ndarray, by: np.ndarray, bz: np.ndarray,
 class LidarOdometry(Module):
     pointcloud: In[PointCloud2]
     imu: In[Imu]
+    bump: In[Bool]
+    bump_rear: In[Bool]
     coordinator_joint_state: In[JointState]
     depth_image: In[Image]          # RealSense depth (aligned to colour), DEPTH16 mm
     camera_info: In[CameraInfo]     # colour intrinsics (= aligned depth intrinsics)
@@ -207,6 +220,8 @@ class LidarOdometry(Module):
         # looking while the rover explores and the fresh map keeps building)
         self._reloc_state = "idle"
         self._boot_deadline = 0.0
+        self._last_anchor = time.monotonic()
+        self._anchor_ref_xy: tuple[float, float] | None = None
         self._reloc_gen = 0             # a search started before the last reset is stale
         self._reloc_pts: list[np.ndarray] = []
         self._reloc_thread: Any = None
@@ -555,6 +570,32 @@ class LidarOdometry(Module):
         self._begin_relocalization("carried", reset_kiss=True)
         return True
 
+    def _anchor_due(self, now: float, x: float, y: float) -> bool:
+        """The continuous SLAM anchor (see ANCHOR_EVERY_S). Only while idle,
+        only after some travel - a parked rover proves nothing new."""
+        if now - self._last_anchor < ANCHOR_EVERY_S:
+            return False
+        if self._anchor_ref_xy is not None and \
+                math.hypot(x - self._anchor_ref_xy[0], y - self._anchor_ref_xy[1]) < ANCHOR_MIN_TRAVEL_M:
+            return False
+        self._last_anchor = now
+        self._anchor_ref_xy = (x, y)
+        logger.info("SLAM anchor: verifying this position against the map (writes pause until it agrees)")
+        self._begin_relocalization("anchor", reset_kiss=False)
+        return True
+
+    async def handle_bump(self, msg: Bool) -> None:
+        """A contact is a KNOWN jolt (owner doctrine, 27/08): the pose is
+        suspect from this instant, so freeze map writes and re-anchor NOW
+        instead of letting a shifted map be painted."""
+        if self._reloc_state == "idle":
+            self._last_anchor = time.monotonic()
+            logger.warning("SLAM anchor: bump - map writes frozen, re-anchoring against the map")
+            self._begin_relocalization("bump", reset_kiss=False)
+
+    async def handle_bump_rear(self, msg: Bool) -> None:
+        await self.handle_bump(msg)
+
     # ── the work ───────────────────────────────────────────────────────
     async def handle_pointcloud(self, msg: PointCloud2) -> None:
         out = msg.as_numpy()
@@ -601,6 +642,8 @@ class LidarOdometry(Module):
             self._accumulate(pts, kiss)
         elif self._carried(now_wall, x, y):
             pass                            # _carried() opened a new search; this revolution is not written
+        elif self._anchor_due(t0, x, y):
+            pass                            # anchor check opened; this revolution is not written either
         self.odom.publish(PoseStamped(ts, self.world_frame, position=Vector3(x, y, LIDAR_HEIGHT_M), orientation=q))
         self.reloc_frame.publish(PoseStamped(
             ts, f"reloc:{'searching' if self._searching else self._frame}",

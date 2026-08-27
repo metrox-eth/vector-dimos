@@ -17,7 +17,20 @@ VIEWER=/home/openclaw/miniconda3/envs/lerobot052/bin/dimos-viewer
 RELAY_EXT=45817          # fixed rover-side UDP port relaying to the run's dynamic QUIC port
 DRY="${DRY:-0}"
 
-echo "== 0/7 no stack already flying =="
+echo "== 0/7 rover REPOSITIONNE + no stack already flying =="
+# Owner's rule (27/08 12h20): NEVER launch without the rover repositioned by
+# his hands first - "il peut etre n'importe ou" (the 12h18 run started on a
+# blank map 10 cm from the sofa; its first act was bumping it). Interactive:
+# ask and wait. Detached (Iris): REPOSITIONNE=1 required, given only after
+# his word.
+if [ "${REPOSITIONNE:-0}" != "1" ]; then
+  if [ -t 0 ]; then
+    read -r -p "Rover repositionne au point de depart ? [Entree pour confirmer] " _
+  else
+    echo "REFUS: lancement detache sans REPOSITIONNE=1 (le rover doit etre replace d'abord - regle 27/08)"
+    exit 1
+  fi
+fi
 ssh $ROVER 'for p in $(pgrep -f "[s]onar_live"); do kill "$p"; done' 2>/dev/null   # the readout UI holds the ESP port
 # a STALE deno (cockpit server of a previous run) keeps port 7780 and its QUIC
 # socket, and a stale relay keeps $RELAY_EXT: the new run's cockpit is stillborn
