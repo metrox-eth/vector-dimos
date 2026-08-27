@@ -1,5 +1,7 @@
 # VECTOR hardware
 
+![VECTOR, 2026-08-23: mecanum wheels on hub motors, RealSense D455F on the folding mast, RPLIDAR C1 on the lid, e-stop, Jetson Orin Nano inside](images/vector.jpg)
+
 Custom design, built from scratch. One-off — this repo is its software.
 
 ## Drive
