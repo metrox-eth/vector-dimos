@@ -42,6 +42,12 @@ What runs today, all of it on a Jetson Orin Nano 8GB unless said otherwise:
   (`tools/stats_server.py`, LCM and zenoh at once), and a state-transition
   vigil that only speaks on change.
 
+This is the cockpit during a flight — every organ with its age and message
+count on the left, the dimOS camera cockpit and the live map on the right.
+The launch sequence refuses to fly until all three are actually on screen:
+
+![The VECTOR cockpit in flight: the organ panel (battery, lidar, odometry, IMU, camera, costmap, wheels, bumpers, per-core CPU, unified memory), the dimOS camera cockpit, and the live costmap in Rerun](docs/images/cockpit.jpg)
+
 Where it stops today: the anchored lap — driving the flat against a saved
 reference map and confirming the map comes out as one room, not two — is wired
 end to end and verified on the bus, but the validation lap itself hasn't been
