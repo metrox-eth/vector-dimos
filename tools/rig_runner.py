@@ -2,8 +2,8 @@
 
 dimOS's CoordinatorRPC is a bus-wide singleton (NAME="Coordinator", upstream
 main included - checked 27/08 22h29): the rig's coordinator probe finds the
-ROVER's over the zenoh mesh and refuses to start. lesh's "run two blueprints"
-story needs a namespace this version lacks - question queued for him.
+ROVER's over the zenoh mesh and refuses to start. The upstream "run two
+blueprints" flow needs a namespace this version lacks - question queued upstream.
 
 Until then: rename the rig's coordinator BEFORE the CLI runs. Side benefit:
 `dimos stop` on the rig speaks only to "CoordinatorRig" and can never stop

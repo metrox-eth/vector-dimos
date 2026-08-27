@@ -60,7 +60,7 @@ ESCAPE_PERIOD_S = 0.05  # base watchdog is 0.2 s; 10 Hz left gaps that stopped t
 #      doorway both offer a zero-cost route and the tie falls to path length.
 #      Measured: with dimOS's field alone the planner takes the 0.65 m corridor
 #      when a 0.90 m one of the same length is right there. That is exactly
-#      lesh's "I'd want some gradient from impassable things so that pathing
+#      the upstream "I'd want some gradient from impassable things so that pathing
 #      algo prefers to stay away from obstacles", and the shape of 4 of the 11
 #      impacts in the 25/08 autopsy.
 #   2. simple_inflate rounds its radius up to whole cells (inflation.py:29) and
