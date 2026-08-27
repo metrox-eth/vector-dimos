@@ -101,6 +101,7 @@ class ScoredGrid:
         # Runtime only, never saved: it protects a leg for 3 s, and a monotonic
         # clock means nothing in another process anyway.
         self._last_low_hit = np.full((self.n, self.n), -np.inf, dtype=np.float64)
+        self._cam_prev: frozenset = frozenset()   # camera obstacle cells of the PREVIOUS frame (moving-object gate)
         self._keepout: np.ndarray | None = None   # cells the rover may never enter, whatever the layers say
 
     # ---- coordinates -------------------------------------------------------
@@ -185,11 +186,29 @@ class ScoredGrid:
                          now: float | None = None) -> None:
         """The camera saw something standing here: a hit on the LOW layer, and
         the cell is stamped - for the next LOW_HIT_PROTECT_S the floor beside it
-        may not erase it (see the module docstring: the table leg of run B)."""
-        self._hit(self.low, pts_xy[:, 0], pts_xy[:, 1], from_xy)
+        may not erase it (see the module docstring: the table leg of run B).
+
+        MOVING things are never written (owner, 27/08 11h55: "la RealSense ne
+        doit pas ecrire dans la carte si c'est un objet en mouvement"): a cell
+        only takes a hit if the camera ALSO saw an obstacle there on the
+        previous frame. At 5 Hz, a walking person or a rolling vacuum moves on
+        before the second look; furniture repeats. One frame of latency on
+        genuinely new static obstacles - the lidar layer covers the interval."""
         gx, gy = self.cell(pts_xy[:, 0], pts_xy[:, 1])
-        if len(gx):
-            self._last_low_hit[gy, gx] = time.monotonic() if now is None else now
+        if len(gx) == 0:
+            self._cam_prev = frozenset()
+            return
+        flat = np.unique(gy * self.n + gx)
+        cur = frozenset(int(v) for v in flat)
+        repeat = np.array(sorted(cur & self._cam_prev), dtype=np.int64)
+        self._cam_prev = cur
+        if len(repeat) == 0:
+            return
+        rgx, rgy = repeat % self.n, repeat // self.n
+        rx = self.ox + (rgx + 0.5) * self.res
+        ry = self.oy + (rgy + 0.5) * self.res
+        self._hit(self.low, rx, ry, from_xy)
+        self._last_low_hit[rgy, rgx] = time.monotonic() if now is None else now
 
     def camera_floor(self, pts_xy: np.ndarray, now: float | None = None) -> None:
         """The camera saw bare floor here: a miss on BOTH layers (the only way a
@@ -353,6 +372,7 @@ class ScoredGrid:
         # keep-out slot __init__ would have given it.
         g._keepout = None
         g._last_low_hit = np.full((g.n, g.n), -np.inf, dtype=np.float64)
+        g._cam_prev = frozenset()
         return g
 
     # ---- output ------------------------------------------------------------

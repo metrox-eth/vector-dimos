@@ -97,6 +97,7 @@ def test_thin_leg_survives_the_floor_sampled_beside_it() -> None:
     g = fresh()
     leg = np.array([[1.0, 0.0]])
     t = 1000.0                                     # an injected clock, in seconds
+    g.camera_obstacles(leg, (0.0, 0.00), now=t - 0.1)   # amorce (porte anti-mobiles)
     g.camera_obstacles(leg, (0.0, 0.00), now=t)
     g.camera_obstacles(leg, (0.0, 0.15), now=t + 0.1)
     gx, gy = g.cell(np.array([1.0]), np.array([0.0]))
@@ -147,6 +148,7 @@ def test_ghost_dies_when_the_camera_sees_through_it() -> None:
     dies as soon as the camera looks through that spot at low height."""
     g = fresh()
     t0 = 100.0
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # amorce (porte anti-mobiles)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)   # second viewpoint
     assert g.value_at(2.0, 0.0) == 100, "the ghost starts as a real-looking obstacle"
@@ -161,6 +163,7 @@ def test_ghost_dies_when_the_camera_sees_through_it() -> None:
 def test_high_ray_never_erases_a_low_box() -> None:
     g = fresh()
     t0 = 100.0
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # amorce (porte anti-mobiles)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
     later = t0 + LOW_HIT_PROTECT_S + 1.0
@@ -174,6 +177,7 @@ def test_high_ray_never_erases_a_low_box() -> None:
 def test_fresh_hits_are_protected_from_carving() -> None:
     g = fresh()
     t0 = 100.0
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # amorce (porte anti-mobiles)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
     # 1 s later (inside LOW_HIT_PROTECT_S): a real thing is re-hit every
@@ -189,6 +193,7 @@ def test_floor_ray_carves_the_low_corridor() -> None:
     band between 0.59 m and 2.46 m of range."""
     g = fresh()
     t0 = 100.0
+    g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)   # amorce (porte anti-mobiles)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.0), now=t0)
     g.camera_obstacles(np.array([[2.0, 0.0]]), (0.0, 0.15), now=t0)
     later = t0 + LOW_HIT_PROTECT_S + 1.0
@@ -206,6 +211,25 @@ def test_camera_rays_never_touch_the_lidar_layer() -> None:
     g.camera_rays(np.array([[3.0, 0.0, 0.30]]), (0.0, 0.0), now=200.0)
     assert g.value_at(2.0, 0.0) == 100, "only a lidar ray may retract a lidar claim"
     print("  camera ray through a lidar wall -> wall stays (layer doctrine)")
+
+
+def test_moving_object_never_writes_the_map() -> None:
+    """Owner, 27/08 11h55: the RealSense must not write moving things. A cell
+    only takes a camera hit if the PREVIOUS frame also saw an obstacle there -
+    a rolling vacuum or a walking person moves on before the second look."""
+    g = fresh()
+    # the Xiaomi rolls by: a different cell every frame, two viewpoints anyway
+    for k, x in enumerate((1.0, 1.2, 1.4, 1.6, 1.8)):
+        g.camera_obstacles(np.array([[x, 0.0]]), (0.0, 0.15 * k))
+    for x in (1.0, 1.2, 1.4, 1.6, 1.8):
+        assert g.value_at(x, 0.0) != 100, f"a moving object left a wall at {x} m"
+    # a box STANDS there: same cell three frames, two viewpoints
+    g2 = fresh()
+    g2.camera_obstacles(np.array([[1.0, 0.0]]), (0.0, 0.0))
+    g2.camera_obstacles(np.array([[1.0, 0.0]]), (0.0, 0.0))
+    g2.camera_obstacles(np.array([[1.0, 0.0]]), (0.0, 0.15))
+    assert g2.value_at(1.0, 0.0) == 100, "a standing box must still map"
+    print("  rolling object -> no wall anywhere on its path; standing box -> mapped")
 
 
 def test_walled_in_map_is_measured_as_a_prison() -> None:
@@ -256,7 +280,8 @@ if __name__ == "__main__":
               test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip,
               test_ghost_dies_when_the_camera_sees_through_it, test_high_ray_never_erases_a_low_box,
               test_fresh_hits_are_protected_from_carving, test_floor_ray_carves_the_low_corridor,
-              test_camera_rays_never_touch_the_lidar_layer, test_walled_in_map_is_measured_as_a_prison,
+              test_camera_rays_never_touch_the_lidar_layer, test_moving_object_never_writes_the_map,
+              test_walled_in_map_is_measured_as_a_prison,
               test_revolution_cost):
         print(t.__name__); t()
     print("TEST PASSED")
