@@ -210,7 +210,7 @@ class VectorBaseAdapter:
 
     Args:
         dof: must be 3 (holonomic).
-        address: serial port of the RS485 bus (Waveshare hat).
+        address: serial port of the RS485 bus (Waveshare USB dongle).
         client: injectable modbus client (tests use MockModbusClient). An
             injected client is assumed already open: connect() probes it but
             never calls its connect(). It IS closed like an owned one - a

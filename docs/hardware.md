@@ -12,7 +12,7 @@ Custom design, built from scratch. One-off — this repo is its software.
 | Motor drivers | 2× ZLAC8015D dual-channel AC servo drivers |
 | Driver bus | MODBUS RTU over RS485, 115200 baud 8N1 — unit 2 = front pair, unit 1 = back pair |
 | Compute | NVIDIA Jetson Orin Nano Super (JetPack 6.2) — bring-up notes: [jetson_orin_nano.md](jetson_orin_nano.md) |
-| RS485 interface | Waveshare RS485/CAN HAT on the Jetson's 40-pin header — the bus is `/dev/ttyTHS1` (the header UART; the login console is elsewhere, nothing to disable) |
+| RS485 interface | Waveshare USB→RS485 dongle (FTDI FT232R) — the bus is `/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_*` (the 40-pin header UART `ttyTHS1` is retired) |
 
 Wheel topology (as wired, encoded in `kinematics.py` and verified by the cold
 bench): each driver's left channel is inverted — a negative RPM command drives

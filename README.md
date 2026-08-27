@@ -246,7 +246,7 @@ The script does, at 20 Hz.
 
 With no `VECTOR_MOCK_BUS` and nothing wired on the bus, the same command refuses to
 start rather than driving blind — `ZLAC8015D id 2 (front) did not answer on
-/dev/ttyTHS1 @115200`, then dimOS's `Failed to connect to vector adapter`, exit 1.
+the RS485 dongle @115200`, then dimOS's `Failed to connect to vector adapter`, exit 1.
 `python tests/probe_rs485.py` answers the same question on its own: it is a
 read-only MODBUS probe (it writes nothing, so it is safe with the motors
 powered) that says whether a driver is talking on the port at all.
