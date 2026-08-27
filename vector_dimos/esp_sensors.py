@@ -70,6 +70,15 @@ SONAR_MAX_TRUSTED = 0.55        # regle du monde 17 (66 cm measured, margin)
 SONAR_MEDIAN = 3
 SONAR_SPREAD_MAX = 0.10
 CONTACT_COOLDOWN_S = 1.0
+BUMP_HOLD_S = 0.10        # a corner must stay closed this long to be a CONTACT.
+                          # 27/08 11h40: both FRONT corners closed 104 ms apart
+                          # on a STANDING rover, then more on every acceleration
+                          # - the bumper bar (much softer springs since 26/08)
+                          # flutters and closes its own switches. A real
+                          # collision keeps pressing until the escape; a flutter
+                          # releases within the window (the ESP sends a state
+                          # line on EVERY change, measured). 0.10 s = 1.5 cm of
+                          # push at cruise - inside the bar's spring travel.
 SONAR_PUBLISH_PERIOD_S = 0.2    # <= 5 Hz on sonar_range
 # Owner's vote, 26/08 19h45, after the bumper cushion lifted a few millimetres
 # and sat in front of the sonar for two hours (0.08 m readings, every drive
@@ -230,8 +239,8 @@ class EspSensors(Module):
                 _log("SW rx: " + " ".join(str(v) for v in value))
             for i in range(4):
                 if value[i] and not prev[i]:
-                    name, _xy, rear = CORNERS[i]
-                    self._contact(name, rear)
+                    # confirm after BUMP_HOLD_S: fire only if still pressed
+                    threading.Timer(BUMP_HOLD_S, self._confirm_contact, args=(i,)).start()
             return
         now = time.monotonic()
         median = self._sonar.feed(value)
@@ -250,6 +259,13 @@ class EspSensors(Module):
             self.sonar_range.publish(Float32(data=out))
 
     # ---- contacts -----------------------------------------------------------
+    def _confirm_contact(self, i: int) -> None:
+        """BUMP_HOLD_S after a rising edge: still pressed = real contact,
+        released meanwhile = bar flutter, dropped silently."""
+        if self._sw[i]:
+            name, _xy, rear = CORNERS[i]
+            self._contact(name, rear)
+
     def _contact(self, name: str, rear: bool) -> None:
         now = time.monotonic()
         if now - self._last_contact < CONTACT_COOLDOWN_S:
