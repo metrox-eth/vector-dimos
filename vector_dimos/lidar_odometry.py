@@ -3,8 +3,7 @@ optional rotation PRIOR from the D455F gyro. dimOS ships no odometry for a 2D
 lidar or an RGB-D camera (its robots bring their own), so this module supplies
 the pose.
 
-THE WHEELS NEVER FEED THE PRIOR (owner, day one, docs/localization.md, restated
-26/08 21h45). The 25/08 "v2" injected them anyway, and the 26/08 duel showed
+THE WHEELS NEVER FEED THE PRIOR (doctrine, day one: docs/localization.md). The 25/08 "v2" injected them anyway, and the 26/08 duel showed
 the cost in one log line: wheels spinning at 7-10 RPM against the pinned
 Xiaomi, wheel theta climbing +2100 deg, every scan of a perfectly precise lidar
 stamped at that lying pose - the map doubled. Wheel odometry on mecanum lies BY
@@ -60,7 +59,7 @@ from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.geometry_msgs.Quaternion import Quaternion
 from dimos.msgs.geometry_msgs.Transform import Transform
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
-from dimos.msgs.std_msgs.Bool import Bool
+from dimos_lcm.std_msgs import Bool
 from dimos.msgs.sensor_msgs.CameraInfo import CameraInfo
 from dimos.msgs.sensor_msgs.Image import Image
 from dimos.msgs.sensor_msgs.Imu import Imu
@@ -75,12 +74,12 @@ from vector_dimos.relocalize2d import MapField, relocalize
 logger = setup_logger()
 
 PLANE_THICKNESS_M = 0.05
-LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (metrox, 2026-08-23: 37 cm; centred in width, 3 cm behind the length centre)
+LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (measured; centred in width, 3 cm behind the length centre)
 # D455F on the mast at the front bumper: 0.30 m ahead of the lidar (rover 54 cm
 # long, lidar 3 cm behind its centre), 0.80 m up (floor reads 0.80 m below the
 # optical axis, flat with range; depth scale checked against the lidar), level. Optical frame x right,
 # y down, z forward -> base: X = z, Y = -x, Z = -y.
-CAMERA_XYZ_BASE = (-0.20, 0.0, 0.56)  # camera moved to the REAR mast 24/08 (bumper build): 20 cm behind the lidar axis (metrox's tape), 0.56 m up, floor-plane fit; sees the floor from ~0.95 m ahead, its own body not at all
+CAMERA_XYZ_BASE = (-0.20, 0.0, 0.56)  # camera on the REAR mast: 20 cm behind the lidar axis (tape-measured), 0.56 m up, floor-plane fit; sees the floor from ~0.95 m ahead, its own body not at all
 CAMERA_PITCH_RAD = math.radians(1.1)  # looks 1.1 deg DOWN (floor fit 24/08); roll -0.1 ignored
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 2                # one depth frame in two (15 fps -> 7.5 Hz; was 3, widened 27/08 - the camera is becoming THE detector)
@@ -108,26 +107,50 @@ RELOC_RETRY_S = 5.0            # between two attempts
 BOOT_GRACE_S = 600.0           # after a refused boot attempt, keep trying this long WHILE exploring.
                                # Was 120 s; the 26/08 21h05 run drove 25 clean metres, gave up at 2 min
                                # and spent 8 more in its own frame - grid unaligned, keep-out zones
-                               # INACTIVE (owner 21h49: the run must understand where it is and lay its
+                               # INACTIVE (rule: the run must understand where it is and lay its
                                # limits down, every time). The late-swap path in costmap2d absorbs a
                                # success at any point in the grace.
                                # (see the class docstring: a standing rover has one viewpoint)
 CARRY_RESIDUAL_M = 0.35        # the body outran the wheels by this much in CARRY_WINDOW_S: it was carried
-ANCHOR_EVERY_S = 25.0          # continuous SLAM anchor (owner, 27/08 12h16: "il faut absolument que
-                               # chaque mesure se remette sur les murs... il ne faut pas que la carte
-                               # se decale"): every 25 s of driving, the current revolutions are
-                               # matched against the freshest checkpoint; accepted -> the pose snaps
-                               # back onto the walls; rejected -> map writes stay FROZEN and the
-                               # search repeats until re-anchored. Slow rotational poison (the 12h05
-                               # rainbow arcs) gets caught within one period instead of never.
-ANCHOR_MIN_TRAVEL_M = 1.0      # no anchor check while parked - nothing has changed
+# ODOM_GUARDS=0 -> Sunday's odometry: plain kiss-icp (+ gyro prior), no scan
+# gate, no re-anchor, no carry detector, no bump freeze. The guards assume no
+# dropped revolutions; under load ~35 the worker skips revolutions, per-rev
+# motion doubles past SCAN_JUMP_M on perfectly healthy driving (measured 27/08
+# 16h52: 0.16-0.21 m jumps at 0.45 m/s) and the gate death-spirals into a
+# frozen map. Until the gate is rate-normalized (real dt, not revolutions) and
+# confronted with the dimOS findings, the teleop lap gets this off switch.
+# Default ON: behaviour unchanged.
+ODOM_GUARDS = os.environ.get("ODOM_GUARDS", "1").strip().lower() not in ("0", "false", "no", "off")
+# NOTE: odometry never consumes the relocalization TF. Feeding an accumulated
+# world->map measurement back into the pose origin is a feedback loop that
+# cannot converge (the measurement lags the map, not the pose); dimOS keeps
+# reference corrections in the CONSUMER layer instead - the relocalization
+# module merges the reference into the live map and the costmapper consumes
+# the merged map. This module stays open-loop by design.
+SCAN_JUMP_M = 0.15             # per-scan integration gate: at 10 Hz the body cannot move more
+SCAN_JUMP_RAD = 0.14           # than ~2 cm nor turn more than ~5 deg between two revolutions, so a
+                               # registration whose correction exceeds these bounds is a LIE (a
+                               # jolt, or ICP caught in a wrong minimum) - that scan is NOT
+                               # integrated into the reference map and the pose stays on prediction.
+                               # One bad integration paints ghost walls INTO the reference and every
+                               # later scan then anchors faithfully to the ghosts.
+SCAN_REJECT_MAX = 10           # ~1 s of consecutive rejections = actually lost: full re-anchor
+ANCHOR_TRAVEL_M = 1.5          # continuous SLAM anchor, WORLD-triggered (never a clock): every
+                               # measurement must settle back onto the walls, and a measurement
+                               # that cannot must never shift the map. After this much travel -
+ANCHOR_TURN_RAD = 1.57         # - or this much accumulated turning (drift breeds in rotation),
+                               # the current revolutions are matched against the freshest
+                               # checkpoint; accepted -> the pose snaps back onto the walls;
+                               # rejected -> map writes stay FROZEN and the search repeats until
+                               # re-anchored. At cruise this is a check every ~10 s of straight
+                               # driving and at every quarter-turn.
 CARRY_WINDOW_S = 1.0
 CARRY_COOLDOWN_S = 15.0
 LOST_SIGMA_M = 1.0             # kiss-icp's adaptive threshold above this...
 LOST_SIGMA_S = 1.5             # ...for this long = scan matching no longer converging
 CURRENT_MAP_MAX_AGE_S = 300.0  # a checkpoint older than this is not "the current map" any more
 
-OBSTACLE_Z_M = (0.12, 1.30)    # world z band the camera turns into floor obstacles. Upper bound 1.30, not 0.70 (metrox, 23/08): a table top is a BLOCK - the rover goes around tables like a human, never between the legs; a lamp head on a tripod counts too
+OBSTACLE_Z_M = (0.12, 1.30)    # world z band the camera turns into floor obstacles. Upper bound 1.30, not 0.70: a table top is a BLOCK - the rover goes around tables like a human, never between the legs; a lamp head on a tripod counts too
 
 
 def _yaw_quat(yaw: float) -> Quaternion:
@@ -211,6 +234,7 @@ class LidarOdometry(Module):
         self._yaw_rate = 0.0
         self._depth_n = 0
         self._depth_pts_last = 0
+        self._pending_cam_pts = None
         # relocalization. `_origin` carries the kiss-icp frame into the frame
         # the map lives in: published pose = _origin (+) kiss pose. kiss-icp is
         # never told about it, so its own scan-to-map keeps working untouched.
@@ -220,8 +244,9 @@ class LidarOdometry(Module):
         # looking while the rover explores and the fresh map keeps building)
         self._reloc_state = "idle"
         self._boot_deadline = 0.0
-        self._last_anchor = time.monotonic()
-        self._anchor_ref_xy: tuple[float, float] | None = None
+        self._anchor_ref: tuple[float, float, float] | None = None   # (x, y, yaw) at the last anchor
+        self._anchor_turn = 0.0                                       # |yaw| accumulated since it
+        self._scan_rejects = 0                                        # consecutive per-scan gate rejections
         self._reloc_gen = 0             # a search started before the last reset is stale
         self._reloc_pts: list[np.ndarray] = []
         self._reloc_thread: Any = None
@@ -361,7 +386,12 @@ class LidarOdometry(Module):
         _, idx = np.unique(keys, axis=0, return_index=True)
         pts = pts[idx].astype(np.float32)
         self._depth_pts_last = len(pts)
-        self.lidar.publish(PointCloud2.from_numpy(pts, frame_id=self.world_frame, timestamp=time.time()))
+        # attached to EVERY lidar revolution until replaced (0.5 s cap): the
+        # 10 Hz lidar vs 7.5 Hz depth beat left one revolution in four without
+        # camera points - the tall points blinked at ~2.5 Hz ("la RealSense
+        # clignote", 27/08 15h28). The viewpoint gate absorbs the repeats on
+        # the mapping side.
+        self._pending_cam_pts = (pts, time.monotonic())
 
     def _pose_at(self, ts: float) -> tuple[float, float, float]:
         """Pose interpolated at wall time ts from the recent history (else the latest)."""
@@ -571,25 +601,33 @@ class LidarOdometry(Module):
         return True
 
     def _anchor_due(self, now: float, x: float, y: float) -> bool:
-        """The continuous SLAM anchor (see ANCHOR_EVERY_S). Only while idle,
-        only after some travel - a parked rover proves nothing new."""
-        if now - self._last_anchor < ANCHOR_EVERY_S:
+        """The continuous SLAM anchor - triggered by the WORLD (travel or
+        turning), never by a clock. A parked rover proves nothing new."""
+        yaw = self.pose2d[2]
+        if self._anchor_ref is None:
+            self._anchor_ref = (x, y, yaw)
+            self._anchor_turn = 0.0
             return False
-        if self._anchor_ref_xy is not None and \
-                math.hypot(x - self._anchor_ref_xy[0], y - self._anchor_ref_xy[1]) < ANCHOR_MIN_TRAVEL_M:
+        rx, ry, ryaw = self._anchor_ref
+        self._anchor_turn += abs(math.atan2(math.sin(yaw - ryaw), math.cos(yaw - ryaw)))
+        self._anchor_ref = (rx, ry, yaw)      # position ref fixed, yaw ref follows (incremental turn sum)
+        travelled = math.hypot(x - rx, y - ry)
+        if travelled < ANCHOR_TRAVEL_M and self._anchor_turn < ANCHOR_TURN_RAD:
             return False
-        self._last_anchor = now
-        self._anchor_ref_xy = (x, y)
-        logger.info("SLAM anchor: verifying this position against the map (writes pause until it agrees)")
+        turned = math.degrees(self._anchor_turn)
+        self._anchor_ref = (x, y, yaw)
+        self._anchor_turn = 0.0
+        logger.info(f"SLAM anchor: {travelled:.1f} m / {turned:.0f} deg since the last "
+                    "check - verifying against the map (writes pause until it agrees)")
         self._begin_relocalization("anchor", reset_kiss=False)
         return True
 
     async def handle_bump(self, msg: Bool) -> None:
-        """A contact is a KNOWN jolt (owner doctrine, 27/08): the pose is
+        """A contact is a KNOWN jolt: the pose is
         suspect from this instant, so freeze map writes and re-anchor NOW
         instead of letting a shifted map be painted."""
-        if self._reloc_state == "idle":
-            self._last_anchor = time.monotonic()
+        if ODOM_GUARDS and self._reloc_state == "idle":
+            self._anchor_ref = None
             logger.warning("SLAM anchor: bump - map writes frozen, re-anchoring against the map")
             self._begin_relocalization("bump", reset_kiss=False)
 
@@ -615,10 +653,27 @@ class LidarOdometry(Module):
             new_pose = k.registration.align_points_to_map(
                 points=source, voxel_map=k.local_map, initial_guess=initial_guess,
                 max_correspondance_distance=3 * sigma, kernel=sigma)
-            k.adaptive_threshold.update_model_deviation(np.linalg.inv(initial_guess) @ new_pose)
-            k.local_map.update(frame_down, new_pose)
-            k.last_delta = np.linalg.inv(np.asarray(k.last_pose)) @ new_pose
-            k.last_pose = new_pose
+            # THE PER-SCAN GATE (the other half of SLAM): a correction the body
+            # cannot physically have produced in one revolution means the
+            # registration lied - never integrate a lie into the reference.
+            corr = np.linalg.inv(initial_guess) @ np.asarray(new_pose)
+            jump_m = float(np.hypot(corr[0, 3], corr[1, 3]))
+            jump_rad = abs(math.atan2(corr[1, 0], corr[0, 0]))
+            if ODOM_GUARDS and (jump_m > SCAN_JUMP_M or jump_rad > SCAN_JUMP_RAD):
+                self._scan_rejects += 1
+                new_pose = initial_guess                 # pose stays on prediction
+                k.last_delta = prior                     # motion model keeps the prediction too
+                k.last_pose = new_pose
+                if self._scan_rejects == 1 or self._scan_rejects % 5 == 0:
+                    logger.warning(f"scan gate: registration jumped {jump_m:.2f} m / "
+                                   f"{math.degrees(jump_rad):.1f} deg in one revolution - scan NOT "
+                                   f"integrated ({self._scan_rejects} in a row)")
+            else:
+                self._scan_rejects = 0
+                k.adaptive_threshold.update_model_deviation(corr)
+                k.local_map.update(frame_down, new_pose)
+                k.last_delta = np.linalg.inv(np.asarray(k.last_pose)) @ new_pose
+                k.last_pose = new_pose
             # consume the priors
             self._gyro_acc, self._gyro_seen = 0.0, False
         pose = np.asarray(new_pose)
@@ -638,17 +693,31 @@ class LidarOdometry(Module):
         R2 = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
         world_pts = (pts @ R2.T) + np.array([x, y, LIDAR_HEIGHT_M])
         ts = time.time(); q = _yaw_quat(yaw)
+        if ODOM_GUARDS and self._scan_rejects >= SCAN_REJECT_MAX and self._reloc_state == "idle":
+            logger.warning(f"scan gate: {self._scan_rejects} rejected revolutions in a row - "
+                           "actually lost, full re-anchor (map writes stay frozen)")
+            self._scan_rejects = 0
+            self._begin_relocalization("lost", reset_kiss=False)
         if self._reloc_state != "idle":
             self._accumulate(pts, kiss)
-        elif self._carried(now_wall, x, y):
+        elif ODOM_GUARDS and self._carried(now_wall, x, y):
             pass                            # _carried() opened a new search; this revolution is not written
-        elif self._anchor_due(t0, x, y):
+        elif ODOM_GUARDS and self._anchor_due(t0, x, y):
             pass                            # anchor check opened; this revolution is not written either
-        self.odom.publish(PoseStamped(ts, self.world_frame, position=Vector3(x, y, LIDAR_HEIGHT_M), orientation=q))
+        # odom on the FLOOR PLANE (z=0): dimOS's planner measures 3D distances
+        # (goal_tolerance 0.2 m, path checks down to 0.01 m) - an odom published
+        # at lidar height keeps the robot 0.37 m away from every z=0 goal
+        # FOREVER. The known-trap family from their Discord ("odom origin at
+        # lidar height"); the lidar height lives in the tf child and in the
+        # world-cloud transform, never in the pose.
+        self.odom.publish(PoseStamped(ts, self.world_frame, position=Vector3(x, y, 0.0), orientation=q))
         self.reloc_frame.publish(PoseStamped(
             ts, f"reloc:{'searching' if self._searching else self._frame}",
             position=Vector3(self._origin[0], self._origin[1], 0.0), orientation=_yaw_quat(self._origin[2])))
         if not self._searching:
+            cam = self._pending_cam_pts
+            if cam is not None and time.monotonic() - cam[1] < 0.5:
+                world_pts = np.vstack([world_pts, cam[0]])
             self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
         self.tf.publish(TFMessage(
             Transform(translation=Vector3(x, y, 0.0), rotation=q, frame_id=self.world_frame, child_frame_id=self.base_frame, ts=ts),
