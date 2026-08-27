@@ -1,6 +1,6 @@
 # VECTOR hardware
 
-![VECTOR, 2026-08-23: mecanum wheels on hub motors, RealSense D455F on the folding mast, RPLIDAR C1 on the lid, e-stop, Jetson Orin Nano inside](images/vector.jpg)
+![VECTOR — an open source holonomic rover on dimOS](images/vector_banner.jpg)
 
 Custom design, built from scratch. One-off — this repo is its software.
 
@@ -38,7 +38,6 @@ the left wheels forward.
 | Protection | General disconnect, per-driver breakers, 100 A main fuse |
 | Metering | PZEM-017 shunt meter (100 A) — shares the RS485 bus with the drivers |
 
-![VECTOR from above: RPLIDAR C1 centred on the lid (on the ReSpeaker), e-stop box, XT60 power, the camera mast and bumper bar at the front](images/vector_top_view.jpg)
 
 ## Geometry
 
