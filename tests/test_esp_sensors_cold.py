@@ -165,3 +165,45 @@ check("sonar 0.25 m: spin 0.5 rad/s -> the unbraked spin RPM",
 
 print(f"{OK} OK, {KO} KO")
 sys.exit(1 if KO else 0)
+
+
+print("E. bar flutter filter (a corner must HOLD 0.10 s to be a contact)")
+import time as _t
+
+from vector_dimos.esp_sensors import BUMP_HOLD_S, EspSensors
+
+
+class _Sink:
+    def __init__(self):
+        self.n = 0
+    def publish(self, _msg):
+        self.n += 1
+
+
+def _bare():
+    e = EspSensors.__new__(EspSensors)
+    e._sw = (0, 0, 0, 0)
+    e._sonar = None
+    e._clear_since = None
+    e._last_contact = -10.0
+    e._last_sonar_publish = 0.0
+    e.contacts = 0
+    e.bump = _Sink(); e.bump_rear = _Sink()
+    return e
+
+
+e = _bare()
+e._handle_line("SW 1 0 0 0")          # bar flutter: pressed...
+e._handle_line("SW 0 0 0 0")          # ...released 20 ms later
+_t.sleep(BUMP_HOLD_S + 0.08)
+check("flutter (press+release inside the hold) publishes NOTHING", e.bump.n == 0 and e.contacts == 0)
+
+e2 = _bare()
+e2._handle_line("SW 1 0 0 0")         # real collision: pressed and HELD
+_t.sleep(BUMP_HOLD_S + 0.08)
+check("held contact publishes ONE bump after the hold", e2.bump.n == 1 and e2.contacts == 1)
+
+e3 = _bare()
+e3._handle_line("SW 0 0 0 1")         # rear corner held
+_t.sleep(BUMP_HOLD_S + 0.08)
+check("rear corner goes out on bump_rear", e3.bump_rear.n == 1 and e3.bump.n == 0)
