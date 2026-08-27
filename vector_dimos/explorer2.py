@@ -1,6 +1,6 @@
 """Frontier exploration as a pure, replayable function.
 
-Shape asked for by lesh in dimensionalOS/dimos#1255 and written down in
+Shape asked for upstream in dimensionalOS/dimos#1255 and written down in
 `showrobotics/docs/dimos_explorer_spec.md` §3:
 
     next_target(costmap, pose, state) -> PoseStamped | None
@@ -24,8 +24,8 @@ PR, and what is not:
            through it but never prefers it (its unknown_traversal_penalty=0.95)
   dropped  the old 0.3 info + 0.3 distance-from-explored-goals + 0.2
            lookahead-distance + 0.15 obstacle-distance + 0.05 momentum sum.
-           The 0.3 on "far from explored goals" is the map-jumping lesh
-           opened #1255 about; the lookahead term peaked at 5 m and taxed
+           The 0.3 on "far from explored goals" is the map-jumping that
+           #1255 was opened about; the lookahead term peaked at 5 m and taxed
            every nearby frontier.
   dropped  its info_gain_threshold / num_no_gain_attempts self-stop, and the
            loop's "10 consecutive failures" give-up. Both are timers, and
@@ -107,7 +107,7 @@ Field additions, all measured on VECTOR (spec §7):
         forces them to 100, so they arrive as obstacles and the lethal
         clearance keeps every target a body-radius away from them.
 
-The three directives all come back as a pose (the signature stays lesh's);
+The three directives all come back as a pose (the signature stays the upstream one);
 which one it is reads off `target.directive`.
 
 Everything here is checked offline: tests/test_explorer2_cold.py for the
@@ -258,7 +258,7 @@ class Tuning:
     # that can end a run. A place the rover has ALREADY decided from - i.e.
     # already taken a full lidar revolution at - cannot be made to give up more
     # by going back to it: the rover would not move. That is a geometric fact,
-    # not an attempt counter, and it is what lesh's "nothing reachable AND worth
+    # not an attempt counter, and it is what the upstream "nothing reachable AND worth
     # it" means. Without it a frontier that no viewpoint can resolve (a shadow
     # the 2D scan plane never enters) is retargeted forever: measured in the
     # harness, 300 goals and 184 m of travel for the last 0.2 m2 of map.

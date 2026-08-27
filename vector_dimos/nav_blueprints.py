@@ -455,7 +455,7 @@ def _nav_blueprint():
         # Discord health norm is a ~7 Hz costmap; at 1 Hz the path-clearance
         # sees obstacles up to 1 s late (unacceptable for autonomy). Raised
         # from 3 because the full-map costmap recompute at 3.3 Hz ate two
-        # cores parked (load 41, 27/08 15h49). The real fix is lesh's answer.
+        # cores parked (load 41, 27/08 15h49). The real fix is the upstream answer.
         VoxelGridMapper.blueprint(voxel_size=0.08, device="CUDA:0", frame_id="world", emit_every=10),
         (CostMapper.blueprint() if stock_nav_enabled() else
          VectorCostMap.blueprint()),   # STOCK_NAV=1 -> dimOS's CostMapper exactly as their go2 ships it

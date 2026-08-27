@@ -3,7 +3,7 @@
 dimOS's Recorder (their "memory") stores the In ports below with a pose per
 observation; afterwards the run is replayed without the robot - draw the
 map, try a costmap function or a planner on it, compare (docs/capabilities/
-memory, @lesh_bla 23/08: "render how it would path on top of your map
+memory, upstream pointer 23/08: "render how it would path on top of your map
 without running a robot"). Also the answer to "when it crashes we
 lose everything": the recording survives the crash.
 
