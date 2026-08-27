@@ -353,40 +353,65 @@ thousands of cells): hide it first if the viewer gets heavy.
 
 ## Layout
 
+Between modules everything rides dimOS's transport — LCM by default, zenoh with
+`TRANSPORT=zenoh` (what the numbers in Status were measured on). MODBUS below is
+the motor bus only.
+
 ```
 vector_dimos/
-  kinematics.py    # X-config mecanum inverse/forward kinematics + real wheel topology
-  zlac8015d.py     # minimal ZLAC8015D MODBUS RTU driver (velocity mode)
-  adapter.py       # VectorBaseAdapter: dimOS TwistBaseAdapter over the two drivers
-  blueprints.py    # base / gamepad / rplidar blueprint definitions
-  gamepad.py       # pygame joystick -> Twist module
-  rplidar_c1.py    # RPLIDAR C1 -> flat PointCloud2 module
-  wheel_odom.py    # optional standalone Odometry stream — no blueprint deploys it
-                   # (the base blueprint already gets odometry from the adapter)
-  mock.py          # mock MODBUS client for the cold benches
-  lidar_odometry.py  # kiss-icp scan-to-map + the frame the map lives in (relocalization)
-  costmap2d.py       # the 2D map that learns and unlearns (a cell the camera just called
-                     # an obstacle ignores floor samples for 3 s), checkpoints, keep-out cells
-  relocalize2d.py    # global 2D relocalization: a scan back onto a saved map (numpy only)
-  persistent_map.py  # the saved map, its generations, and the zone file
+  kinematics.py      # X-config mecanum inverse/forward kinematics + real wheel topology
+  zlac8015d.py       # minimal ZLAC8015D MODBUS RTU driver (velocity mode)
+  adapter.py         # VectorBaseAdapter: dimOS TwistBaseAdapter over the two drivers
+  blueprints.py      # base / gamepad / rplidar blueprint definitions
   nav_blueprints.py  # the full nav/explore blueprints (voxel mapper on CUDA, costmapper, recorder)
-  relocalization.py  # dimOS's RelocalizationModule with one threshold adapted to planar maps
   rig_blueprints.py  # import-light blueprints meant to run on a second machine (reloc-rig)
+  gamepad.py         # pygame joystick -> Twist module
+  rplidar_c1.py      # RPLIDAR C1 -> flat PointCloud2 module
+  c1_serial.py       # the C1's serial layer: wake burst, RTS handling, reconnects
+  camera.py          # RealSense config for VECTOR (native 5 fps mode, mount transform)
+  esp_sensors.py     # ESP32 link: bumper corners, sonar, gyro prior feed
+  respeaker.py       # ReSpeaker mic array (DOA) reader
+  lidar_odometry.py  # kiss-icp scan-to-map + the frame the map lives in
+  costmap2d.py       # the 2D map that learns and unlearns, checkpoints, keep-out cells
+  relocalize2d.py    # global 2D relocalization: a scan back onto a saved map (numpy only)
+  relocalization.py  # dimOS's RelocalizationModule with one threshold adapted to planar maps
+  persistent_map.py  # the saved map, its generations, and the zone file
+  explorer2.py       # frontier explorer: information gain per path cost (default)
+  fast_explorer.py   # the A/B alternative: dimOS's weighted-sum frontier scoring
+  recovering_planner.py  # planner wrapper that backs out of dead ends
   memory.py          # recorder configs: full replay vs a light odom+costmap teleop recording
+  wheel_odom.py      # optional standalone wheel Odometry stream (no blueprint deploys it)
+  lcm_latest.py      # bounds velocity-command LCM queues to ONE pending message
+  mock.py            # mock MODBUS client for the cold benches
 tools/
-  fly.sh           # the gated launch sequence (piloted default; EXPLORE=1 arms autonomy)
-  stats_server.py  # bi-bus organ panel (LCM + zenoh), JSON + /panel
-  vigie_iris.py    # state-transition vigil over the panel: one line per real change
-  rig_runner.py    # run dimos on a second machine with a namespaced coordinator
-  zenoh_rendezvous.py   # a pure introduction peer so both machines' sessions gossip
-  four_open3d_cuda.sh          # open3d CUDA bake, native on the Orin
-  four_open3d_cuda_rig.sh      # same bake, cross via qemu in l4t-jetpack
-  four_open3d_cuda_vast.sh     # same bake, on a rented aarch64 cloud box
-  keepout.py       # declare the zones, in metres, in the persistent frame (CLI)
-  zone_server.py   # the same zones, drawn with the mouse on the map: http://<rover>:8902
-  zone_ui.html     # the page it serves (vanilla canvas, no CDN, no build step)
-  vector-zones.service  # the systemd unit that keeps that page up on the Jetson
-  reloc_proof.py   # prove the relocalizer on recorded runs, in centimetres
+  fly.sh             # the gated launch sequence (piloted default; EXPLORE=1 arms autonomy)
+  preflight.py       # hardware preflight: drives, lidar, camera, ESP, battery
+  preflight_nav.py   # nav preflight: maps, zones, reference consistency
+  stats_server.py    # bi-bus organ panel (LCM + zenoh), JSON + /panel
+  vigie_iris.py      # state-transition vigil over the panel: one line per real change
+  garde_vitesse.py   # speed watchdog: kills exploration beyond 0.35 m/s
+  run_autopsy.py     # draw a run from its recording: trajectory, events, map
+  replay_decision.py # replay the decision map of a recorded run
+  bench_run.py       # A/B bench over two recorded runs
+  explore_ctl.py     # start/stop the exploration of a live stack
+  explore_sim.py     # offline explorer comparison on a recorded map
+  rig_runner.py      # run dimos on a second machine with a namespaced coordinator
+  zenoh_rendezvous.py     # a pure introduction peer so both machines' sessions gossip
+  udp_forward.py     # tiny UDP relay (camera cockpit across machines)
+  four_open3d_cuda.sh       # open3d CUDA bake, native on the Orin
+  four_open3d_cuda_rig.sh   # same bake, cross via qemu in l4t-jetpack
+  four_open3d_cuda_vast.sh  # same bake, on a rented aarch64 cloud box
+  build_librealsense_jetson.sh  # librealsense build for the Jetson
+  keepout.py         # declare the zones, in metres, in the persistent frame (CLI)
+  zone_server.py     # the same zones, drawn with the mouse on the map: http://<rover>:8902
+  zone_ui.html       # the page it serves (vanilla canvas, no CDN, no build step)
+  vector-zones.service   # systemd unit for the zone page
+  vector-stats.service   # systemd unit for the organ panel
+  reloc_proof.py     # prove the relocalizer on recorded runs, in centimetres
+  sonar_live.py      # live sonar readout (holds the ESP port - never during a flight)
+  gyro_sign_bench.py # gyro axis/sign bench
+  pivot_ladder.py    # does the BODY rotate when the wheels say it does (rotation ladder)
+  mars/              # step-by-step exploration loop: sense (photo + 3D check) -> move
 docs/
   hardware.md            # what VECTOR is made of
   localization.md        # the localization doctrine
