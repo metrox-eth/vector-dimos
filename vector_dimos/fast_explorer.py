@@ -16,7 +16,10 @@ goal_timeout (15 s) for nothing. Any goal_reached message wakes it now -
 but a failed goal is remembered and frontiers near it are skipped for
 FAILED_GOAL_HOLD_S, with a short breath before the next pick: without
 that the loop re-published the same unreachable goal 3x per second and
-pinned a core (23/08 21:25).
+pinned a core (23/08 21:25). The hold only ever PREFERS another frontier -
+when it would empty the result it yields the closest held one, because
+upstream reads an empty list as "no frontier" and gives up for good after
+10 of them (20 s, a third of the hold).
 """
 
 from __future__ import annotations
@@ -92,14 +95,26 @@ class VectorExplorer(WavefrontFrontierExplorer):
         now = time.monotonic()
         self._failed_goals = [f for f in self._failed_goals if now - f[2] < FAILED_GOAL_HOLD_S]
         centroids, sizes = [], []
+        held: list[tuple[Vector3, int]] = []
         for cx, cy, size in found:
             w = costmap.grid_to_world(Vector3(cx, cy, 0.0))
             if any((w.x - fx) ** 2 + (w.y - fy) ** 2 < FAILED_GOAL_RADIUS_M ** 2 for fx, fy, _ in self._failed_goals):
+                held.append((w, size))
                 continue
             centroids.append(w); sizes.append(size)
         if not centroids:
-            logger.info(f"frontiers: {len(found)} clusters, all near recently failed goals")
-            return []
+            # The hold PREFERS other frontiers, it never starves the selector. Upstream
+            # reads [] as "no frontier": get_exploration_goal returns None and
+            # _run_exploration_loop counts a consecutive failure - 10 of them at 2 s
+            # ends exploration for good after 20 s, a third of the 60 s hold, with
+            # valid frontiers still on the map. Hand back the closest held cluster
+            # instead; a published goal resets that counter (the planner may well
+            # route to it now, the map moved since it refused). [] stays for
+            # "genuinely no frontier".
+            w, size = min(held, key=lambda h: (h[0].x - robot_pose.x) ** 2 + (h[0].y - robot_pose.y) ** 2)
+            logger.info(f"frontiers: {len(found)} clusters, all near recently failed goals - "
+                        f"hold yielded under starvation: ({w.x:.2f}, {w.y:.2f})")
+            centroids, sizes = [w], [size]
         logger.info(f"frontiers: {len(found)} clusters in {(time.perf_counter() - t0) * 1000:.0f} ms")
         return self._rank_frontiers(centroids, sizes, robot_pose, costmap)
 
