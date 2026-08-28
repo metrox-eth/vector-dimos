@@ -10,11 +10,14 @@ command the flight would have run is readable in $FLY_TEST_LOG.
   A. contradiction - EXPLORE=1 with an EXPLICIT DRY=1 refuses before touching
                      anything (it used to silently fly the autonomous one)
   B. the default   - no flag = piloted lap: exploration never armed
-  C. gate 8/8      - persistent custom mode: still a GATE (46 x 15 s = 690 s of
-                     grace, then explore stop + e-stop + dimos stop)
+  C. gate 8/8      - persistent custom mode (PERSISTENT_MAP=1, now EXPLICIT):
+                     still a GATE (46 x 15 s = 690 s of grace, then explore
+                     stop + e-stop + dimos stop)
   D. the two modes where the gate's four log lines CANNOT be printed
                      (PERSISTENT_MAP=0, STOCK_NAV=1): a warning, not an abort -
-                     the flight lives and says the zones are inactive
+                     the flight lives and says the zones are inactive. Since
+                     2026-08-28 18:43 PERSISTENT_MAP=0 is the DEFAULT, so the
+                     virgin flight is the one that gets the warning.
   E. gate 2/7      - STOCK_NAV=1 over a flat with zones drawn: stock nav has no
                      zone concept, so the operator is warned BEFORE the stack
                      starts - and only there (custom nav applies them)
@@ -26,7 +29,9 @@ command the flight would have run is readable in $FLY_TEST_LOG.
   J. gate 0/7      - on a REAL pty (the interactive path): the hand-push step is
                      offered only when estop_rs485.py exited 0 on both drives
   K. mode flags    - GAMEPAD, STOCK_NAV and PERSISTENT_MAP cross the ssh into
-                     BOTH preflights, not only into the stack launch
+                     BOTH preflights, not only into the stack launch; and the
+                     VIRGIN default (PERSISTENT_MAP=0) is what the stub env
+                     receives when nobody exports it (2026-08-28 18:43)
   H. bash -n on fly.sh, the arm script and the stubs
 
 Run:   PYTHONPATH=. .venv/bin/python3 tests/test_fly_gates_cold.py
@@ -199,27 +204,33 @@ rc, out, log = fly(DRY=0, reloc="CONTINUING the persistent map")
 check("DRY=0 alone arms the flight", rc == 0 and "== 7/8 exploration ==" in out, f"rc {rc}")
 
 print("C. persistent custom mode: gate 8/8 still stops the flight")
-rc, out, log = fly(EXPLORE=1)   # PERSISTENT_MAP defaults to 1, STOCK_NAV to 0
+# PERSISTENT_MAP=1 is now the EXPLICIT B arm (the default went to 0 on
+# 2026-08-28 18:43): this whole section is about the mode that owes us the zones.
+rc, out, log = fly(EXPLORE=1, PERSISTENT_MAP=1)   # STOCK_NAV still defaults to 0
 check("never relocalized -> rc 1", rc == 1 and "NEVER UNDERSTOOD WHERE IT IS" in out, f"rc {rc}")
 polls = ran(log, "CONTINUING the persistent map")
 check("polled 46 x 15 s = 690 s of grace", len(polls) == 46, f"{len(polls)} polls")
 check("the abort stops exploration", len(ran(log, "explore_ctl.py stop")) == 1)
 check("the abort e-stops the wheels", len(ran(log, "estop_rs485.py")) == 1)
-rc, out, log = fly(EXPLORE=1, reloc="CONTINUING the persistent map")
+rc, out, log = fly(EXPLORE=1, PERSISTENT_MAP=1, reloc="CONTINUING the persistent map")
 check("relocalized -> IN FLIGHT", rc == 0 and "IN FLIGHT" in out and "relocalized (1x15 s)" in out, f"rc {rc}")
 check("relocalized -> no e-stop", not ran(log, "estop_rs485.py"))
-rc, out, log = fly(EXPLORE=1, reloc="relocalization: gave up")
+rc, out, log = fly(EXPLORE=1, PERSISTENT_MAP=1, reloc="relocalization: gave up")
 check("gave up -> the gate still bites", rc == 1 and "NEVER UNDERSTOOD WHERE IT IS" in out, f"rc {rc}")
 
 print("D. the modes where those four lines cannot be printed: a WARNING, not an abort")
 for label, env in (("PERSISTENT_MAP=0", dict(PERSISTENT_MAP=0)),
                    ("STOCK_NAV=1", dict(STOCK_NAV=1)),
-                   ("both", dict(PERSISTENT_MAP=0, STOCK_NAV=1))):
+                   ("both", dict(PERSISTENT_MAP=0, STOCK_NAV=1)),
+                   # the virgin flight of 2026-08-28 18:43: nobody exports
+                   # anything and the gate is a warning because there is no
+                   # saved frame to come back to.
+                   ("nothing exported (the DEFAULT)", dict())):
     rc, out, log = fly(EXPLORE=1, **env)
     check(f"{label}: flight lives (rc 0, IN FLIGHT)", rc == 0 and "IN FLIGHT" in out, f"rc {rc}")
     check(f"{label}: warns the gate is not enforced", "GATE 8/8 NOT ENFORCED" in out)
     check(f"{label}: names the mode and the missing zones",
-          f"PERSISTENT_MAP={env.get('PERSISTENT_MAP', 1)} STOCK_NAV={env.get('STOCK_NAV', 0)}" in out
+          f"PERSISTENT_MAP={env.get('PERSISTENT_MAP', 0)} STOCK_NAV={env.get('STOCK_NAV', 0)}" in out
           and "NO keep-out zones" in out)
     check(f"{label}: no 11.5 min poll", not ran(log, "CONTINUING the persistent map"))
     check(f"{label}: no e-stop, no explore stop",
@@ -239,7 +250,7 @@ check("the warning stops nothing: no e-stop, no dimos stop",
       not ran(log, "estop_rs485.py") and not ran(log, "dimos stop"))
 rc, out, log = fly(EXPLORE=1, STOCK_NAV=1, FLY_TEST_KEEPOUT=0)
 check("stock nav, no zones drawn -> silent", rc == 0 and "AND ZONES DRAWN" not in out, f"rc {rc}")
-rc, out, log = fly(EXPLORE=1, FLY_TEST_KEEPOUT=1, reloc="CONTINUING the persistent map")
+rc, out, log = fly(EXPLORE=1, PERSISTENT_MAP=1, FLY_TEST_KEEPOUT=1, reloc="CONTINUING the persistent map")
 check("custom nav applies the zones -> no warning", rc == 0 and "AND ZONES DRAWN" not in out, f"rc {rc}")
 check("custom nav: the rover is not even asked for keepout.json", not ran(log, "keepout.json"))
 
@@ -251,7 +262,7 @@ arm = ran(log, "arm_garde_vitesse.sh")
 check("the watchdog is armed with zenoh", len(arm) == 1 and "TRANSPORT=zenoh" in arm[0], arm[0][-60:] if arm else "none")
 stack = ran(log, "dimos --rerun-open")
 check("the stack runs on zenoh", len(stack) == 1 and "TRANSPORT=zenoh " in stack[0])
-rc, out, log = fly(EXPLORE=1, TRANSPORT="zenoh")     # abort path
+rc, out, log = fly(EXPLORE=1, PERSISTENT_MAP=1, TRANSPORT="zenoh")     # abort path (gate 8/8 enforced)
 stops = ran(log, "explore_ctl.py stop")
 check("the abort's stop is published on zenoh too", len(stops) == 1 and "TRANSPORT=zenoh" in stops[0],
       stops[0][-70:] if stops else "none")
@@ -336,10 +347,19 @@ rc, out, log = fly()
 pre = ran(log, "preflight.py") + ran(log, "preflight_nav.py")
 check("default flight: GAMEPAD=0 in both (the pad stays informative)",
       len(pre) == 2 and all("GAMEPAD=0" in ln for ln in pre), pre[0][-60:] if pre else "none")
-check("default flight: STOCK_NAV=0 PERSISTENT_MAP=1 in both",
-      all("STOCK_NAV=0" in ln and "PERSISTENT_MAP=1" in ln for ln in pre))
+check("default flight: STOCK_NAV=0 PERSISTENT_MAP=0 in both (VIRGIN by default, 18:43)",
+      all("STOCK_NAV=0" in ln and "PERSISTENT_MAP=0" in ln for ln in pre))
+check("default flight: the STACK is launched virgin too",
+      all("PERSISTENT_MAP=0" in ln for ln in ran(log, "dimos --rerun-open")),
+      ran(log, "dimos --rerun-open")[0][-90:] if ran(log, "dimos --rerun-open") else "none")
 check("default flight: EXPLORER_V2=1 in both (unset = explorer2, its own default)",
       all("EXPLORER_V2=1" in ln for ln in pre))
+# ... and the B arm is one export away, everywhere at once
+rc, out, log = fly(PERSISTENT_MAP=1)
+pre_b = ran(log, "preflight.py") + ran(log, "preflight_nav.py")
+check("PERSISTENT_MAP=1 exported: =1 in both preflights AND in the stack",
+      len(pre_b) == 2 and all("PERSISTENT_MAP=1" in ln for ln in pre_b)
+      and all("PERSISTENT_MAP=1" in ln for ln in ran(log, "dimos --rerun-open")))
 rc, out, log = fly(EXPLORER_V2=0)
 pre = ran(log, "preflight.py") + ran(log, "preflight_nav.py")
 check("the explorer A/B crosses too: EXPLORER_V2=0 in both preflights",
