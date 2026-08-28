@@ -40,7 +40,9 @@ revolutions are matched against the persistent map
 continued map shares the saved frame, on rejection the run starts fresh
 exactly as before, with the score numbers logged. The same search is re-run
 when the body is moved without the wheels, and NOTHING is written to the map
-while it runs.
+while it runs - nor is `odom` published, when that search reset kiss-icp: the
+pose is then a fiction that would put the rover back at the run's origin, and
+the planner reads `odom`, not the freeze (see _pose_trusted).
 """
 from __future__ import annotations
 
@@ -215,6 +217,7 @@ class LidarOdometry(Module):
     _reloc_ready_at = 0.0           # monotonic of the last disk look for a reference map
     _reloc_ready_ans = False        # what it found (RELOC_READY_EVERY_S cache)
     _gave_up_pending = False        # publish reloc:gave_up once, then the frame again
+    _reloc_reset_kiss = False       # this search reset kiss-icp: the pose is fiction until it ends
     _anchor_ref = None              # (x, y, yaw) at the last anchor
     _anchor_turn = 0.0
     _scan_rejects = 0
@@ -272,6 +275,7 @@ class LidarOdometry(Module):
         self._reloc_ready_at = 0.0
         self._reloc_ready_ans = False
         self._gave_up_pending = False
+        self._reloc_reset_kiss = False
         self._run_started = 0.0
         self._anchor_ref: tuple[float, float, float] | None = None   # (x, y, yaw) at the last anchor
         self._anchor_turn = 0.0                                       # |yaw| accumulated since it
@@ -457,6 +461,21 @@ class LidarOdometry(Module):
         """Frozen: nothing goes into the map until we know where we are."""
         return self._reloc_state == "searching"
 
+    @property
+    def _pose_trusted(self) -> bool:
+        """False while a search that RESET kiss-icp runs (audit 28/08).
+
+        A reset empties kiss-icp's own frame - its next pose is ~(0, 0, 0) -
+        while `_origin` still carries the frame from before, so `_to_map_frame`
+        would publish the start of the run as the robot's position: a step of
+        the whole trajectory travelled so far, straight into the planner and
+        the explorer, which read `odom` and know nothing of the search. The map
+        is already frozen for exactly this reason; the pose goes with it, until
+        the search re-anchors or gives up. A search that kept kiss-icp (anchor,
+        bump, lost, boot) keeps a continuous pose and keeps publishing it.
+        """
+        return not (self._searching and self._reloc_reset_kiss)
+
     def _to_map_frame(self, kiss: tuple[float, float, float]) -> tuple[float, float, float]:
         """kiss-icp's own frame -> the frame the map lives in."""
         ox, oy, oyaw = self._origin
@@ -472,12 +491,14 @@ class LidarOdometry(Module):
         the place the rover was picked up FROM, and scan-matching a new room
         against it is exactly what smeared the walls. A fresh KissICP gives a
         clean frame to search in; the origin then carries it onto the map.
+        It also empties the pose: see `_pose_trusted`.
         """
         if reset_kiss and self._cfg is not None:
             from kiss_icp.kiss_icp import KissICP
             with self._lock:
                 self._kiss = KissICP(self._cfg)
                 self._gyro_acc, self._gyro_seen = 0.0, False
+        self._reloc_reset_kiss = reset_kiss
         self._reloc_gen += 1
         self._reloc_pts = []
         self._reloc_thread = None
@@ -548,6 +569,7 @@ class LidarOdometry(Module):
         self._reloc_thread = None
         self._reloc_result = None
         self._reloc_reason = ""
+        self._reloc_reset_kiss = False
         self._no_ref_tries = 0
         self._scan_rejects = 0
         self._lost_since = 0.0
@@ -817,7 +839,10 @@ class LidarOdometry(Module):
         # FOREVER. The known-trap family from their Discord ("odom origin at
         # lidar height"); the lidar height lives in the tf child and in the
         # world-cloud transform, never in the pose.
-        self.odom.publish(PoseStamped(ts, self.world_frame, position=Vector3(x, y, 0.0), orientation=q))
+        # Suspended, like the map and for the same reason, while a search that
+        # reset kiss-icp runs: see _pose_trusted.
+        if self._pose_trusted:
+            self.odom.publish(PoseStamped(ts, self.world_frame, position=Vector3(x, y, 0.0), orientation=q))
         state = "searching" if self._searching else self._frame
         if self._gave_up_pending:
             # said ONCE, then the frame again: costmap2d unfreezes on any frame
