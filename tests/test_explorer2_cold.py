@@ -14,13 +14,17 @@ Rule #2 applies: a known input must give a known output in physical units
   G. purity                     - the costmap, the pose and the rest of the
                                   state come back untouched, and the function
                                   is deterministic
+  J. the loop around it         - which goal a bare goal_reached is credited to
 
-No robot, no LCM, no dimOS needed: that is the whole point of the rewrite.
+No robot and no LCM: that is the whole point of the rewrite. Only J touches the
+module class, and it skips itself where dimOS is not installed.
 
 Run:  .venv/bin/python3 tests/test_explorer2_cold.py
 """
 import math
 import sys
+import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -30,11 +34,13 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "vector_dimos"))
 
 try:  # the package __init__ pulls dimOS; off the Jetson, load the module directly
+    import vector_dimos.explorer2 as _explorer2_module  # noqa: E402
     from vector_dimos.explorer2 import (  # noqa: E402
         DIRECTIVE_BACK_OFF, DIRECTIVE_FRONTIER, DIRECTIVE_WAIT, DEFAULT_TUNING,
         ExploreState, PoseStamped, Tuning, next_target,
     )
 except ImportError:  # pragma: no cover
+    import explorer2 as _explorer2_module  # type: ignore[no-redef]  # noqa: E402
     from explorer2 import (  # type: ignore[no-redef]  # noqa: E402
         DIRECTIVE_BACK_OFF, DIRECTIVE_FRONTIER, DIRECTIVE_WAIT, DEFAULT_TUNING,
         ExploreState, PoseStamped, Tuning, next_target,
@@ -604,6 +610,122 @@ noclock = ExploreState()
 noclock.note_failed(gx, gy, (here.position.x, here.position.y), cm)
 check("no clock is read when `now` is given: a 1970 timestamp behaves",
       next_target(cm, here, noclock, now=-1e9) is not None)
+
+
+# ===========================================================================
+print("J. the loop: a verdict owed to the PREVIOUS goal never excludes the new one")
+# ===========================================================================
+#
+# The only group that needs dimOS: it drives Explorer2._run_exploration_loop
+# itself, with next_target stubbed (A-I own the decisions, this owns the
+# plumbing) and a scripted planner. goal_reached is a bare Bool with no goal
+# identity in it, so the cancel of a goal that timed out unanswered used to be
+# credited to the goal published a millisecond earlier - an exclusion on ground
+# the rover never drove to, killing every cluster within 0.6 m of it.
+
+Explorer2 = getattr(_explorer2_module, "Explorer2", None)
+
+if Explorer2 is None:
+    print("  -- skipped: no dimOS here, the module class does not exist")
+else:
+    GOAL_TIMEOUT_S = 0.4
+    STUB_GOAL = (2.0, 3.0)      # metres, the only target the stub hands out
+    START = (1.0, 3.0)          # 1.00 m from it
+    STEP_M = 0.4                # what the rover covers per goal: > GOAL_PROGRESS_M
+
+    def stub_target(costmap, odom, state, **kwargs):
+        t = PoseStamped(ts=0.0, frame_id="world")
+        t.position.x, t.position.y = STUB_GOAL
+        return t
+
+    class Planner:
+        """The goal_request Out plus the planner behind it: `script` says what
+        the planner does the instant a goal is published - the worst case for
+        the race, and the one the audit describes."""
+
+        transport = object()
+
+        def __init__(self, script):
+            self.script = script
+            self.goals = []
+            self.published_at = []
+            self.explorer = None
+
+        def publish(self, goal):
+            self.goals.append((round(float(goal.position.x), 2), round(float(goal.position.y), 2)))
+            self.published_at.append(time.perf_counter())
+            act = self.script.get(len(self.goals))
+            if act is not None:
+                act(self.explorer)
+
+    def gave_up(ex):
+        """The planner publishes goal_reached=False (no path / goal abandoned)."""
+        ex._on_goal_reached(type("M", (), {"data": False})())
+
+    def drove(ex):
+        """The rover covers STEP_M toward the goal; the planner says nothing."""
+        o = ex.latest_odometry
+        ex.latest_odometry = pose(float(o.position.x) + STEP_M, float(o.position.y))
+
+    def last(ex):
+        ex.exploration_active = False
+
+    def acts(*fns):
+        return lambda ex: [f(ex) for f in fns]
+
+    def run_loop(script):
+        ex = object.__new__(Explorer2)
+        ex._state = ExploreState()
+        ex._last_goal = None
+        ex._last_goal_ok = None
+        ex._late_answer_owed = False
+        ex._tuning = DEFAULT_TUNING
+        ex.goal_reached_event = threading.Event()
+        ex.stop_event = threading.Event()
+        ex.exploration_active = True
+        ex.latest_costmap = Grid(door(room(), "east", 70, 24))
+        ex.latest_odometry = pose(*START)
+        ex.config = type("Cfg", (), {"goal_timeout": GOAL_TIMEOUT_S})()
+        ex.bump = type("Bump", (), {"transport": None})()
+        ex.goal_request = Planner(script)
+        ex.goal_request.explorer = ex
+        real_next_target = _explorer2_module.next_target
+        _explorer2_module.next_target = stub_target
+        try:
+            ex._run_exploration_loop()
+        finally:
+            _explorer2_module.next_target = real_next_target
+        return ex, ex.goal_request, time.perf_counter()
+
+    # Goal 1 times out while the rover is still closing on it (0.40 m of 1.00 m),
+    # so it is re-decided, not excluded - and the planner still owes it a verdict.
+    # That verdict lands the instant goal 2 goes out, while the rover drives to
+    # goal 2 exactly as the planner plans for it.
+    ex, planner, ended = run_loop({1: drove, 2: acts(gave_up, drove, last)})
+    check("two goals went out", planner.goals == [STUB_GOAL, STUB_GOAL], f"{planner.goals}")
+    check("the late verdict excludes nothing: the rover never failed at (2.00, 3.00)",
+          ex._state.failed == [], f"{ex._state.failed}")
+    check("the goal in flight keeps its own 0.4 s timeout instead of an instant verdict",
+          ended - planner.published_at[1] >= GOAL_TIMEOUT_S,
+          f"{ended - planner.published_at[1]:.2f} s")
+    check("and the timeout then judges on the gap closed: 0.40 m of 1.00 m, so no exclusion",
+          ex._state.failed == [] and abs(float(ex.latest_odometry.position.x)
+                                         - (START[0] + 2 * STEP_M)) < 1e-6)
+
+    # Nothing is owed on the first goal of a run: a no-path verdict on it is the
+    # planner talking about THAT goal, and it must still bite at once.
+    ex, planner, ended = run_loop({1: acts(gave_up, last)})
+    check("a no-path verdict on the first goal is still credited",
+          [(round(f[0], 2), round(f[1], 2)) for f in ex._state.failed] == [STUB_GOAL],
+          f"{ex._state.failed}")
+    check("and it still wakes the loop at once (no 0.4 s slept for nothing)",
+          ended - planner.published_at[0] < GOAL_TIMEOUT_S,
+          f"{ended - planner.published_at[0]:.3f} s")
+
+    # An ANSWERED goal owes nothing either: two verdicts in a row are both real.
+    ex, planner, ended = run_loop({1: gave_up, 2: acts(gave_up, last)})
+    check("two answered goals in a row are both credited (the swallow is one deep)",
+          len(ex._state.failed) == 2, f"{ex._state.failed}")
 
 
 print(f"{OK} OK, {KO} KO")
