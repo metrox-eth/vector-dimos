@@ -26,6 +26,7 @@ import numpy as np
 from scipy import ndimage
 
 from dimos.mapping.occupancy.gradient import voronoi_gradient
+from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.geometry_msgs.Twist import Twist
 from dimos.msgs.geometry_msgs.Vector3 import Vector3
 from dimos.msgs.nav_msgs.OccupancyGrid import CostValues, OccupancyGrid
@@ -246,6 +247,7 @@ class RecoveringGlobalPlanner(GlobalPlanner):
     _path_started_at: float = float("inf")
     _escaping: bool = False
     _in_stop_message: bool = False
+    _held_goal: PoseStamped | None = None
 
     def _local_planner_state(self) -> str:
         with self._local_planner._lock:
@@ -258,6 +260,44 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             super()._handle_stop_message(stop_message)
         finally:
             self._in_stop_message = False
+
+    # --- one writer on cmd_vel ------------------------------------------------
+    #
+    # The escape thread writes cmd_vel at 20 Hz. Upstream plans a goal the moment
+    # it arrives, and start_planning() puts the path follower on that same
+    # Subject at 10 Hz: the wheels then get interleaved forward-path and
+    # reverse-escape twists until the escape ends and its cancel_goal() kills a
+    # goal accepted seconds earlier - goal_reached=False, and the explorer
+    # excludes (60 s) a frontier it never drove to. So while an escape runs the
+    # goal is HELD instead: latest-only, the last one wins, planned when the
+    # escape gives the wheels back.
+
+    def handle_goal_request(self, goal: PoseStamped) -> None:
+        with self._lock:
+            if self._escaping:
+                self._held_goal = goal
+                logger.info("Goal held: a contact escape owns the wheels")
+                return
+        super().handle_goal_request(goal)
+
+    def _hold_current_goal(self) -> None:
+        """An escape started under a planning attempt: keep the goal for later."""
+        with self._lock:
+            self._held_goal = self._current_goal
+        logger.warning("Planning refused: a contact escape owns the wheels")
+
+    def _plan_held_goal(self) -> bool:
+        """Plan the goal an escape held, if any. True when there was one.
+
+        Planned, not cancelled: it never had a follower, and cancel_goal would
+        publish goal_reached=False for a goal the rover never drove."""
+        with self._lock:
+            goal, self._held_goal = self._held_goal, None
+        if goal is None:
+            return False
+        logger.warning("Planning the goal held during the escape")
+        self.handle_goal_request(goal)
+        return True
 
     def abandon_goal(self, trigger: str) -> None:
         """Stop, give the goal up, no recovery motion of any kind.
@@ -280,19 +320,30 @@ class RecoveringGlobalPlanner(GlobalPlanner):
         acted=False and the rover kept grinding the wall).
 
         Returns False if this contact aborted a running escape instead."""
-        if self._escaping:
-            self._escape_abort.set()
-            logger.warning("Contact during an escape: stopping dead", trigger=trigger)
-            return False
-        self._escaping = True
+        with self._lock:
+            # under the lock: a goal request arriving right here is held, never planned
+            if self._escaping:
+                self._escape_abort.set()
+                logger.warning("Contact during an escape: stopping dead", trigger=trigger)
+                return False
+            self._escaping = True
+            self._escape_id += 1
+            escape_id = self._escape_id
         self._escape_abort.clear()
-        threading.Thread(target=self._escape_run, args=(direction, trigger),
+        threading.Thread(target=self._escape_run, args=(direction, trigger, escape_id),
                          daemon=True).start()
         return True
 
     _escape_abort: threading.Event
+    _escape_id: int = 0
 
-    def _escape_run(self, direction: float, trigger: str) -> None:
+    def _end_escape(self, escape_id: int) -> None:
+        """Give the wheels back - unless a newer contact has already taken them."""
+        with self._lock:
+            if self._escape_id == escape_id:
+                self._escaping = False
+
+    def _escape_run(self, direction: float, trigger: str, escape_id: int) -> None:
         try:
             self._local_planner.stop_planning()
             with self._lock:
@@ -323,11 +374,23 @@ class RecoveringGlobalPlanner(GlobalPlanner):
                 seconds=round(time.perf_counter() - t0, 1),
                 aborted=self._escape_abort.is_set(),
             )
-            self.cancel_goal()
+            with self._lock:
+                held = self._held_goal is not None
+            if not held:
+                self.cancel_goal()          # unchanged: a contact abandons the goal
+                return
+            # The wheels are free again: the flag drops BEFORE the follower can
+            # be started, so cmd_vel is never written by two threads at once.
+            self._end_escape(escape_id)
+            self._plan_held_goal()
         except Exception:  # noqa: BLE001
             logger.exception("Contact escape failed")
         finally:
-            self._escaping = False
+            self._end_escape(escape_id)
+            try:
+                self._plan_held_goal()      # an early return must not strand it
+            except Exception:  # noqa: BLE001
+                logger.exception("Held goal could not be planned")
 
     # dimOS's default is 8 s / 0.4 m. "Stuck for eight seconds is already dead
     # for a robot doing 0.3 m/s": 2.5 s, same 5 cm/s floor.
@@ -335,7 +398,17 @@ class RecoveringGlobalPlanner(GlobalPlanner):
     _stuck_threshold: float = 0.12
 
     def _plan_path(self) -> None:
+        if self._escaping:
+            self._hold_current_goal()   # a replan racing the start of an escape
+            return
         super()._plan_path()
+        if self._escaping:
+            # a contact fired while A* ran: the escape owns the wheels, so the
+            # follower that just started goes, and the goal waits for it
+            self._local_planner.stop_planning()
+            self._hold_current_goal()
+            self._path_started_at = float("inf")
+            return
         if self._local_planner.get_state() != NavigationState.IDLE:
             self._path_started_at = time.perf_counter()
         else:
