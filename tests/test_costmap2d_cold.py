@@ -13,6 +13,10 @@ Known input -> known output, in metres:
      at low = -3 - the floor sampled on its own cell in the NEXT frame erased
      every hit. A cell hit by the camera is deaf to floor samples for
      LOW_HIT_PROTECT_S; past that window it is forgotten exactly as before.
+  7. the parked rover (2026-08-28): a wall at 1.0 m raised to HIT_CAP by 12
+     viewpoints, then one more revolution from the spot it is parked on ->
+     still HIT_CAP, still occupancy 100 (the viewpoint rule caps the
+     increase, it never lowers a score)
 """
 
 import numpy as np
@@ -128,6 +132,42 @@ def test_reinforcement_is_capped_and_unlearning_bounded() -> None:
         g.lidar_revolution(np.array([[3.0, 0.0]]), (0.0, 0.0)); n += 1
     assert n <= 2 * HIT_CAP and g.lidar[gy[0], gx[0]] >= FREE_FLOOR
     print(f"  30 viewpoints -> score capped at {HIT_CAP}; forgotten after {n} clear revolutions (bounded)")
+
+
+def test_parked_rover_never_erases_an_established_wall() -> None:
+    """28/08 audit: the viewpoint rule capped the VALUE instead of the increase,
+    so a hit from a spot a cell already knew forced it back to OCCUPIED_AT - 1.
+    A wall raised to HIT_CAP by 12 approach viewpoints collapsed to 1 on the
+    very next revolution taken from a parked rover, and occupancy() published
+    free floor 0.6 m in front of the wall (the checkpoint saved the hole too)."""
+    g = fresh()
+    for i in range(12):                                # approach: 12 viewpoints, 0.15 m apart
+        g.lidar_revolution(LEG, (0.0, 0.15 * i))
+    gx, gy = g.cell(np.array([1.0]), np.array([0.0]))
+    assert g.lidar[gy[0], gx[0]] == HIT_CAP and g.value_at(1.0, 0.0) == 100, "12 viewpoints -> a wall"
+    parked = (0.0, 0.15 * 11)                          # the rover stops where it last looked from
+    g.lidar_revolution(LEG, parked)
+    assert g.lidar[gy[0], gx[0]] == HIT_CAP, "a same-viewpoint hit adds nothing - and takes nothing"
+    assert g.value_at(1.0, 0.0) == 100, "the wall in front of a parked rover stays a wall"
+    # driving slowly is the same failure: 0.2 m/s at 10 Hz = 0.02 m per
+    # revolution, so 4 revolutions out of 5 come from a viewpoint the cell knows
+    for k in range(1, 26):                             # 0.5 m of creep
+        g.lidar_revolution(LEG, (0.02 * k, parked[1]))
+        assert g.value_at(1.0, 0.0) == 100, f"wall published FREE while creeping, revolution {k}"
+    assert g.lidar[gy[0], gx[0]] == HIT_CAP
+    # same rule on the LOW layer: the camera can hold an obstacle too
+    c = fresh()
+    box = np.array([[1.0, 0.0]])
+    t0 = 500.0
+    c.camera_obstacles(box, (0.0, 0.0), now=t0)        # seed frame (the anti-moving-object gate)
+    for i in range(12):
+        c.camera_obstacles(box, (0.0, 0.15 * i), now=t0 + 0.1 * i)
+    assert c.low[gy[0], gx[0]] == HIT_CAP and c.value_at(1.0, 0.0) == 100
+    c.camera_obstacles(box, (0.0, 0.15 * 11), now=t0 + 1.3)
+    assert c.low[gy[0], gx[0]] == HIT_CAP, "the LOW layer is capped the same way"
+    assert c.value_at(1.0, 0.0) == 100, "a camera obstacle survives a parked rover too"
+    print(f"  wall at 1.0 m, 12 viewpoints -> score {HIT_CAP}; parked + 1 revolution and 0.5 m of "
+          f"creep -> still {HIT_CAP}, occupancy 100 (lidar and LOW)")
 
 
 def test_checkpoint_roundtrip(tmp_path=None) -> None:
@@ -277,7 +317,8 @@ if __name__ == "__main__":
     for t in (test_leg_needs_two_viewpoints_and_ray_is_free, test_ramp_hit_from_one_spot_never_becomes_a_wall,
               test_chair_moved_is_forgotten_by_lidar_rays, test_low_object_only_the_camera_can_forget,
               test_thin_leg_survives_the_floor_sampled_beside_it,
-              test_reinforcement_is_capped_and_unlearning_bounded, test_checkpoint_roundtrip,
+              test_reinforcement_is_capped_and_unlearning_bounded,
+              test_parked_rover_never_erases_an_established_wall, test_checkpoint_roundtrip,
               test_ghost_dies_when_the_camera_sees_through_it, test_high_ray_never_erases_a_low_box,
               test_fresh_hits_are_protected_from_carving, test_floor_ray_carves_the_low_corridor,
               test_camera_rays_never_touch_the_lidar_layer, test_moving_object_never_writes_the_map,

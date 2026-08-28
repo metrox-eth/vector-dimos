@@ -163,8 +163,13 @@ class ScoredGrid:
         # further; the second viewpoint (0.10 m of motion) makes it a wall.
         # Driving toward anything real crosses viewpoints within a metre, so
         # legs and furniture still map on approach.
-        cap = np.where(moved, HIT_CAP, OCCUPIED_AT - 1)
-        new = np.minimum(cur + 1, cap).astype(np.int8)
+        # The viewpoint rule bounds the INCREASE, never the value: a
+        # same-viewpoint hit adds nothing, it never takes anything away.
+        # (28/08: it used to clamp the value, so one revolution taken from a
+        # parked rover pushed a wall built by twenty viewpoints back down to
+        # 1 - below OCCUPIED_AT - and occupancy() published free floor where
+        # the wall stood.)
+        new = np.where(moved, np.minimum(cur + 1, HIT_CAP), cur).astype(np.int8)
         layer[gy, gx] = new
         self._last_hit_xy[gy[moved], gx[moved]] = from_xy
         self.seen[gy, gx] = True
