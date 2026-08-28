@@ -5,10 +5,11 @@ cloud (front sectors). Prints ONE line the explore loop parses:
 
   guard cam L=.. C=.. R=.. valid=..%  lidar F=.. L=.. R=..  ahead=..  sides=..
 
-Camera geometry MEASURED: 0.80 m high, level, fy~386 px. Rows 260..480 cover
-heights 0.70 m (at 3 m) down to the lowest the camera can see; below ~0.5 m
-of range it sees nothing under 0.5 m high - that blind zone is the lidar's
-and, later, the bumpers'. Too few valid depth pixels = BLIND = blocked.
+Camera geometry comes from lidar_odometry.CAMERA_XYZ_BASE - ONE mount for the
+map and the guard, never a copy here (the copy was still the dead front-bumper
+mount, 0.50 m of phantom clearance ahead). Close in the camera sees nothing
+low; that blind zone is the lidar's and, later, the bumpers'. Too few valid
+depth pixels = BLIND = blocked.
 Distances per band = minimum of per-column medians (thin legs cannot hide).
 """
 import sys, time, threading
@@ -16,6 +17,7 @@ import numpy as np, cv2
 from dimos.core.transport_factory import make_transport
 from dimos.msgs.sensor_msgs.Image import Image
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+from vector_dimos.lidar_odometry import CAMERA_XYZ_BASE
 
 tag = sys.argv[1] if len(sys.argv) > 1 else time.strftime("%H%M%S")
 wait_s = float(sys.argv[2]) if len(sys.argv) > 2 else 3.0
@@ -39,10 +41,11 @@ if "color_image" in last:
     cv2.imwrite(f"/home/metrox/mars/{tag}.png", last["color_image"].to_opencv())
 cam = {"L": BLIND, "C": BLIND, "R": BLIND}; valid_pct = 0.0
 # --- camera: full 3D check. Every 4th depth pixel -> point in the ROVER frame
-# (camera 0.80 m up, 0.21 m ahead of the lidar, level; optical x right, y down,
-# z forward). Floor removed by geometry (z < FLOOR_Z), everything else up to
-# the mast top counts, whatever its height - every height, not a selected band.
-CAM_H, CAM_X = 0.80, 0.30; FLOOR_Z, TOP_Z = 0.04, 0.90; HALF_W = 0.33   # rover 54x46 cm, camera at the front bumper, highest point
+# (mount = CAMERA_XYZ_BASE, taken level here: the 1.1 deg down of
+# CAMERA_PITCH_RAD is ~6 cm of height at 3 m; optical x right, y down, z
+# forward). Floor removed by geometry (z < floor_z), everything else up to the
+# mast top counts, whatever its height - every height, not a selected band.
+CAM_X, CAM_H = CAMERA_XYZ_BASE[0], CAMERA_XYZ_BASE[2]; FLOOR_Z, TOP_Z = 0.04, 0.90; HALF_W = 0.33   # rover 54x46 cm, highest point
 if "depth_image" in last:
     K = list(last["camera_info"].K) if "camera_info" in last else [386.6, 0, 320.6, 0, 386.0, 245.0, 0, 0, 1]   # measured 2026-08-23
     fx, fy, cx, cy = K[0], K[4], K[2], K[5]

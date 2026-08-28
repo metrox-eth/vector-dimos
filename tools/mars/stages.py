@@ -80,7 +80,9 @@ secs = float(sys.argv[1]) if len(sys.argv) > 1 else 12.0
 time.sleep(secs)
 print(f"collected {secs:.0f} s: raw revolutions {raw_revs[0]}, streams seen: {sorted(last)}")
 if raw_revs[0]:
-    view(None, f"1. RAW LIDAR, {raw_revs[0]} revolutions summed", counts=np.minimum(raw_hits, 99) // max(1, raw_revs[0] // 1))
+    # hits per revolution: DIVIDE first. Clamping the sum before the division emptied
+    # the whole grid past 99 revolutions (12 s at 10 Hz = 120); view() caps at '#'.
+    view(None, f"1. RAW LIDAR, {raw_revs[0]} revolutions summed", counts=raw_hits // raw_revs[0])
 odom = last.get("odom")
 if odom is None:
     print("no odom -> cannot draw the later stages in the rover frame"); sys.exit(0)
