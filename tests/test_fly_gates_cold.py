@@ -338,6 +338,14 @@ check("default flight: GAMEPAD=0 in both (the pad stays informative)",
       len(pre) == 2 and all("GAMEPAD=0" in ln for ln in pre), pre[0][-60:] if pre else "none")
 check("default flight: STOCK_NAV=0 PERSISTENT_MAP=1 in both",
       all("STOCK_NAV=0" in ln and "PERSISTENT_MAP=1" in ln for ln in pre))
+check("default flight: EXPLORER_V2=1 in both (unset = explorer2, its own default)",
+      all("EXPLORER_V2=1" in ln for ln in pre))
+rc, out, log = fly(EXPLORER_V2=0)
+pre = ran(log, "preflight.py") + ran(log, "preflight_nav.py")
+check("the explorer A/B crosses too: EXPLORER_V2=0 in both preflights",
+      len(pre) == 2 and all("EXPLORER_V2=0" in ln for ln in pre))
+check("and the stack gets it (the switch finally does something)",
+      any("EXPLORER_V2=0" in ln for ln in ran(log, "dimos --rerun-open")))
 # the other end of the wire: the gate on the rover reads the name we send
 check("preflight.py's pad gate reads that very variable",
       'os.environ.get("GAMEPAD", "0") == "1"' in (ROOT / "tools" / "preflight.py").read_text())

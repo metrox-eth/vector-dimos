@@ -107,7 +107,7 @@ ssh $ROVER 'for p in $(pgrep -x deno) $(pgrep -f "[u]dp_forward"); do kill "$p";
 # into a refusal only when GAMEPAD=1, and that variable stopped at the rig, so
 # the pad gate never fired once and a padless GAMEPAD=1 flight walked all seven
 # gates before the operator found nothing could drive (2026-08-28 audit).
-MODE_ENV="GAMEPAD=${GAMEPAD:-0} STOCK_NAV=${STOCK_NAV:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1}"
+MODE_ENV="GAMEPAD=${GAMEPAD:-0} STOCK_NAV=${STOCK_NAV:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1} EXPLORER_V2=${EXPLORER_V2:-1}"
 echo "== 1/7 preflight hardware =="
 ssh $ROVER "cd ~/vector-dimos && $MODE_ENV .venv/bin/python tools/preflight.py" || { echo "HARDWARE KO - no flight"; exit 1; }
 echo "== 2/7 preflight nav =="
@@ -136,7 +136,7 @@ LAUNCH_MARK=$(ssh $ROVER 'date +%s')
 # the default dlopen reserve (~1.6 KB) cannot hold - a 4 MiB reserve gives it
 # room (256 KB was not enough inside loaded workers) (measured 2026-08-27 20:00: without it, "cannot allocate memory in static
 # TLS block").
-ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1} ODOM_GUARDS=${ODOM_GUARDS:-1} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
+ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1} ODOM_GUARDS=${ODOM_GUARDS:-1} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} EXPLORER_V2=${EXPLORER_V2:-1} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
 sleep 12
 # the run dir must POSTDATE this launch: on 2026-08-26 a failed launch over a live
 # stack passed the lidar check against the PREVIOUS run's log (false IN FLIGHT)
