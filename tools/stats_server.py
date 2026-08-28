@@ -22,8 +22,14 @@ except ImportError:
     serial = None
 
 PORT = 8900
+# Calibrated on the pack, not on theory. FULL: 26.91 V measured right off a
+# completed charge (2026-08-28). EMPTY: the true cutoff voltage has never been
+# captured - 20.0 V stays as a pessimistic floor until a real battery death is
+# recorded (battery_log.csv below exists exactly so the next one is).
 SOC_V_EMPTY = 20.0
-SOC_V_FULL = 28.0
+SOC_V_FULL = 26.91
+BATTERY_LOG = os.path.expanduser("~/.local/state/vector/battery_log.csv")
+_battery_last_log = [0.0]
 # The ONE port the PZEM lives on. The old code scanned every by-id port with
 # MODBUS frames (motor bus, ESP, even the new lidar stick - its exclusion
 # hint named the DEAD CP2102N): bus contention sprayed on every /metrics
@@ -223,6 +229,17 @@ def battery():
     except Exception as e:
         return {"available": False, "reason": f"PZEM not answering: {e}"}
     soc = (voltage - SOC_V_EMPTY) / (SOC_V_FULL - SOC_V_EMPTY) * 100.0
+    # One CSV line a minute: the flight recorder for the pack. Its whole
+    # purpose is to capture the voltage of the NEXT battery death, so the
+    # empty anchor above can finally be a measurement.
+    now = time.time()
+    if now - _battery_last_log[0] >= 60.0:
+        _battery_last_log[0] = now
+        try:
+            with open(BATTERY_LOG, "a") as f:
+                f.write(f"{int(now)},{voltage:.2f},{current:.2f},{power:.1f}\n")
+        except OSError:
+            pass
     return {
         "available": True,
         "voltage_v": round(voltage, 2),
