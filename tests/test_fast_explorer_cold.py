@@ -71,4 +71,48 @@ import threading; ex.goal_reached_event = threading.Event()
 t0 = time.time(); ex._on_goal_reached(Bool(data=False)); dt = time.time() - t0
 assert ex.goal_reached_event.is_set() and len(ex._failed_goals) == 1 and dt >= 0.9, (dt, ex._failed_goals)
 print(f"  failed goal remembered ({len(ex._failed_goals)}), explorer woken after a {dt:.1f} s breath; hold {FAILED_GOAL_HOLD_S:.0f} s")
+
+# the hold prefers, it never starves: upstream reads [] as "no frontier" and ends
+# exploration after 10 of them (20 s), a third of the 60 s hold (audit 28/08, S5).
+# Known map, known metres: two 1 m free patches in unknown space, centres at
+# world (1.98, 4.98) and (7.98, 4.98); robot at (3.50, 5.00) -> 1.53 m from the
+# first, 4.48 m from the second.
+from dimos.msgs.nav_msgs.OccupancyGrid import OccupancyGrid
+from dimos.msgs.geometry_msgs.Vector3 import Vector3
+from dimos.navigation.frontier_exploration.wavefront_frontier_goal_selector import WavefrontConfig
+
+two = np.full((240, 240), -1, dtype=np.int8)
+two[90:110, 30:50] = 0               # patch A, ring centroid (1.975, 4.975) m
+two[90:110, 150:170] = 0             # patch B, ring centroid (7.975, 4.975) m
+cm = OccupancyGrid(grid=two, resolution=RES)
+POSE = Vector3(3.5, 5.0, 0.0)
+A, B = (1.975, 4.975), (7.975, 4.975)
+assert len(find_frontiers(two, (70, 100), 99, 6)) == 2, "map must hold exactly 2 clusters"
+
+ex = VectorExplorer.__new__(VectorExplorer)
+ex.config = WavefrontConfig(min_frontier_perimeter=0.3, safe_distance=0.35,   # nav_blueprints values
+                            lookahead_distance=4.0, max_explored_distance=12.0)
+ex.explored_goals = []; ex.exploration_direction = Vector3(0.0, 0.0, 0.0)
+
+
+def detect(holds):
+    ex._failed_goals = [(x, y, time.monotonic()) for x, y in holds]
+    ex._last_goal = None
+    return ex.detect_frontiers(POSE, cm)
+
+
+free = detect([])
+assert len(free) == 2, free
+starved = detect([A, B])                       # both clusters under a fresh hold
+assert len(starved) == 1, starved              # pre-fix: [] -> 10 failures, exploration over in 20 s
+assert abs(starved[0].x - A[0]) < 0.1 and abs(starved[0].y - A[1]) < 0.1, starved[0]
+assert ex._last_goal is not None and abs(ex._last_goal[0] - A[0]) < 0.1, ex._last_goal
+print(f"  both clusters held -> yields the closest, ({starved[0].x:.2f}, {starved[0].y:.2f}) m at "
+      f"{((starved[0].x - POSE.x) ** 2 + (starved[0].y - POSE.y) ** 2) ** 0.5:.2f} m, not []")
+one = detect([A])                              # one held, one free -> only the free one
+assert len(one) == 1 and abs(one[0].x - B[0]) < 0.1, one
+print(f"  one held, one free -> only the free one, ({one[0].x:.2f}, {one[0].y:.2f}) m")
+empty = ex.detect_frontiers(POSE, OccupancyGrid(grid=np.zeros((60, 60), dtype=np.int8), resolution=RES))
+assert empty == [], empty                      # [] stays for "genuinely no frontier"
+print("  fully known map -> [] (the give-up path is still reachable when it is true)")
 print("TEST PASSED")
