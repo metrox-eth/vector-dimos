@@ -269,6 +269,11 @@ class GamepadTeleop(Module):
                         continue
                 # DEADMAN: no held button, no motion - ever.
                 if not deadman:
+                    # Releasing also resets the slew state: the ramp restarts
+                    # from rest, so a re-press with the sticks centred cannot
+                    # replay the last driven speed (28/08 audit: 0.44 m/s for
+                    # ~0.75 s, sticks at rest).
+                    prev_vx = prev_vy = 0.0
                     self._publish(0.0, 0.0, 0.0)
                     time.sleep(period)
                     continue
