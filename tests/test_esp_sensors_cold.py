@@ -8,6 +8,7 @@ m/s). Groups:
   D'. brake_forward  - metres in, forward m/s out (vector_dimos.adapter)
   D''. sonar_publication - what goes on the sonar_range stream, and when
   D'''. the same brake through the adapter, in wheel RPM on a mock bus
+  E. bar flutter filter - a corner must HOLD BUMP_HOLD_S to be a contact
 
 The ESP module writes nothing into the map any more (sensor doctrine, 2026-08-25),
 so there is no patch geometry left to test here.
@@ -163,10 +164,6 @@ got = wheel_rpm(braked, bbus, (0.0, 0.0, 0.5))
 check("sonar 0.25 m: spin 0.5 rad/s -> the unbraked spin RPM",
       got == wheel_rpm(free, fbus, (0.0, 0.0, 0.5)), f"{got}")
 
-print(f"{OK} OK, {KO} KO")
-sys.exit(1 if KO else 0)
-
-
 print("E. bar flutter filter (a corner must HOLD 0.10 s to be a contact)")
 import time as _t
 
@@ -181,13 +178,10 @@ class _Sink:
 
 
 def _bare():
+    """A reader with no dimOS machinery, starting exactly where the
+    constructor does (_reset_state), with the two Outs replaced by sinks."""
     e = EspSensors.__new__(EspSensors)
-    e._sw = (0, 0, 0, 0)
-    e._sonar = None
-    e._clear_since = None
-    e._last_contact = -10.0
-    e._last_sonar_publish = 0.0
-    e.contacts = 0
+    e._reset_state()
     e.bump = _Sink(); e.bump_rear = _Sink()
     return e
 
@@ -204,6 +198,14 @@ _t.sleep(BUMP_HOLD_S + 0.08)
 check("held contact publishes ONE bump after the hold", e2.bump.n == 1 and e2.contacts == 1)
 
 e3 = _bare()
-e3._handle_line("SW 0 0 0 1")         # rear corner held
+e3._handle_line("SW 0 0 1 0")         # rear corner held (SW index 2 = arriere-droit)
 _t.sleep(BUMP_HOLD_S + 0.08)
 check("rear corner goes out on bump_rear", e3.bump_rear.n == 1 and e3.bump.n == 0)
+
+e3b = _bare()
+e3b._handle_line("SW 0 0 0 1")        # index 3 = avant-droit, a FRONT corner
+_t.sleep(BUMP_HOLD_S + 0.08)
+check("front-right goes out on bump, not bump_rear", e3b.bump.n == 1 and e3b.bump_rear.n == 0)
+
+print(f"{OK} OK, {KO} KO")
+sys.exit(1 if KO else 0)
