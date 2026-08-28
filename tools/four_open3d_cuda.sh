@@ -17,6 +17,11 @@ log "nvcc: $(nvcc --version | tail -1)"
 
 log "ETAPE 2/4: dependances Open3D (leur script officiel)"
 cd Open3D
+# Pair CUDA patch (known Jetson bug, isl-org/Open3D#6885): the supplied
+# constructor makes the __shared__ array non-trivial and recent nvcc rejects it
+# (20054). Same patch as the vast oven - without it ETAPE 4 dies after HOURS.
+sed -i 's|constexpr __device__ inline Pair() {}|Pair() = default;|' cpp/open3d/core/nns/kernel/Pair.cuh
+grep -q "Pair() = default" cpp/open3d/core/nns/kernel/Pair.cuh || { log "ECHEC patch Pair"; exit 1; }
 sudo -n env DEBIAN_FRONTEND=noninteractive bash util/install_deps_ubuntu.sh assume-yes > ../deps.log 2>&1 \
   || { log "ECHEC deps (voir deps.log)"; exit 1; }
 python3 -m pip install --user -q "cmake>=3.24,<4" ninja setuptools wheel >> ../deps.log 2>&1

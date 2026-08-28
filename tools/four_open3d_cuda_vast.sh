@@ -56,7 +56,10 @@ W=$(ls lib/python_package/pip_package/*.whl | head -1)
 python3.12 -m pip install -q "$W" numpy > /root/verif.log 2>&1
 SO=$(python3.12 -c "import open3d, os; print(os.path.dirname(open3d.__file__))" 2>/dev/null)/cuda/pybind.cpython-312-aarch64-linux-gnu.so
 [ -f "$SO" ] || SO=$(find / -name "pybind.cpython-312*.so" -path "*open3d*" 2>/dev/null | head -1)
-log "segment TLS: $(readelf -lW $SO | grep TLS | head -1)"
+# no path = no wheel to check: CDLL("") is dlopen(NULL), it loads the main
+# program and would log "roue saine" for a wheel nobody ever opened
+[ -n "$SO" ] && [ -f "$SO" ] || { log "ECHEC .so introuvable - roue invalide"; exit 1; }
+log "segment TLS: $(readelf -lW "$SO" | grep TLS | head -1)"
 python3.12 -c "import ctypes; ctypes.CDLL(\"$SO\")" && log "CHARGEMENT OK - roue saine" || { log "ECHEC chargement - roue invalide"; exit 1; }
 log "ROUE PRETE:"
 ls -la lib/python_package/pip_package/*.whl
