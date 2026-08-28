@@ -9,6 +9,10 @@ Mapping (standard dual-stick):
     left stick Y  -> vx (forward)     left stick X  -> vy (strafe)
     right stick X -> wz (rotation)    R2 held       -> boost
 
+Publishes ONLY while the deadman is held, plus a 0.5 s brake of zeros right
+after it is released - then silence (see BRAKE_S). A pad lying at rest owns
+nothing, so the same stack can explore on its own while the pad is plugged in.
+
 Runs headless: the Jetson has no display, so SDL is pinned to its dummy
 video/audio drivers below. The pad is hot-pluggable - the module waits for
 one instead of giving up at startup, and goes back to waiting if it is
@@ -89,6 +93,15 @@ CLAMP_ANGULAR_RADS = 0.8
 MECANUM_LEVER_M = 0.50    # Lx+Ly: half wheelbase 0.27 + half track 0.23 (54x46 cm chassis)
 WHEEL_ENVELOPE_MS = 0.45  # max rim speed however the sticks are mixed
 DEADMAN_BUTTON = 7        # MEASURED 2026-08-27: the chosen deadman button was pressed 21x -> index 7 (shanwan pad, Android mode). Held = commands allowed; released = zeros, always
+BRAKE_S = 0.5             # how long the zeros keep flowing after the deadman is
+                          # released - then TOTAL SILENCE until it is held again.
+                          # dimOS's MovementManager reads ANY tele_cmd_vel message,
+                          # zeros included, as "a human is driving": it cancels the
+                          # nav goal and mutes nav_cmd_vel for tele_cooldown_sec
+                          # (1.0 s). A pad at rest publishing 50 Hz of zeros
+                          # therefore killed exploration for good (28/08 audit).
+                          # 0.5 s < 1.0 s: the brake is seen, then autonomy gets
+                          # the bus back and the two coexist.
 # NOTE (2026-08-27): when this pad's radio dies mid-drive (sleep, battery -
 # observed on a piloted lap), the rover STOPS cleanly - observed behaviour, no
 # radio watchdog needed. Revisit ONLY if a radio death ever leaves a non-zero
@@ -227,6 +240,7 @@ class GamepadTeleop(Module):
         pad = None
         trusted = False            # neutral-first trust gate (13h42 runaway)
         prev_vx = prev_vy = 0.0    # slew-limiter state
+        brake_until = 0.0          # publish zeros until this instant, then shut up
         waiting_logged = False
         try:
             while not self._stop_event.is_set():
@@ -264,7 +278,8 @@ class GamepadTeleop(Module):
                         logger.info("Gamepad axes seen at neutral - commands now trusted "
                                     "(hold the deadman button to drive)")
                     else:
-                        self._publish(0.0, 0.0, 0.0)
+                        if time.monotonic() < brake_until:
+                            self._publish(0.0, 0.0, 0.0)
                         time.sleep(period)
                         continue
                 # DEADMAN: no held button, no motion - ever.
@@ -274,7 +289,11 @@ class GamepadTeleop(Module):
                     # replay the last driven speed (28/08 audit: 0.44 m/s for
                     # ~0.75 s, sticks at rest).
                     prev_vx = prev_vy = 0.0
-                    self._publish(0.0, 0.0, 0.0)
+                    # BRAKE THEN SILENCE (see BRAKE_S): zeros for 0.5 s after the
+                    # last command, then not one message until the deadman is
+                    # held again - a released pad must not mute autonomy.
+                    if time.monotonic() < brake_until:
+                        self._publish(0.0, 0.0, 0.0)
                     time.sleep(period)
                     continue
                 vx, vy, wz = axes_to_twist(*axes, self.cfg)
@@ -285,6 +304,7 @@ class GamepadTeleop(Module):
                 # instant, the mix could transiently exceed the rim ceiling
                 vx, vy, wz = clamp_twist(vx, vy, wz)
                 self._publish(vx, vy, wz)
+                brake_until = time.monotonic() + BRAKE_S
                 time.sleep(period)
         finally:
             try:

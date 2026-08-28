@@ -4,7 +4,7 @@ Sections:
   A. axes_to_twist - known axis values -> known m/s and rad/s. Pure, no pygame.
   B. the module's hot-plug loop driven by a FAKE pygame: absent pad -> pad
      plugged in -> deadman released and pressed again -> pad pulled out ->
-     pad back. Still no pygame needed.
+     pad back -> at 50 Hz, the 0.5 s brake then SILENCE. Still no pygame needed.
   C. real pygame with no display, if it is installed: the dummy SDL drivers
      have to make init()/event.pump() work on a headless Jetson.
   F. the 27/08 safety nets: trust gate, absolute ceilings, wheel envelope.
@@ -330,6 +330,56 @@ check(not pad_module._thread.is_alive() and stop_s < 2.0,
       f"stop() joins the loop in {stop_s:.2f} s")
 check(close(published[-1].linear.x, 0.0) and close(published[-1].angular.z, 0.0),
       "last message on shutdown is a zero Twist")
+
+# 6. BRAKE THEN SILENCE, at the real 50 Hz rate (28/08 autonomy fix). dimOS's
+# MovementManager reads EVERY tele_cmd_vel message - zeros included - as "a
+# human is driving": it cancels the nav goal and mutes nav_cmd_vel for
+# tele_cooldown_sec (1.0 s). Publishing 50 zeros/s at rest therefore left
+# GAMEPAD=1 exploring nothing, for ever. The released pad now brakes for 0.5 s
+# (<= 25 messages at 50 Hz) and then says NOTHING at all.
+js.pad = FakePad("Fake 50Hz", [0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+brake_module = GamepadTeleop(rate_hz=50.0)
+brake_pub = []
+brake_module.tele_cmd_vel.subscribe(brake_pub.append)
+brake_module.start()
+check(wait_for(lambda: spy.count("Gamepad connected: Fake 50Hz") == 1, 5.0),
+      "50 Hz module: pad connected")
+check(wait_for(lambda: spy.count("axes seen at neutral") == 4, 3.0),
+      "50 Hz module: trust earned at neutral")
+check(not brake_pub, f"deadman never held -> not a single message published "
+                     f"(got {len(brake_pub)})")
+js.pad.buttons[gp.DEADMAN_BUTTON] = 1
+js.pad.axes = [0.0, -1.0, 0.0, 0.0, 0.0, -1.0]
+check(wait_for(lambda: close(brake_pub[-1].linear.x, gp.CLAMP_LINEAR_MS) if brake_pub else False, 3.0),
+      f"deadman held -> the 50 Hz flow ramps to the {gp.CLAMP_LINEAR_MS} m/s ceiling")
+js.pad.buttons[gp.DEADMAN_BUTTON] = 0   # release, at speed
+time.sleep(1.2)                          # 0.5 s of brake + 0.7 s past its end
+last_drive = max(i for i, m in enumerate(brake_pub) if not close(m.linear.x, 0.0))
+brake = brake_pub[last_drive + 1:]
+check(all(close(m.linear.x, 0.0) and close(m.linear.y, 0.0)
+          and close(m.angular.z, 0.0) for m in brake),
+      f"release -> every message after the last driven one is a zero Twist "
+      f"({len(brake)} of them)")
+check(1 <= len(brake) <= 25,
+      f"... and at most 25 of them (BRAKE_S {gp.BRAKE_S} s x 50 Hz): got {len(brake)}")
+silent_from = len(brake_pub)
+time.sleep(0.6)                          # 30 ticks at 50 Hz
+check(len(brake_pub) == silent_from,
+      f"then SILENCE: 0 messages in the next 0.6 s (got "
+      f"{len(brake_pub) - silent_from}; pre-fix: 30 zeros, autonomy muted)")
+# and the flow restarts on the next press - the pad is not disarmed, just quiet
+js.pad.buttons[gp.DEADMAN_BUTTON] = 1
+check(wait_for(lambda: len(brake_pub) - silent_from >= 20, 2.0),
+      f"deadman pressed again -> the 50 Hz flow resumes "
+      f"({len(brake_pub) - silent_from} messages)")
+restart = brake_pub[silent_from:]
+step = gp.SLEW_LINEAR_MS2 / 50.0        # 0.012 m/s per tick at 50 Hz
+check(abs(restart[0].linear.x) <= step + 1e-9,
+      f"... from rest: first vx = {restart[0].linear.x:.3f} m/s <= one slew "
+      f"step ({step:.3f}), not the 0.438 of the stale-state bug")
+check(wait_for(lambda: close(brake_pub[-1].linear.x, gp.CLAMP_LINEAR_MS), 3.0),
+      f"... and ramps back to the {gp.CLAMP_LINEAR_MS} m/s ceiling (stick still forward)")
+brake_module.stop()
 
 gp.logger = real_logger
 del sys.modules["pygame"]
