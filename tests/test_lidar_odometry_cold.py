@@ -21,6 +21,10 @@ metres, degrees):
   E. roundtrip 73 deg                 - a scan taken at (1.20, -0.70, 73.0 deg)
                                         comes back out of the re-anchor path as
                                         73 deg of published heading
+  F. the pose under review            - a hand-carry resets kiss-icp, whose frame
+                                        then reports 0.00 m for a rover standing
+                                        at 4.10 m: `odom` is suspended like the
+                                        map until the search answers
 
 Needs dimOS (kiss-icp is faked, the messages and the relocalizer are real).
 
@@ -35,6 +39,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -156,6 +161,16 @@ class Kiss:
         return frame, frame
 
 
+# _begin_relocalization(reset_kiss=True) rebuilds kiss-icp from `_cfg`: the bench
+# hands it the same fake, so the RESET is the real code path (kiss-icp itself is
+# not installed here). `_cfg` is the step the rebuilt Kiss drives at - a rover
+# that has just been put down stands still (0.0 m per revolution).
+_KISS_MOD = types.ModuleType("kiss_icp.kiss_icp")
+_KISS_MOD.KissICP = lambda cfg: Kiss(step_m=float(cfg))
+sys.modules.setdefault("kiss_icp", types.ModuleType("kiss_icp"))
+sys.modules["kiss_icp.kiss_icp"] = _KISS_MOD
+
+
 class Sink:
     """An Out stream that keeps what was published, and when."""
 
@@ -203,6 +218,7 @@ def odometry(kiss, run_started, frame="fresh"):
     o._reloc_gen, o._reloc_pts, o._reloc_thread, o._reloc_result = 0, [], None, None
     o._no_ref_tries, o._no_ref_logged = 0, 0.0
     o._reloc_ready_at, o._reloc_ready_ans, o._gave_up_pending = 0.0, False, False
+    o._reloc_reset_kiss = False
     o._lost_since, o._carry_cooldown = 0.0, 0.0
     o._run_started = run_started
     o.odom, o.lidar, o.reloc_frame, o.tf, o.camera_floor = Sink(), Sink(), Sink(), Sink(), Sink()
@@ -506,6 +522,114 @@ check("re-anchored -> unfrozen, mapping again, still the fresh frame",
       f"{len(o.lidar.msgs)} clouds after the match")
 check("the origin the search wrote is the pose it found",
       abs(math.degrees(o._origin[2]) - 73.0) < 2.0, f"origin yaw {math.degrees(o._origin[2]):+.2f} deg")
+
+
+# --- F. the pose while a search that reset kiss-icp runs --------------------
+
+print("F. hand-carry: kiss-icp is reset, so odom is suspended like the map")
+
+REAL_GRACE, REAL_RETRY, REAL_RELOC = LO.BOOT_GRACE_S, LO.RELOC_RETRY_S, LO.relocalize
+LO.RELOC_RETRY_S = 0.0
+
+
+def carried(step_m: float = 0.10, revs: int = 40):
+    """Drive `revs` x `step_m` with nothing to match against (so nothing
+    freezes), then be picked up: a checkpoint appears, kiss-icp's threshold
+    says scan matching is lost, and the hand-carry search resets kiss-icp."""
+    fresh_state_dir()
+    started = time.time()
+    cur = run_dir(started)
+    o = odometry(Kiss(step_m=step_m), started)
+    o._cfg = 0.0                                  # put down and standing still
+    drive(o, revs, SLEEP)
+    checkpoint(cur, age_s=0)                      # the costmap checkpointed meanwhile
+    o._reloc_ready_at = 0.0                       # look at the disk again on the next revolution
+    o._kiss.adaptive_threshold.v = 2.0            # scans stopped matching: the carry signal
+    o._lost_since = time.monotonic() - LO.LOST_SIGMA_S - 1.0
+    return o
+
+
+def watch(o, n_revs):
+    """One revolution at a time: how many odom messages went out while the
+    search was open, the x the reset frame reported, and the first pose
+    published once the search was over."""
+    during, frozen, fiction, after = 0, 0, [], None
+    for _ in range(n_revs):
+        n = len(o.odom.msgs)
+        drive(o, 1, SLEEP)
+        out = o.odom.msgs[n:]
+        if o._searching:
+            during, frozen = during + len(out), frozen + 1
+            fiction.append(o.pose2d[0])
+        elif frozen and after is None and out:
+            after = out[-1]
+    return during, frozen, fiction, after
+
+
+# F1: the search never matches and gives up
+LO.BOOT_GRACE_S = 0.5
+LO.relocalize = lambda field, pts: verdict(accepted=False)
+o = carried()
+trusted = o.odom.msgs[-1].position.x
+clouds = len(o.lidar.msgs)
+check("40 revolutions x 0.10 m: the last pose the planner heard is 4.00 m",
+      abs(trusted - 4.00) < 0.01, f"{trusted:.2f} m")
+n = len(o.odom.msgs)
+drive(o, 1, SLEEP)                                # the revolution that detects the carry
+trigger_odom = len(o.odom.msgs) - n
+check("the hand-carry opened a search that reset kiss-icp",
+      o._searching and o._reloc_reset_kiss and o._reloc_reason == "carried",
+      f"{o._reloc_reason} / {o._reloc_state}")
+during, frozen, fiction, after = watch(o, 59)
+during, frozen = during + trigger_odom, frozen + 1
+check("the reset frame would have published 0.00 m for a rover standing at 4.10 m",
+      abs(min(fiction)) < 0.01 and trusted - min(fiction) > 3.9,
+      f"a {trusted - min(fiction):.2f} m step, never published")
+check("NO odom between begin_relocalization and the give-up",
+      during == 0 and frozen >= 8, f"{during} odom in {frozen} frozen revolutions")
+check("the map was frozen for exactly those revolutions",
+      len(o.lidar.msgs) == clouds + (60 - frozen), f"{len(o.lidar.msgs) - clouds} clouds in {60 - frozen}")
+check("the frame keeps being published while the pose does not (costmap2d still hears)",
+      len(o.reloc_frame.msgs) == 100, f"{len(o.reloc_frame.msgs)} frames for 100 revolutions")
+check("the give-up hands the pose back", o._reloc_state == "idle" and after is not None,
+      f"resumed at {after.position.x:+.2f} m" if after is not None else "never resumed")
+
+# F2: the search re-anchors - the pose comes back TRUE, not at the origin
+LO.BOOT_GRACE_S = 3.0
+LO.relocalize = lambda field, pts: verdict(4.30, 0.0, 0.0, accepted=True)
+o = carried()
+during, frozen, fiction, after = watch(o, LO.RELOC_REVS + 2)
+if o._reloc_thread is not None:
+    o._reloc_thread.join(30.0)
+d2, f2, fic2, after2 = watch(o, 4)
+during, frozen = during + d2, frozen + f2
+after = after if after is not None else after2
+check("NO odom between begin_relocalization and the re-anchor",
+      during == 0 and frozen >= LO.RELOC_REVS, f"{during} odom in {frozen} frozen revolutions")
+check("re-anchored at 4.30 m -> that is the pose the planner hears again, not 0.00 m",
+      after is not None and abs(after.position.x - 4.30) < 0.01,
+      f"{after.position.x:+.3f} m" if after is not None else "never resumed")
+check("and the map is written again", o._reloc_state == "idle" and len(o.lidar.msgs) > 0,
+      f"{len(o.lidar.msgs)} clouds, state {o._reloc_state}")
+
+# F3: a search that did NOT reset kiss-icp keeps publishing - the pose is continuous
+LO.BOOT_GRACE_S = 0.5
+LO.relocalize = lambda field, pts: verdict(accepted=False)
+fresh_state_dir()
+started = time.time()
+checkpoint(run_dir(started), age_s=0)
+o = odometry(Kiss(step_m=0.10), started)
+o._cfg = 0.0
+LOOP.run_until_complete(o.handle_bump(None))
+check("bump -> searching, and kiss-icp is NOT reset", o._searching and not o._reloc_reset_kiss)
+drive(o, 6, SLEEP)
+check("6 revolutions x 0.10 m frozen: the pose still flows, and it is the real one (0.60 m)",
+      len(o.odom.msgs) == 6 and abs(o.odom.msgs[-1].position.x - 0.60) < 0.01
+      and len(o.lidar.msgs) == 0,
+      f"{len(o.odom.msgs)} odom, last {o.odom.msgs[-1].position.x:.2f} m, "
+      f"{len(o.lidar.msgs)} clouds")
+
+LO.BOOT_GRACE_S, LO.RELOC_RETRY_S, LO.relocalize = REAL_GRACE, REAL_RETRY, REAL_RELOC
 
 shutil.rmtree(TMP, ignore_errors=True)
 print(f"{OK} OK, {KO} KO")
