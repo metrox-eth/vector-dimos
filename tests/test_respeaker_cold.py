@@ -2,6 +2,10 @@
 
 Run:  .venv/bin/python tests/test_respeaker_cold.py
 Rule #2: known values in physical units through the real parsing path.
+
+Sections A-D need nothing but the module and run everywhere. E-F touch
+pyusb (``ReSpeakerUSB.read`` imports usb.core even with a fake device) and
+skip with a printed line where pyusb is absent - the bench still exits 0.
 """
 
 import math
@@ -14,6 +18,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from vector_dimos.respeaker import (  # noqa: E402
     CHANNELS, CHUNK_SIZE, SAMPLE_RATE, ReSpeakerUSB, parse_response,
 )
+
+try:
+    import usb.core  # noqa: F401
+    HAVE_USB = True
+except ImportError:
+    HAVE_USB = False
 
 FAIL = 0
 
@@ -35,40 +45,7 @@ check("beam2 = 200 deg", abs(angles[2] - 200.0) < 0.01, f"{angles[2]:.3f}")
 check("bad status byte -> None", parse_response(b"\x01" + payload, "radians") is None)
 check("short payload -> None", parse_response(b"\x00" + payload[:8], "radians") is None)
 
-print("B. read_doa gating (fake device)")
-
-
-class FakeDev:
-    """Canned ctrl_transfer answers keyed by cmdid."""
-
-    def __init__(self, energies, azimuths_deg):
-        self.energies, self.azimuths = energies, azimuths_deg
-
-    def ctrl_transfer(self, bmtype, breq, cmdid, resid, length, timeout):
-        import array
-        if cmdid == 0x80 | 80:   # AEC_SPENERGY_VALUES
-            raw = b"\x00" + struct.pack("<ffff", *self.energies) + b"\x00"
-        elif cmdid == 0x80 | 75:  # AEC_AZIMUTH_VALUES
-            raw = b"\x00" + struct.pack(
-                "<ffff", *[math.radians(a) for a in self.azimuths]) + b"\x00"
-        else:
-            raw = b"\x00" + b"\x02\x01\x00\x00"
-        return array.array("B", raw)
-
-
-usb = ReSpeakerUSB()
-usb.dev = FakeDev([0.0, 0.0, 0.0, 0.0], [10, 90, 180, 270])
-check("silence -> None", usb.read_doa() is None)
-usb.dev = FakeDev([0.1, 0.9, 0.2, 0.0], [10, 90, 180, 270])
-doa = usb.read_doa()
-check("loudest beam wins (90 deg)", doa is not None and abs(doa - 90.0) < 0.01,
-      f"{doa}")
-usb.dev = FakeDev([0.5, 0.0, 0.0, 0.0], [-15, 90, 180, 270])
-doa = usb.read_doa()
-check("negative azimuth wraps to 345", doa is not None and abs(doa - 345.0) < 0.01,
-      f"{doa}")
-
-print("C. ring buffer keeps channel 0 (known pattern roundtrip)")
+print("B. ring buffer keeps channel 0 (known pattern roundtrip)")
 from vector_dimos.respeaker import ReSpeakerMic  # noqa: E402
 
 mic = ReSpeakerMic.__new__(ReSpeakerMic)  # no Module __init__: buffer only
@@ -85,7 +62,7 @@ check("chunk length = CHUNK_SIZE mono samples", len(samples) == n, f"{len(sample
 check("ch0 values kept (i%1000)", samples[:5] == (0, 1, 2, 3, 4), f"{samples[:5]}")
 check("ch1 (-7) dropped", -7 not in samples[:100])
 
-print("D. EnergyVAD segmentation (known chunks in, known utterance out)")
+print("C. EnergyVAD segmentation (known chunks in, known utterance out)")
 from vector_dimos.respeaker import EnergyVAD  # noqa: E402
 
 def mk(level, n=CHUNK_SIZE):
@@ -125,7 +102,7 @@ for _ in range(6):
         blip = r
 check("2-chunk blip (0.2 s) rejected", blip is None)
 
-print("E. find_respeaker_card (real /proc/asound/cards format)")
+print("D. find_respeaker_card (real /proc/asound/cards format)")
 from vector_dimos.respeaker import find_respeaker_card  # noqa: E402
 
 CARDS = """ 0 [Array          ]: USB-Audio - reSpeaker XVF3800 4-Mic Array
@@ -139,11 +116,46 @@ check("finds renumbered card 3", find_respeaker_card(CARDS2) == "3")
 check("no respeaker -> None", find_respeaker_card(" 1 [HDA ]: tegra-hda - NVIDIA HDA") is None)
 check("empty -> None", find_respeaker_card("") is None)
 
+print("E. read_doa gating (fake device, needs pyusb)")
+
+
+class FakeDev:
+    """Canned ctrl_transfer answers keyed by cmdid."""
+
+    def __init__(self, energies, azimuths_deg):
+        self.energies, self.azimuths = energies, azimuths_deg
+
+    def ctrl_transfer(self, bmtype, breq, cmdid, resid, length, timeout):
+        import array
+        if cmdid == 0x80 | 80:   # AEC_SPENERGY_VALUES
+            raw = b"\x00" + struct.pack("<ffff", *self.energies) + b"\x00"
+        elif cmdid == 0x80 | 75:  # AEC_AZIMUTH_VALUES
+            raw = b"\x00" + struct.pack(
+                "<ffff", *[math.radians(a) for a in self.azimuths]) + b"\x00"
+        else:
+            raw = b"\x00" + b"\x02\x01\x00\x00"
+        return array.array("B", raw)
+
+
+if not HAVE_USB:
+    print("  SKIP pyusb absent - ReSpeakerUSB.read needs usb.core, run E on the Jetson")
+else:
+    reader = ReSpeakerUSB()
+    reader.dev = FakeDev([0.0, 0.0, 0.0, 0.0], [10, 90, 180, 270])
+    check("silence -> None", reader.read_doa() is None)
+    reader.dev = FakeDev([0.1, 0.9, 0.2, 0.0], [10, 90, 180, 270])
+    doa = reader.read_doa()
+    check("loudest beam wins (90 deg)", doa is not None and abs(doa - 90.0) < 0.01,
+          f"{doa}")
+    reader.dev = FakeDev([0.5, 0.0, 0.0, 0.0], [-15, 90, 180, 270])
+    doa = reader.read_doa()
+    check("negative azimuth wraps to 345", doa is not None and abs(doa - 345.0) < 0.01,
+          f"{doa}")
+
 print("F. module without hardware = clean no-op")
-try:
-    import usb.core  # noqa: F401
-    print("  (pyusb present on this machine - D covered on the Jetson instead)")
-except ImportError:
+if HAVE_USB:
+    print("  SKIP pyusb present - the guard path only exists where it is absent")
+else:
     mic2 = ReSpeakerMic(enabled=True)
     mic2._running = False
     print("  OK  import guard path reachable")
