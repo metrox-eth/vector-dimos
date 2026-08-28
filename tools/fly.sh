@@ -178,9 +178,18 @@ fi
 
 echo "== 7/8 exploration =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py start'
-# the speed watchdog flies with every flight (2026-08-26 it was armed by hand)
-ssh $ROVER 'pgrep -f "[g]arde_vitesse" >/dev/null || (cd ~/vector-dimos && nohup .venv/bin/python tools/garde_vitesse.py > /tmp/garde_vitesse.log 2>&1 < /dev/null &)'
-echo "speed watchdog armed (kills exploration beyond 0.35 m/s)"
+# The speed watchdog flies with every flight (2026-08-26 it was armed by hand).
+# NOT "start one if pgrep finds none": the previous flight's watchdog survives its
+# run and satisfied that guard while tailing a dead log - armed on screen,
+# unguarded in the room (2026-08-28 audit). The arm script kills the pid the pid
+# file names, starts a fresh watchdog and proves the pid file now names a process
+# born after that launch. No proof = exploration running unguarded = no flight.
+ssh $ROVER 'cd ~/vector-dimos && bash tools/arm_garde_vitesse.sh' || {
+  echo "SPEED WATCHDOG NOT ARMED - exploration would run unguarded, stopping the flight"
+  ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py stop'
+  ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py; .venv/bin/dimos stop; sleep 2; .venv/bin/python tests/estop_rs485.py'
+  exit 1
+}
 
 echo "== 8/8 the rover must understand WHERE IT IS (GATE) =="
 # Requirement: as soon as the rover maps, it must understand where it is and
