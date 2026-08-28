@@ -1,8 +1,9 @@
 # Mars tools — the step-by-step exploration loop (runs on the rover, `~/mars/`)
 
 - `sense.py TAG [wait]` — the guard: photo + full-height 3D obstacle check from the RealSense depth
-  (camera 0.80 m, level; floor removed by geometry) + RPLIDAR front/side sectors, read from dimOS's
-  own streams. Prints one `guard …` line. Too few valid depth pixels = blind = blocked.
+  (mount read from `lidar_odometry.CAMERA_XYZ_BASE`, level; floor removed by geometry) + RPLIDAR
+  front/side sectors, read from dimOS's own streams. Prints one `guard …` line. Too few valid depth
+  pixels = blind = blocked. Run it from the repo root: it imports `vector_dimos`.
 - `explore.sh N TAG` — N guarded steps: forward 30/15 cm or turn toward the freer lidar side; virtual
   walls via `XMIN/XMAX/YMIN/YMAX` (glass is invisible to depth and lidar); stuck detector (wheels
   commanded but the lidar pose did not move -> back off, stop).
