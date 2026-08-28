@@ -13,6 +13,7 @@ import json
 import os
 import socket
 import struct
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -35,6 +36,15 @@ _battery_last_log = [0.0]
 # hint named the DEAD CP2102N): bus contention sprayed on every /metrics
 # poll, all day on 2026-08-26. Fixed port, never scan.
 PZEM_PORT = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+# ONE MODBUS master on that RS-485 link at a time. This is a ThreadingHTTPServer
+# and both /metrics and /panel call battery(), so two request threads used to
+# write frames into the same tty, each reset_input_buffer() eating the other's
+# reply -> "PZEM not answering" on a healthy pack. The lock serialises the whole
+# transaction; the cache means the second caller usually needs no port at all
+# (the panel refreshes every 2 s, /vol nests it, the vigil polls every 15 s).
+PZEM_CACHE_S = 1.0
+_pzem_lock = threading.Lock()
+_pzem_cache = [0.0, None]  # [monotonic stamp, (voltage, current, power)]
 
 _prev_cpu = None  # (idle, total)
 _prev_cores = None  # [(idle, total)] per core - per-core view (added 2026-08-27)
@@ -201,22 +211,31 @@ def _crc16(data):
 
 
 def _pzem_read(port):
-    """Read PZEM-017 input registers 0..7. Returns dict or raises."""
+    """Read PZEM-017 input registers 0..7. Returns (V, A, W) or raises.
+
+    Serialised on _pzem_lock, and answered from the cache when the last reading
+    is younger than PZEM_CACHE_S - never two masters on the shunt at once.
+    """
     req = bytes([0x01, 0x04, 0x00, 0x00, 0x00, 0x08])
     req += struct.pack("<H", _crc16(req))
-    with serial.Serial(port, 9600, bytesize=8, parity="N", stopbits=2, timeout=0.5) as s:
-        s.reset_input_buffer()
-        s.write(req)
-        resp = s.read(21)  # addr, fc, count, 16 data bytes, crc x2
-    if len(resp) < 21 or resp[1] != 0x04:
-        raise IOError(f"bad response ({len(resp)} bytes)")
-    if struct.pack("<H", _crc16(resp[:-2])) != resp[-2:]:
-        raise IOError("CRC mismatch")
-    regs = struct.unpack(">8H", resp[3:19])
-    voltage = regs[0] * 0.01
-    current = regs[1] * 0.01
-    power = (regs[2] | (regs[3] << 16)) * 0.1
-    return voltage, current, power
+    with _pzem_lock:
+        stamp, cached = _pzem_cache
+        if cached is not None and time.monotonic() - stamp < PZEM_CACHE_S:
+            return cached
+        with serial.Serial(port, 9600, bytesize=8, parity="N", stopbits=2, timeout=0.5) as s:
+            s.reset_input_buffer()
+            s.write(req)
+            resp = s.read(21)  # addr, fc, count, 16 data bytes, crc x2
+        if len(resp) < 21 or resp[1] != 0x04:
+            raise IOError(f"bad response ({len(resp)} bytes)")
+        if struct.pack("<H", _crc16(resp[:-2])) != resp[-2:]:
+            raise IOError("CRC mismatch")
+        regs = struct.unpack(">8H", resp[3:19])
+        voltage = regs[0] * 0.01
+        current = regs[1] * 0.01
+        power = (regs[2] | (regs[3] << 16)) * 0.1
+        _pzem_cache[:] = [time.monotonic(), (voltage, current, power)]
+        return voltage, current, power
 
 
 def battery():
@@ -583,7 +602,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    import threading
     threading.Thread(target=_lcm_listener, daemon=True).start()
     threading.Thread(target=_zenoh_listener, daemon=True).start()
     threading.Thread(target=_gpu_sampler, daemon=True).start()

@@ -15,16 +15,25 @@ the word "sensors" (fly.sh gate 5 greps for it). No rover needed. Groups:
                    {"error": ...} and no organs -> 'NO ORGAN PANEL - no flight')
   D. le scan     - the guarded helper both sees a live cmdline and says no to a
                    needle nobody carries
+  E. un seul     - two threads call battery() at the same instant against a
+     maitre        counting serial stub: never two of them inside the MODBUS
+                   transaction, and both read the same 24.50 V (pre-fix: 2)
+  F. le cache    - a second call within PZEM_CACHE_S opens the port ZERO times
+                   and answers the same volts; once the entry ages out, the
+                   next call goes back to the port
 
 Run:  PYTHONPATH=. .venv/bin/python3 tests/test_stats_sensors_cold.py
 """
 
 import json
 import os
+import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import types
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -146,6 +155,136 @@ try:
 finally:
     proc.kill()
     proc.wait(timeout=10)
+
+
+# --- E + F. one MODBUS master on the shunt, and a cache that spares it -------
+#
+# Known input: a stub PZEM whose registers encode 24.50 V / 1.20 A / 29.4 W.
+# Known output: battery() in physical units (24.5 V -> 65% on the 20.0/26.91 V
+# scale) AND two counters no real port can give us - how many callers were
+# inside the transaction at once, and how many times the port was opened.
+
+V_IN, A_IN, W_IN = 24.50, 1.20, 29.4
+PCT_IN = 65.0  # (24.50 - 20.0) / (26.91 - 20.0) * 100, rounded
+
+
+def _pzem_frame(volts, amps, watts):
+    """The 21-byte reply a PZEM-017 sends for a read of registers 0..7."""
+    deci_w = round(watts * 10)
+    regs = [round(volts * 100), round(amps * 100), deci_w & 0xFFFF, deci_w >> 16, 0, 0, 0, 0]
+    head = bytes([0x01, 0x04, 0x10]) + struct.pack(">8H", *regs)
+    return head + struct.pack("<H", stats_server._crc16(head))
+
+
+FRAME = _pzem_frame(V_IN, A_IN, W_IN)
+
+
+class CountingSerial:
+    """A PZEM that answers the frame above and counts who is on the wire."""
+
+    guard = threading.Lock()  # protects the counters ONLY, never the transaction
+    opens = 0
+    inside = 0
+    max_inside = 0
+
+    @classmethod
+    def reset(cls):
+        cls.opens = cls.inside = cls.max_inside = 0
+
+    def __init__(self, port, *a, **k):
+        with CountingSerial.guard:
+            CountingSerial.opens += 1
+            CountingSerial.inside += 1
+            CountingSerial.max_inside = max(CountingSerial.max_inside, CountingSerial.inside)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        with CountingSerial.guard:
+            CountingSerial.inside -= 1
+        return False
+
+    def reset_input_buffer(self):
+        pass
+
+    def write(self, data):
+        pass
+
+    def read(self, n):
+        time.sleep(0.05)  # a real transaction is ~10 ms: wide enough to collide
+        return FRAME[:n]
+
+
+CACHE = getattr(stats_server, "_pzem_cache", None)  # absent pre-fix
+
+
+def arm_pzem(cache_s):
+    CountingSerial.reset()
+    stats_server.PZEM_CACHE_S = cache_s
+    if CACHE is not None:
+        CACHE[:] = [0.0, None]
+
+
+print("stats_server - un seul maitre MODBUS sur le shunt")
+port_file = tempfile.NamedTemporaryFile(prefix="pzem-stub-", delete=False)
+port_file.close()
+log_file = tempfile.NamedTemporaryFile(prefix="battery-log-", suffix=".csv", delete=False)
+log_file.close()
+real_serial, real_port, real_log = stats_server.serial, stats_server.PZEM_PORT, stats_server.BATTERY_LOG
+stats_server.serial = types.SimpleNamespace(Serial=CountingSerial)
+stats_server.PZEM_PORT = port_file.name       # exists, so battery() goes to the stub
+stats_server.BATTERY_LOG = log_file.name      # never the rover's flight recorder
+try:
+    if CACHE is None:
+        check("le cache PZEM existe (_pzem_cache)", False, "absent: transaction non gardee")
+
+    # --- E. two threads at the same instant, cache disabled so both must read --
+    arm_pzem(0.0)
+    ready = threading.Barrier(2)
+    got = {}
+
+    def one(name):
+        ready.wait(timeout=5)
+        got[name] = stats_server.battery()
+
+    threads = [threading.Thread(target=one, args=(n,)) for n in ("a", "b")]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=15)
+
+    check("deux appels simultanes: jamais 2 dans la transaction PZEM",
+          CountingSerial.max_inside == 1, f"max {CountingSerial.max_inside} en meme temps")
+    check("... les deux ont bien parle au port (cache desactive)",
+          CountingSerial.opens == 2, f"{CountingSerial.opens} ouvertures")
+    check(f"... et chacun lit {V_IN} V / {PCT_IN}% (roundtrip physique)",
+          all(got.get(n, {}).get("voltage_v") == V_IN and got.get(n, {}).get("percent") == PCT_IN
+              for n in ("a", "b")), str(got)[:120])
+    check(f"... avec {A_IN} A et {W_IN} W",
+          got.get("a", {}).get("current_a") == A_IN and got.get("a", {}).get("power_w") == W_IN,
+          str(got.get("a"))[:100])
+
+    # --- F. the 1 s cache: the second caller does not touch the port ----------
+    arm_pzem(1.0)
+    first = stats_server.battery()
+    after_first = CountingSerial.opens
+    second = stats_server.battery()
+    check("une lecture -> une ouverture du port", after_first == 1, f"{after_first}")
+    check("un 2e appel sous PZEM_CACHE_S: 0 ouverture de plus",
+          CountingSerial.opens == after_first, f"{CountingSerial.opens} au total")
+    check("... et il rend la MEME tension, pas un trou",
+          second.get("voltage_v") == first.get("voltage_v") == V_IN, str(second)[:100])
+    if CACHE is not None:
+        CACHE[0] -= 2.0  # age the entry past the window, no sleep needed
+        stats_server.battery()
+        check("une fois le cache perime, l'appel suivant retourne au port",
+              CountingSerial.opens == after_first + 1, f"{CountingSerial.opens} au total")
+finally:
+    stats_server.serial, stats_server.PZEM_PORT = real_serial, real_port
+    stats_server.BATTERY_LOG = real_log
+    os.unlink(port_file.name)
+    os.unlink(log_file.name)
 
 print(f"{OK} OK, {KO} KO")
 print("TEST PASSED" if KO == 0 else "TEST FAILED")
