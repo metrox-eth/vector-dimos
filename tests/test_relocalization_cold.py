@@ -313,6 +313,30 @@ try:
     check("keepout_mask ignores a stale legacy no_slip_reflex zone",
           int(persistent_map.keepout_mask(stale_legacy, RES, -1.0, -1.0, 80).sum()) == 0)
 
+    # A rectangle drawn on an older/larger flat, or left where a rebase moved
+    # the origin away from it: it falls entirely off this 4 x 4 m grid and must
+    # claim nothing, exactly like the same shape written as a polygon. Clamping
+    # both ends onto the same edge index forbade a corner cell forever -
+    # occupancy() applies keep-outs last, so no ray can ever retract it.
+    off_grid = {"30 m past the far corner": (30.0, 30.0, 35.0, 35.0),
+                "30 m behind the near corner": (-30.0, -30.0, -25.0, -25.0),
+                "off in x only, in range in y": (-30.0, -0.475, -25.0, 0.525)}
+    for where, (ax0, ay0, ax1, ay1) in off_grid.items():
+        away = [{"label": "vieille-carte", "type": FORBIDDEN, "x0": ax0, "y0": ay0,
+                 "x1": ax1, "y1": ay1, "note": ""}]
+        cells = int(persistent_map.keepout_mask(away, RES, -1.0, -1.0, 80).sum())
+        check(f"a rectangle entirely off this grid ({where}) -> no cell forbidden",
+              cells == 0, f"{cells} cells")
+    as_poly = [{"label": "vieille-carte", "type": FORBIDDEN,
+                "points": [[-30.0, -30.0], [-25.0, -30.0], [-25.0, -25.0], [-30.0, -25.0]]}]
+    check("...and the same shape written as a polygon says the same",
+          int(persistent_map.keepout_mask(as_poly, RES, -1.0, -1.0, 80).sum()) == 0)
+    half = [{"label": "moitie", "type": FORBIDDEN, "x0": -30.0, "y0": -0.475,
+             "x1": 0.025, "y1": 0.525, "note": ""}]
+    cells = int(persistent_map.keepout_mask(half, RES, -1.0, -1.0, 80).sum())
+    check("a rectangle half off the grid still claims its 1.05 x 1.05 m of overlap",
+          cells == 441, f"{cells} cells")
+
     saved = persistent_map.MAP_PATH
     persistent_map.MAP_PATH = os.path.join(d, "persistent_map.npz")
     try:
