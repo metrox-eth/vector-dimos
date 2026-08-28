@@ -17,6 +17,9 @@ PYTHON="${GARDE_PYTHON:-.venv/bin/python}"
 LOG="${GARDE_LOG:-/tmp/garde_vitesse.log}"
 DEADLINE_S="${GARDE_ARM_DEADLINE_S:-15}"   # the fresh watchdog must show up within this
 TICK=$(getconf CLK_TCK)
+# the watchdog's STOP rides the run's bus (explore_ctl): the flight passes
+# TRANSPORT in, and it must reach the python we launch, not stop at this shell
+export TRANSPORT="${TRANSPORT:-lcm}"
 
 alive() {   # a zombie still answers kill -0 and still tails nothing: it is not alive
   local rest state

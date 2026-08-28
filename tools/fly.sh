@@ -19,7 +19,24 @@ RELAY_EXT=45817          # fixed rover-side UDP port relaying to the run's dynam
 # midnight, autonomous exploration armed itself into a piloted evening and the
 # flight then hung on gate 8/8 - a run lost to a switch. The common case must be
 # the default; the autonomous case is the explicit exception.)
-if [ "${EXPLORE:-0}" = "1" ]; then DRY=0; else DRY="${DRY:-1}"; fi
+# EXPLORE=1 used to override an EXPLICIT DRY=1 without a word: the operator asked
+# for the two opposite flights at once and silently got the autonomous one
+# (2026-08-28 audit). Contradiction = refusal, before anything is touched.
+if [ "${EXPLORE:-0}" = "1" ]; then
+  [ "${DRY:-0}" = "1" ] && { echo "CONTRADICTORY FLAGS: EXPLORE=1 (autonomous) with DRY=1 (piloted) - pick one, no flight"; exit 1; }
+  DRY=0
+else
+  DRY="${DRY:-1}"
+fi
+# The run's bus, resolved ONCE here: EVERY ssh that publishes (explore start and
+# stop) or arms the watchdog must carry it. Only the stack launch did, so on a
+# zenoh run the rover-side publishes defaulted to lcm - the start, the abort's
+# stop and the watchdog's own stop all reached nobody (2026-08-28 audit).
+TRANSPORT="${TRANSPORT:-lcm}"
+# FLY_TEST=1 replaces every command that reaches the rover, the screen or the
+# clock with a recorder, so the gates below can be flown cold on the rig
+# (tests/test_fly_gates_cold.py). Nothing but that bench ever sets it.
+if [ "${FLY_TEST:-0}" = "1" ]; then . "${FLY_TEST_STUBS:?FLY_TEST=1 needs FLY_TEST_STUBS}"; fi
 
 echo "== SYNC code rig -> rover =="
 # The rover has NO git clone - this rsync IS the deployment (found 2026-08-27:
@@ -82,7 +99,7 @@ LAUNCH_MARK=$(ssh $ROVER 'date +%s')
 # the default dlopen reserve (~1.6 KB) cannot hold - a 4 MiB reserve gives it
 # room (256 KB was not enough inside loaded workers) (measured 2026-08-27 20:00: without it, "cannot allocate memory in static
 # TLS block").
-ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=${TRANSPORT:-lcm} STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1} ODOM_GUARDS=${ODOM_GUARDS:-1} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
+ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1} ODOM_GUARDS=${ODOM_GUARDS:-1} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
 sleep 12
 # the run dir must POSTDATE this launch: on 2026-08-26 a failed launch over a live
 # stack passed the lidar check against the PREVIOUS run's log (false IN FLIGHT)
@@ -177,16 +194,16 @@ if [ "$DRY" = "1" ]; then
 fi
 
 echo "== 7/8 exploration =="
-ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py start'
+ssh $ROVER "cd ~/vector-dimos && TRANSPORT=$TRANSPORT .venv/bin/python tools/explore_ctl.py start"
 # The speed watchdog flies with every flight (2026-08-26 it was armed by hand).
 # NOT "start one if pgrep finds none": the previous flight's watchdog survives its
 # run and satisfied that guard while tailing a dead log - armed on screen,
 # unguarded in the room (2026-08-28 audit). The arm script kills the pid the pid
 # file names, starts a fresh watchdog and proves the pid file now names a process
 # born after that launch. No proof = exploration running unguarded = no flight.
-ssh $ROVER 'cd ~/vector-dimos && bash tools/arm_garde_vitesse.sh' || {
+ssh $ROVER "cd ~/vector-dimos && TRANSPORT=$TRANSPORT bash tools/arm_garde_vitesse.sh" || {
   echo "SPEED WATCHDOG NOT ARMED - exploration would run unguarded, stopping the flight"
-  ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py stop'
+  ssh $ROVER "cd ~/vector-dimos && TRANSPORT=$TRANSPORT .venv/bin/python tools/explore_ctl.py stop"
   ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py; .venv/bin/dimos stop; sleep 2; .venv/bin/python tests/estop_rs485.py'
   exit 1
 }
@@ -199,8 +216,18 @@ echo "== 8/8 the rover must understand WHERE IT IS (GATE) =="
 # - never again: no persistent frame within the grace period -> the flight stops
 # itself.
 # ALLOW_FRESH=1 skips this gate (bootstrapping the very first map only).
+# The four lines below are printed by VectorCostMap continuing a persistent map,
+# and by nothing else: PERSISTENT_MAP=0 disables relocalization by construction
+# and STOCK_NAV=1 swaps VectorCostMap for dimOS's CostMapper, so in those two
+# modes the gate polled 11.5 min for a state that cannot exist and then killed a
+# run doing exactly what the flag asked (2026-08-28 audit). There it is a WARNING;
+# in persistent custom mode - the mode that owes us the zones - it still stops
+# the flight.
 if [ "${ALLOW_FRESH:-0}" = "1" ]; then
   echo "ALLOW_FRESH=1: fresh-frame flight allowed (first-map bootstrap) - NO keep-out zones"
+elif [ "${PERSISTENT_MAP:-1}" = "0" ] || [ "${STOCK_NAV:-0}" = "1" ]; then
+  echo "!! GATE 8/8 NOT ENFORCED (PERSISTENT_MAP=${PERSISTENT_MAP:-1} STOCK_NAV=${STOCK_NAV:-0}): this mode never relocalizes,"
+  echo "   so the flight runs in its OWN frame - NO keep-out zones (bathroom!), no grid alignment. Watch it."
 else
   RELOC_OK=""
   for i in $(seq 1 46); do    # ~11.5 min: 10 min of grace + margin
@@ -218,7 +245,7 @@ else
   done
   if [ -z "$RELOC_OK" ]; then
     echo "THE ROVER NEVER UNDERSTOOD WHERE IT IS - zones inactive, stopping the flight"
-    ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/explore_ctl.py stop'
+    ssh $ROVER "cd ~/vector-dimos && TRANSPORT=$TRANSPORT .venv/bin/python tools/explore_ctl.py stop"
     ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py; .venv/bin/dimos stop; sleep 2; .venv/bin/python tests/estop_rs485.py'
     exit 1
   fi
