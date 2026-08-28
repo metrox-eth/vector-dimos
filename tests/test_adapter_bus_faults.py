@@ -20,18 +20,28 @@ the snapshot complete and the log readable.
      out, in physical units);
   e. the same, driven by the real dimOS ConnectedTwistBase (skipped when
      dimos is not importable);
-  f. a ONE-SIDED outage: the axle that still answers keeps taking new
-     commands while the silent one holds its last one. This test pins that
-     behaviour rather than blessing it - see the adapter docstring.
-  g. a REFUSED enable is loud: dimOS ignores write_enable()'s return value,
-     so the failing step and the controller have to be in the log; and a
-     drive that enables with a fault flag set gets a warning carrying the
-     register value. Logging only - nothing stops the robot.
-  h. a refused PREREQUISITE (one lost frame on the 0x2000 watchdog or the
-     0x200D mode write) makes the adapter ABSTAIN: the ENABLE word
-     (0x200E = 0x08) is never written, so the drive stays unarmed instead of
-     running without its watchdog or outside velocity mode. dimOS ignores the
-     False return - the abstention is what protects.
+  f. ARMING IS A TRANSACTION over the pair: a healthy bus arms both, and no
+     injected failure may ever leave ONE axle armed. A refused prerequisite
+     (one lost frame on the 0x2000 watchdog or the 0x200D mode write) arms
+     nobody, a refused ENABLE on the front never reaches the back, and a
+     refused ENABLE on the back rolls the front back to zero + disable.
+     dimOS ignores write_enable()'s False, so the hardware state we leave
+     behind is the whole protection.
+  g. THE FAULT REGISTERS DECIDE, and they are read BEFORE the ENABLE word.
+     Non-zero on either drive, or a fault register that does not answer, and
+     nobody is armed (metrox, 28/08 18:37). "enabled WITH FAULTS" used to be
+     a warning after the fact, with write_enable returning True.
+  h. A REFUSED COMMAND LATCHES THE WHOLE BASE. The two set_rpm calls go out
+     back to back, so the healthy axle has already taken the new twist by
+     the time the other one refuses - which is how a one-sided RS485 outage
+     became a pirouette. The refusal now latches the base, zeroes and
+     disables both controllers, and refuses every later non-zero command
+     WITHOUT touching the bus; a stop always goes through, and only a
+     complete write_enable(True) lets commands flow again.
+
+  Sections f, g and h used to pin the opposite behaviour ("pinned, not
+  endorsed"). The external audit of 2026-08-28 called both of them P0 and
+  metrox chose the policy; these are the tests of that policy.
   i. the same tick, against a bus that takes REAL TIME to answer. Every
      other mock here answers in microseconds, so (b), (c) and (e2) count
      one poll per tick even with the cache stamped BEFORE the poll - the
@@ -52,9 +62,9 @@ from vector_dimos.adapter import (VectorBaseAdapter, BACK_ID, FRONT_ID,
                                   FEEDBACK_MAX_AGE_S, SERIAL_TIMEOUT_S)
 from vector_dimos.kinematics import MecanumGeometry, inverse, rads_to_rpm
 from vector_dimos.mock import MockModbusClient
-from vector_dimos.zlac8015d import (COMM_OFFLINE_TIME, CONTROL_REG, ENABLE,
-                                    L_CMD_RPM, L_FAULT, L_FB_RPM, OPR_MODE,
-                                    VEL_CONTROL, _to_i16)
+from vector_dimos.zlac8015d import (COMM_OFFLINE_TIME, CONTROL_REG, DISABLE,
+                                    ENABLE, L_CMD_RPM, L_FAULT, L_FB_RPM,
+                                    OPR_MODE, R_FAULT, VEL_CONTROL, _to_i16)
 
 ok = True
 
@@ -398,166 +408,358 @@ else:
 
 os.environ.pop("VECTOR_MOCK_BUS")
 
-print("\n(f) one-sided outage: the axle that answers keeps taking commands")
+class PolicyBus(MockModbusClient):
+    """A bus with a per-(unit, register) kill switch, and a call log to read.
 
+    `refuse` is the set of (unit, addr) pairs whose WRITES are answered with
+    a MODBUS error: the frame goes out, the drive does not take it - one
+    lost or CRC-broken frame on the RS485 run next to the two motor drives,
+    or a pigtail that came loose. The written value is deliberately NOT
+    stored, which is exactly the state the adapter has to assume.
 
-class OneSidedBus(MockModbusClient):
-    """Writes to one unit are refused; reads and the other unit are fine."""
+    `silent_faults` is the set of units whose fault registers never answer.
 
-    def __init__(self, dead_unit):
+    The mutation is live: a test arms on a healthy bus, then breaks it, which
+    is the only way to reach the runtime latch (a bus broken from the start
+    never gets past the arming transaction).
+    """
+
+    def __init__(self):
         super().__init__()
-        self.dead_unit = dead_unit
+        self.refuse = set()
+        self.silent_faults = set()
+
+    def write_register(self, addr, value, unit=0):
+        if (unit, addr) in self.refuse:
+            self.writes.append((unit, addr, [value]))
+            return _ErrorResult()
+        return super().write_register(addr, value, unit=unit)
 
     def write_registers(self, addr, values, unit=0):
-        if unit == self.dead_unit:
+        if (unit, addr) in self.refuse:
             self.writes.append((unit, addr, list(values)))
             return _ErrorResult()
         return super().write_registers(addr, values, unit=unit)
 
-
-bus_f = OneSidedBus(dead_unit=FRONT_ID)
-f = VectorBaseAdapter(dof=3, client=bus_f, geometry=G)
-check(f.connect() is True, "connect() still succeeds (reads answer, writes do not)")
-bus_f.writes.clear()
-check(f.write_velocities([VX, VY, WZ]) is False,
-      "write_velocities() reports False when one controller refuses")
-raw_f = {u: tuple(_to_i16(v) for v in vals)
-         for (u, addr, vals) in bus_f.writes if addr == L_CMD_RPM}
-exp_back = (round(-exp[2]), round(exp[3]))
-print(f"      front(id {FRONT_ID}) refused, back(id {BACK_ID}) got "
-      f"L/R={raw_f.get(BACK_ID)}, geometry says {exp_back}")
-check(raw_f.get(BACK_ID) == exp_back,
-      f"the healthy back axle STILL executes the new twist {raw_f.get(BACK_ID)} "
-      f"= {exp_back} RPM - pinned, not endorsed (see adapter docstring)")
-f.disconnect()
-
-print("\n(g) a refused enable, and a drive that enables with a fault set")
-
-
-class RefusesEnableBus(MockModbusClient):
-    """One controller refuses the 0x200E enable write; the rest is fine."""
-
-    def __init__(self, dead_unit):
-        super().__init__()
-        self.dead_unit = dead_unit
-
-    def write_register(self, addr, value, unit=0):
-        if unit == self.dead_unit and addr == CONTROL_REG:
-            self.writes.append((unit, addr, [value]))
+    def read_holding_registers(self, addr, count, unit=0):
+        if addr == L_FAULT and unit in self.silent_faults:
+            self.reads.append((unit, addr, count))
             return _ErrorResult()
-        return super().write_register(addr, value, unit=unit)
+        return super().read_holding_registers(addr, count, unit=unit)
+
+    # ── what the policy is asserted on ─────────────────────────────────
+    def control_words(self):
+        """Every 0x200E write attempt, in bus order: [(unit, value), ...]."""
+        return [(u, v[0]) for (u, a, v) in self.writes if a == CONTROL_REG]
+
+    def rpm_cmds(self, unit=None):
+        """Every 0x2088 write attempt, signed: [(unit, (L, R)), ...]."""
+        return [(u, tuple(_to_i16(x) for x in v)) for (u, a, v) in self.writes
+                if a == L_CMD_RPM and unit in (None, u)]
+
+    def armed(self):
+        """Units whose control word actually READS as ENABLE right now."""
+        return sorted(u for u in (FRONT_ID, BACK_ID)
+                      if self.regs.get((u, CONTROL_REG)) == ENABLE)
 
 
-bus_g = RefusesEnableBus(dead_unit=FRONT_ID)
-g = VectorBaseAdapter(dof=3, client=bus_g, geometry=G)
-check(g.connect() is True, "connect() succeeds (the drives answer reads)")
-mark = len(LOG.lines)
-check(g.write_enable(True) is False,
-      "write_enable() returns False when a controller refuses 0x200E")
-check(g.read_enabled() is False, "the adapter does not claim to be enabled")
-errors = LOG.since(mark, "error")
-check(errors == ["ZLAC8015D id 2 (front) enable sequence refused at: "
-                 "enable (0x200E)"],
-      f"exactly one error line, naming the controller and the step: {errors}")
-infos = LOG.since(mark, "info")
-check(infos == ["ZLAC8015D id 1 (back) enabled, faults L/R=0/0"],
-      f"the controller that DID enable reports its fault registers: {infos}")
-g.disconnect()
+def policy_adapter(bus, label):
+    """A connected adapter on `bus`. connect() is read-only, so it survives
+    any write kill switch."""
+    a = VectorBaseAdapter(dof=3, client=bus, geometry=G)
+    check(a.connect() is True, f"connect() on {label}")
+    return a
 
-bus_h = MockModbusClient()
-# 0x20A5 = the L-channel fault register: a set bit = a latched fault.
-bus_h.regs[(FRONT_ID, L_FAULT)] = 0x0002
-h = VectorBaseAdapter(dof=3, client=bus_h, geometry=G)
-check(h.connect() is True, "connect() on a bus whose front drive has a fault")
-mark = len(LOG.lines)
-check(h.write_enable(True) is True,
-      "the enable writes are accepted, so write_enable() is True")
-warns = LOG.since(mark, "warning")
-check(warns == ["ZLAC8015D id 2 (front) enabled WITH FAULTS L/R=0x0002/0x0000 "
-                "- see the ZLAC8015D manual for the bit meanings"],
-      f"one warning, carrying the register value: {warns}")
-check(LOG.since(mark, "info") == ["ZLAC8015D id 1 (back) enabled, "
-                                  "faults L/R=0/0"],
-      "the healthy controller still logs its clean fault read")
-h.disconnect()
 
-print("\n(h) a refused prerequisite withholds ENABLE (0x200E is never written)")
+print("\n(f) arming is a transaction: never ONE armed axle")
 
-# Baseline first, in the drives' own units: a healthy enable leaves the
-# watchdog at COMM_OFFLINE_MS ms, the mode at VEL_CONTROL, and writes the
-# ENABLE word LAST - the order the abstention below depends on.
-bus_i = MockModbusClient()
-i = VectorBaseAdapter(dof=3, client=bus_i, geometry=G)
-check(i.connect() is True, "connect() on a healthy bus")
-check(i.write_enable(True) is True, "healthy bus: write_enable() True")
-wd = {u: bus_i.regs.get((u, COMM_OFFLINE_TIME)) for u in (FRONT_ID, BACK_ID)}
-mode = {u: bus_i.regs.get((u, OPR_MODE)) for u in (FRONT_ID, BACK_ID)}
-ctrl = {u: bus_i.regs.get((u, CONTROL_REG)) for u in (FRONT_ID, BACK_ID)}
+# f1 - the healthy baseline, in the drives' own units: the watchdog at
+# COMM_OFFLINE_MS ms, the mode at VEL_CONTROL, and the ENABLE word written
+# LAST per drive (after the watchdog and the zero target). Everything below
+# is a deviation from this line.
+bus_f1 = PolicyBus()
+f1 = policy_adapter(bus_f1, "a healthy bus")
+check(f1.write_enable(True) is True, "healthy bus: write_enable(True) is True")
+check(f1.read_enabled() is True, "and the adapter says it is enabled")
+wd = {u: bus_f1.regs.get((u, COMM_OFFLINE_TIME)) for u in (FRONT_ID, BACK_ID)}
+mode = {u: bus_f1.regs.get((u, OPR_MODE)) for u in (FRONT_ID, BACK_ID)}
 print(f"      healthy enable -> watchdog {wd} ms, mode {mode}, "
-      f"control word {ctrl}")
+      f"control words {bus_f1.control_words()}")
 check(all(v == adapter_mod.COMM_OFFLINE_MS for v in wd.values()),
       f"0x2000 watchdog = {adapter_mod.COMM_OFFLINE_MS} ms on both drives {wd}")
 check(all(v == VEL_CONTROL for v in mode.values()),
       f"0x200D mode = {VEL_CONTROL} (velocity) on both drives {mode}")
-check(all(v == ENABLE for v in ctrl.values()),
-      f"0x200E control = 0x{ENABLE:02X} (ENABLE) on both drives {ctrl}")
-front_seq = [addr for (u, addr, _v) in bus_i.writes if u == FRONT_ID]
+check(bus_f1.armed() == sorted([FRONT_ID, BACK_ID]),
+      f"BOTH drives armed {bus_f1.armed()}")
+front_seq = [addr for (u, addr, _v) in bus_f1.writes if u == FRONT_ID]
 check(front_seq[-1] == CONTROL_REG and COMM_OFFLINE_TIME in front_seq[:-1],
-      f"ENABLE is the LAST write, after the watchdog: "
+      f"ENABLE is the LAST write of that drive, after the watchdog: "
       f"{[hex(a) for a in front_seq]}")
-i.disconnect()
+# the transaction order itself: nobody is armed while the other is still
+# being prepared, so no ENABLE may precede the last preparation write.
+first_enable = next(idx for idx, (u, a, _v) in enumerate(bus_f1.writes)
+                    if a == CONTROL_REG)
+last_prep = max(idx for idx, (u, a, _v) in enumerate(bus_f1.writes)
+                if a != CONTROL_REG)
+check(first_enable > last_prep,
+      f"both drives are fully prepared before the FIRST enable "
+      f"(first 0x200E at #{first_enable}, last prep write at #{last_prep})")
+f1.disconnect()
 
-
-class DropsResponseBus(MockModbusClient):
-    """One register write goes out but its answer never comes back.
-
-    A single lost or CRC-broken frame on the RS485 run next to the two motor
-    drives. The adapter cannot know whether the drive applied it, so the
-    value is left unset here - exactly the state it has to assume.
-    """
-
-    def __init__(self, dead_addr):
-        super().__init__()
-        self.dead_addr = dead_addr
-
-    def write_register(self, addr, value, unit=0):
-        if addr == self.dead_addr:
-            self.writes.append((unit, addr, [value]))
-            return _ErrorResult()
-        return super().write_register(addr, value, unit=unit)
-
-
+# f2 - one dropped response on a PREREQUISITE of the FRONT drive only.
+# This is the audited P0: the old loop logged the front's abstention, hit
+# `continue`, and armed the back anyway.
 for dead_addr, what, step in (
         (COMM_OFFLINE_TIME, "the comm-offline watchdog 0x2000",
          "comm-offline watchdog (0x2000)"),
-        (OPR_MODE, "the velocity mode 0x200D", "velocity mode (0x200D)")):
-    print(f"    -- one dropped response on {what} --")
-    bus_x = DropsResponseBus(dead_addr)
-    x = VectorBaseAdapter(dof=3, client=bus_x, geometry=G)
-    check(x.connect() is True, "connect() succeeds (reads still answer)")
+        (OPR_MODE, "the velocity mode 0x200D", "velocity mode (0x200D)"),
+        (L_CMD_RPM, "the zero target 0x2088",
+         "zero target (0x2088) before enable")):
+    print(f"    -- the FRONT drive drops the response on {what} --")
+    bus_f2 = PolicyBus()
+    bus_f2.refuse.add((FRONT_ID, dead_addr))
+    f2 = policy_adapter(bus_f2, "a bus whose front drops one frame")
     mark = len(LOG.lines)
-    check(x.write_enable(True) is False,
+    check(f2.write_enable(True) is False,
           "write_enable() returns False (dimOS coordinator.py:259 ignores it)")
-    check(x.read_enabled() is False, "the adapter does not claim to be enabled")
-    enable_writes = [w for w in bus_x.writes if w[1] == CONTROL_REG]
-    check(enable_writes == [],
-          f"0x200E was NEVER written - no ENABLE frame on the bus "
-          f"{enable_writes}")
-    armed = {u: bus_x.regs.get((u, CONTROL_REG)) for u in (FRONT_ID, BACK_ID)}
-    print(f"      control word 0x200E per unit: {armed} "
-          f"(ENABLE would be {ENABLE})")
-    check(all(v != ENABLE for v in armed.values()),
-          f"neither drive is armed {armed}")
+    check(f2.read_enabled() is False, "the adapter does not claim to be enabled")
+    print(f"      0x200E write attempts: {bus_f2.control_words()}")
+    check(bus_f2.control_words() == [],
+          f"0x200E was NEVER written, to EITHER drive - the back is not armed "
+          f"behind the front's refusal {bus_f2.control_words()}")
+    check(bus_f2.armed() == [], f"no drive is armed {bus_f2.armed()}")
     errors = LOG.since(mark, "error")
     check(errors == [f"ZLAC8015D id {FRONT_ID} (front) NOT armed, ENABLE "
-                     f"(0x200E) withheld - refused at: {step}",
-                     f"ZLAC8015D id {BACK_ID} (back) NOT armed, ENABLE "
                      f"(0x200E) withheld - refused at: {step}"],
-          f"both controllers name the refused step and the withheld ENABLE: "
-          f"{errors}")
-    check(LOG.since(mark, "info") == [],
-          "no fault-register line: nothing enabled, nothing to report")
-    x.disconnect()
+          f"the log names the drive and the refused step: {errors}")
+    f2.disconnect()
+
+# ... and when the frame is lost for BOTH drives, both are named in one go
+print("    -- both drives drop the response on the watchdog 0x2000 --")
+bus_f3 = PolicyBus()
+bus_f3.refuse.update({(FRONT_ID, COMM_OFFLINE_TIME),
+                      (BACK_ID, COMM_OFFLINE_TIME)})
+f3 = policy_adapter(bus_f3, "a bus where the watchdog write is lost on both")
+mark = len(LOG.lines)
+check(f3.write_enable(True) is False, "write_enable() returns False")
+check(bus_f3.control_words() == [], "no ENABLE frame at all")
+check(len(LOG.since(mark, "error")) == 2,
+      f"both controllers are named in the same attempt: "
+      f"{LOG.since(mark, 'error')}")
+f3.disconnect()
+
+# f4 - the FRONT refuses the ENABLE word itself: the back must never see one.
+print("    -- the FRONT drive refuses the ENABLE word 0x200E --")
+bus_f4 = PolicyBus()
+bus_f4.refuse.add((FRONT_ID, CONTROL_REG))
+f4 = policy_adapter(bus_f4, "a bus whose front refuses 0x200E")
+mark = len(LOG.lines)
+check(f4.write_enable(True) is False, "write_enable() is False")
+check(f4.read_enabled() is False, "the adapter does not claim to be enabled")
+print(f"      0x200E write attempts: {bus_f4.control_words()}")
+check(bus_f4.control_words() == [(FRONT_ID, ENABLE)],
+      f"the front's refused ENABLE is the ONLY control-word frame - the back "
+      f"never gets one {bus_f4.control_words()}")
+check(bus_f4.armed() == [], f"no drive is armed {bus_f4.armed()}")
+check(LOG.since(mark, "error") == [f"ZLAC8015D id {FRONT_ID} (front) enable "
+                                   "sequence refused at: enable (0x200E)"],
+      f"one error, naming the drive and the step: {LOG.since(mark, 'error')}")
+f4.disconnect()
+
+# f5 - the BACK refuses the ENABLE word, so the FRONT is already armed:
+# rollback, and the rollback is zero-then-disable (a drive disarmed with a
+# live RPM target would run it the moment anything re-arms it).
+print("    -- the BACK drive refuses the ENABLE word: rollback of the front --")
+bus_f5 = PolicyBus()
+bus_f5.refuse.add((BACK_ID, CONTROL_REG))
+f5 = policy_adapter(bus_f5, "a bus whose back refuses 0x200E")
+mark = len(LOG.lines)
+check(f5.write_enable(True) is False, "write_enable() is False")
+check(f5.read_enabled() is False, "the adapter does not claim to be enabled")
+print(f"      0x200E write attempts: {bus_f5.control_words()}")
+check(bus_f5.control_words() == [(FRONT_ID, ENABLE), (BACK_ID, ENABLE),
+                                 (FRONT_ID, DISABLE)],
+      f"the front was armed, the back refused, the front was DISABLED again "
+      f"{bus_f5.control_words()}")
+check(bus_f5.armed() == [],
+      f"nothing stays under torque: no drive reads as armed {bus_f5.armed()}")
+front_rpm = bus_f5.rpm_cmds(FRONT_ID)
+check(front_rpm[-1] == (FRONT_ID, (0, 0)),
+      f"and the front got a ZERO target before its disable {front_rpm[-1]}")
+rollback = [m for m in LOG.since(mark, "error") if "rolling it back" in m]
+check(len(rollback) == 1, f"the rollback is loud: {rollback}")
+f5.disconnect()
+
+print("\n(g) the fault registers decide, BEFORE the ENABLE word")
+
+# 0x20A5/0x20A6 = the L/R fault registers: a set bit is a latched fault.
+for unit, side, reg, label in ((FRONT_ID, "front", L_FAULT, "L"),
+                               (BACK_ID, "back", R_FAULT, "R")):
+    print(f"    -- the {side} drive has a latched fault on its {label} channel --")
+    bus_g = PolicyBus()
+    bus_g.regs[(unit, reg)] = 0x0002
+    g = policy_adapter(bus_g, f"a bus whose {side} drive has a fault")
+    mark = len(LOG.lines)
+    check(g.write_enable(True) is False,
+          "write_enable() REFUSES to arm through a latched fault")
+    check(g.read_enabled() is False, "the adapter does not claim to be enabled")
+    check(bus_g.control_words() == [],
+          f"no ENABLE frame on the bus at all {bus_g.control_words()}")
+    lr = ("0x0002/0x0000" if reg == L_FAULT else "0x0000/0x0002")
+    check(LOG.since(mark, "error") == [
+              f"ZLAC8015D id {unit} ({side}) NOT armed: FAULTS L/R={lr} - see "
+              "the ZLAC8015D manual for the bit meanings, then clear them"],
+          f"the error carries the register value: {LOG.since(mark, 'error')}")
+    g.disconnect()
+
+print("    -- the front drive's fault registers do not answer --")
+bus_g3 = PolicyBus()
+bus_g3.silent_faults.add(FRONT_ID)
+g3 = policy_adapter(bus_g3, "a bus whose front fault registers are silent")
+mark = len(LOG.lines)
+check(g3.write_enable(True) is False,
+      "an UNREADABLE fault register is not a pass: write_enable() is False")
+check(g3.read_enabled() is False, "the adapter does not claim to be enabled")
+check(bus_g3.control_words() == [],
+      f"no ENABLE frame on the bus at all {bus_g3.control_words()}")
+check(LOG.since(mark, "error") == [
+          f"ZLAC8015D id {FRONT_ID} (front) NOT armed: its fault registers "
+          "(0x20A5/0x20A6) did not answer - a drive we cannot question is a "
+          "drive we do not arm"],
+      f"and the log says why: {LOG.since(mark, 'error')}")
+g3.disconnect()
+
+print("\n(h) a refused command latches the WHOLE base until an explicit rearm")
+
+bus_h = PolicyBus()
+h = policy_adapter(bus_h, "a healthy bus (the outage starts after arming)")
+check(h.write_enable(True) is True, "armed on the healthy bus")
+check(h.fault_reason is None, "no fault latched yet")
+
+# the front pigtail comes loose: its RPM commands are refused from now on
+bus_h.refuse.add((FRONT_ID, L_CMD_RPM))
+bus_h.writes.clear()
+mark = len(LOG.lines)
+check(h.write_velocities([VX, VY, WZ]) is False,
+      "write_velocities() reports False when one controller refuses")
+print(f"      after the refusal: control words {bus_h.control_words()}, "
+      f"RPM {bus_h.rpm_cmds()}")
+check(h.fault_reason is not None,
+      f"the base is LATCHED in fault: {h.fault_reason!r}")
+check(h.read_enabled() is False,
+      "and it no longer claims to be enabled (both drives were told to disarm)")
+# containment: the axle that DOES answer is the one physically driving, and
+# it must not be left executing the twist the other one refused.
+check(bus_h.rpm_cmds(BACK_ID)[-1] == (BACK_ID, (0, 0)),
+      f"the healthy BACK axle was zeroed {bus_h.rpm_cmds(BACK_ID)}")
+check(bus_h.regs.get((BACK_ID, CONTROL_REG)) == DISABLE,
+      "and disabled (0x200E = DISABLE)")
+check((FRONT_ID, DISABLE) in bus_h.control_words(),
+      f"the silent front was told to disable too - best effort, it is out of "
+      f"software's reach {bus_h.control_words()}")
+check(bus_h.armed() == [], f"no drive reads as armed {bus_h.armed()}")
+
+# the point of the latch: the NEXT non-zero command never reaches the bus
+bus_h.writes.clear()
+bus_h.reads.clear()
+check(h.write_velocities([VX, VY, WZ]) is False,
+      "the next non-zero command is REFUSED")
+check(bus_h.writes == [] and bus_h.reads == [],
+      f"and it never touched the bus: {bus_h.writes} / {bus_h.reads}")
+check(any("refusing wheel RPM" in m for m in LOG.since(mark, "warning")),
+      "the refusal is logged")
+
+# a stop is never refused: it is the one command a broken base still wants out
+bus_h.writes.clear()
+h.write_stop()
+check(bus_h.rpm_cmds(BACK_ID) == [(BACK_ID, (0, 0))],
+      f"write_stop() still reaches the bus while latched {bus_h.rpm_cmds()}")
+bus_h.writes.clear()
+h.write_velocities([0.0, 0.0, 0.0])
+check(bus_h.rpm_cmds(BACK_ID) == [(BACK_ID, (0, 0))],
+      f"a ZERO twist is not refused either, it goes out {bus_h.rpm_cmds()} "
+      f"(it still returns False here: the front is genuinely gone)")
+
+# the throttle: a 100 Hz coordinator driving into the refusal must not flood
+mark = len(LOG.lines)
+for _ in range(50):
+    h.write_velocities([VX, VY, WZ])
+check(len(LOG.since(mark, "warning")) == 0,
+      f"50 more refusals inside {adapter_mod.FAULT_WARN_PERIOD_S}s add no "
+      f"warning ({len(LOG.since(mark, 'warning'))})")
+
+# a rearm attempt on a bus that is still broken must NOT clear the latch
+check(h.write_enable(True) is False,
+      "write_enable(True) fails while the front is still refusing frames")
+check(h.fault_reason is not None, "so the latch survives the failed rearm")
+bus_h.writes.clear()
+check(h.write_velocities([VX, VY, WZ]) is False,
+      "and commands are still refused")
+check(bus_h.writes == [], "still no bus I/O")
+
+# only a COMPLETE transaction rearms
+bus_h.refuse.clear()
+mark = len(LOG.lines)
+check(h.write_enable(True) is True, "the bus heals: write_enable(True) is True")
+check(h.fault_reason is None, "the latch is cleared - THAT is the rearm")
+check(h.read_enabled() is True, "and the adapter is enabled again")
+check(any("rearmed after" in m for m in LOG.since(mark, "info")),
+      f"the rearm is logged: {[m for m in LOG.since(mark, 'info')]}")
+bus_h.writes.clear()
+check(h.write_velocities([VX, VY, WZ]) is True,
+      "commands flow again")
+exp_back = (round(-exp[2]), round(exp[3]))
+check(bus_h.rpm_cmds(BACK_ID) == [(BACK_ID, exp_back)],
+      f"with the geometry's RPM back on the bus {bus_h.rpm_cmds(BACK_ID)} "
+      f"= {exp_back}")
+h.disconnect()
+
+print("    -- the serial layer RAISES instead of answering --")
+
+
+class RaisingWriteBus(PolicyBus):
+    """The port is yanked: write_registers raises instead of answering.
+
+    Controller._write_registers swallows this today, so the adapter's own
+    except is belt and braces - and the belt has to latch too, or a torn-out
+    USB dongle would leave the base commandable.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.explode = False
+
+    def write_registers(self, addr, values, unit=0):
+        if self.explode and addr == L_CMD_RPM:
+            raise OSError("[Errno 5] Input/output error: /dev/ttyUSB0")
+        return super().write_registers(addr, values, unit=unit)
+
+
+bus_hr = RaisingWriteBus()
+hr = policy_adapter(bus_hr, "a bus that will raise")
+check(hr.write_enable(True) is True, "armed on the healthy bus")
+bus_hr.explode = True
+check(hr.write_velocities([VX, VY, WZ]) is False,
+      "a raising serial layer is absorbed: False, no exception")
+check(hr.fault_reason is not None,
+      f"and it latches the base too: {hr.fault_reason!r}")
+bus_hr.explode = False
+bus_hr.writes.clear()
+check(hr.write_velocities([VX, VY, WZ]) is False,
+      "the next non-zero command is refused even though the bus is fine again")
+check(bus_hr.writes == [],
+      "a healed bus does not un-latch by itself - only write_enable(True) does")
+# on a bus that answers again, "a stop always passes" is visible in the
+# return value too, latch or no latch
+bus_hr.writes.clear()
+check(hr.write_velocities([0.0, 0.0, 0.0]) is True,
+      "a ZERO twist passes through the latch and succeeds")
+check(hr.write_stop() is True, "and so does write_stop()")
+check(hr.fault_reason is not None, "neither of them clears the latch")
+check(hr.write_enable(False) is True,
+      "write_enable(False) is never blocked by the latch either")
+check(hr.fault_reason is not None, "and disarming does not clear it")
+hr.disconnect()
 
 print("\n(i) a bus that takes real time to answer: one poll per tick")
 
