@@ -25,6 +25,10 @@ metres, degrees):
                                         then reports 0.00 m for a rover standing
                                         at 4.10 m: `odom` is suspended like the
                                         map until the search answers
+  G. what an anchor is due FOR        - turning and travel, in degrees and
+                                        metres: 300 s parked under 0.1 deg of
+                                        yaw jitter per revolution is not a
+                                        quarter-turn (audit 28/08)
 
 Needs dimOS (kiss-icp is faked, the messages and the relocalizer are real).
 
@@ -630,6 +634,48 @@ check("6 revolutions x 0.10 m frozen: the pose still flows, and it is the real o
       f"{len(o.lidar.msgs)} clouds")
 
 LO.BOOT_GRACE_S, LO.RELOC_RETRY_S, LO.relocalize = REAL_GRACE, REAL_RETRY, REAL_RELOC
+
+
+# --- G. what an anchor is due for: the WORLD, not the clock -----------------
+
+print("G. _anchor_due: turning and travel, never standing-still jitter")
+
+
+def rove(turn_deg_s: float, jitter_deg: float, seconds: float, speed_m_s: float = 0.0,
+         rate_hz: float = 10.0):
+    """`seconds` of revolutions through the real _anchor_due: the rover turns at
+    `turn_deg_s`, drives at `speed_m_s`, and every revolution's yaw carries
+    +/- `jitter_deg` of zero-mean scan-matching noise. Returns (seconds when the
+    anchor fired or None, true degrees turned by then, true metres driven)."""
+    o = odometry(Kiss(), time.time())
+    rng = np.random.default_rng(20260828)
+    for i in range(int(seconds * rate_hz)):
+        t = i / rate_hz
+        x = speed_m_s * t
+        o.pose2d = (x, 0.0, math.radians(turn_deg_s * t + rng.uniform(-jitter_deg, jitter_deg)))
+        if o._anchor_due(time.monotonic(), x, 0.0):
+            return t, turn_deg_s * t, x
+    return None, turn_deg_s * seconds, speed_m_s * seconds
+
+
+fired, turned, _ = rove(turn_deg_s=0.0, jitter_deg=0.1, seconds=300.0)
+check("300 s parked, 0.1 deg of yaw jitter per revolution: no anchor",
+      fired is None, "no fire" if fired is None else f"fired at {fired:.0f} s ({turned:.0f} deg turned)")
+
+fired, turned, _ = rove(turn_deg_s=20.0, jitter_deg=0.1, seconds=30.0)
+check("a real turn at 20 deg/s (2 deg per revolution, under one step): anchors at 90 deg",
+      fired is not None and abs(turned - 90.0) <= 5.0,
+      f"fired at {turned:.1f} deg" if fired is not None else "never fired")
+
+fired, turned, _ = rove(turn_deg_s=45.0, jitter_deg=0.0, seconds=30.0)
+check("a quarter-turn at 45 deg/s: anchors at 90 deg",
+      fired is not None and abs(turned - 90.0) <= 5.0,
+      f"fired at {turned:.1f} deg" if fired is not None else "never fired")
+
+fired, _, driven = rove(turn_deg_s=0.0, jitter_deg=0.1, seconds=60.0, speed_m_s=0.15)
+check(f"driving straight at 0.15 m/s: anchors at {LO.ANCHOR_TRAVEL_M:.1f} m",
+      fired is not None and abs(driven - LO.ANCHOR_TRAVEL_M) < 0.05,
+      f"fired at {driven:.2f} m" if fired is not None else "never fired")
 
 shutil.rmtree(TMP, ignore_errors=True)
 print(f"{OK} OK, {KO} KO")
