@@ -506,7 +506,15 @@ def _explore_blueprint():
     explorer choosing goals on the costmap - explorer2 by default, the 25-26/08
     wavefront one under EXPLORER_V2=0 (see the module docstring). Start it by
     publishing Bool(True) on `explore_cmd`; cap the speed with
-    `dimos --nerf-speed 0.3` (the local planner's default is 0.55 m/s)."""
+    `dimos --nerf-speed 0.3` (the local planner's default is 0.55 m/s).
+
+    STOCK_NAV=1 FLIES WITHOUT KEEP-OUT ZONES. The zones are enforced in exactly
+    one place - VectorCostMap.ScoredGrid.occupancy() forcing zone cells to 100
+    (costmap2d.py) - and stock mode swaps that module for dimOS's CostMapper,
+    which has no zone concept: keepout.json is never read, the bathroom is not
+    forbidden, and no line of the run says so (2026-08-28 audit). This is the
+    documented cost of the A/B, not a bug to fix here; tools/fly.sh warns at
+    gate 2/7 when zones exist on the rover and STOCK_NAV=1."""
     from dimos.core.global_config import global_config
     from vector_dimos.camera import VectorCamera
     from vector_dimos.costmap2d import VectorCostMap

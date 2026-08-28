@@ -325,10 +325,6 @@ $ python tools/keepout.py add rampe -3.0 -8.2 -1.95 -7.75 --type no_slip_reflex
 $ python tools/keepout.py rm toilettes            # works on polygons too
 ```
 
-The whole custom layer is itself an A/B switch: `STOCK_NAV=1` parks it (map,
-zones, custom explorer) and runs dimOS's stock costmapper + frontier explorer
-instead, so the two navigations are directly comparable on the same rover.
-
 `PERSISTENT_MAP=0` turns the whole thing off: no relocalization, no saved map,
 no zones. `PERSISTENT_MAP_REBASE=1` lets a run that did NOT relocalize replace
 the saved flat (off by default: it would move the flat under the zones).
@@ -338,6 +334,33 @@ $ python tests/test_relocalization_cold.py   # 73 checks: known pose in, known p
 $ python tests/test_zones_cold.py            # polygons: exact cell sets, the pose test,
                                              # the map picture, the atomic save
 ```
+
+### `STOCK_NAV=1` flies WITHOUT keep-out zones
+
+The whole custom layer is itself an A/B switch: `STOCK_NAV=1` parks it (map,
+zones, custom explorer) and runs dimOS's stock costmapper + frontier explorer
+instead, so the two navigations are directly comparable on the same rover.
+
+The price of that switch, said plainly: **stock nav has no zones.** They are
+applied in exactly one place — `VectorCostMap.ScoredGrid.occupancy()` forcing
+zone cells to 100 (`costmap2d.py`) — and stock mode replaces that module with
+dimOS's `CostMapper`, which has no zone concept at all: `keepout.json` is never
+read, the bathroom is not forbidden, and no line of the run says so
+(2026-08-28 audit). Same mode, same reason, no relocalization into the
+persistent frame either, so gate 8/8 of `tools/fly.sh` is a warning there
+instead of a gate.
+
+`tools/fly.sh` therefore says it out loud at gate 2/7, before the wheels move,
+whenever `STOCK_NAV=1` and zones exist on the rover:
+
+```console
+!! STOCK_NAV=1 AND ZONES DRAWN (~/.local/state/vector/keepout.json): stock nav has NO keep-out
+   zones - the bathroom is NOT forbidden this flight. Pilot it, or fly without STOCK_NAV.
+```
+
+A warning, never a refusal — the A/B is deliberate. A stock flight over a flat
+with zones drawn is a PILOTED flight, or one whose forbidden places are closed
+by a door.
 
 ### The two maps in Rerun
 
