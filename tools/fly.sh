@@ -101,10 +101,17 @@ ssh $ROVER 'for p in $(pgrep -f "[s]onar_live"); do kill "$p"; done' 2>/dev/null
 # socket, and a stale relay keeps $RELAY_EXT: the new run's cockpit is stillborn
 ssh $ROVER 'for p in $(pgrep -x deno) $(pgrep -f "[u]dp_forward"); do kill "$p"; done' 2>/dev/null
 
+# The mode flags must cross into the PREFLIGHTS too, in the same form as the
+# stack line: a preflight that does not know which flight this is cannot judge
+# it. GAMEPAD is the one that bites today - preflight.py turns "manette absente"
+# into a refusal only when GAMEPAD=1, and that variable stopped at the rig, so
+# the pad gate never fired once and a padless GAMEPAD=1 flight walked all seven
+# gates before the operator found nothing could drive (2026-08-28 audit).
+MODE_ENV="GAMEPAD=${GAMEPAD:-0} STOCK_NAV=${STOCK_NAV:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1}"
 echo "== 1/7 preflight hardware =="
-ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight.py' || { echo "HARDWARE KO - no flight"; exit 1; }
+ssh $ROVER "cd ~/vector-dimos && $MODE_ENV .venv/bin/python tools/preflight.py" || { echo "HARDWARE KO - no flight"; exit 1; }
 echo "== 2/7 preflight nav =="
-ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight_nav.py' || { echo "NAV KO - no flight"; exit 1; }
+ssh $ROVER "cd ~/vector-dimos && $MODE_ENV .venv/bin/python tools/preflight_nav.py" || { echo "NAV KO - no flight"; exit 1; }
 # STOCK_NAV=1 runs dimOS's CostMapper, which has no zone concept at all: the
 # zones drawn on the persistent map are NOT applied by this flight, and nothing
 # in the run ever says so (2026-08-28 audit). A WARNING, never a refusal - the

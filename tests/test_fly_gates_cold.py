@@ -25,6 +25,8 @@ command the flight would have run is readable in $FLY_TEST_LOG.
                      e-stop: the running flight keeps its panel and its cockpit
   J. gate 0/7      - on a REAL pty (the interactive path): the hand-push step is
                      offered only when estop_rs485.py exited 0 on both drives
+  K. mode flags    - GAMEPAD, STOCK_NAV and PERSISTENT_MAP cross the ssh into
+                     BOTH preflights, not only into the stack launch
   H. bash -n on fly.sh, the arm script and the stubs
 
 Run:   PYTHONPATH=. .venv/bin/python3 tests/test_fly_gates_cold.py
@@ -319,6 +321,26 @@ check("both drives acked: the release is announced and the prompt is reached",
       "E-STOP DONE" in out and "se pousse a la main" in out and "Rover repositionne au" in out)
 check("and the flight goes on (rc 0, 7/7 DRY)", rc == 0 and "== 7/7 DRY" in out, f"rc {rc}")
 check("no COUPLE MOTEUR NON RELACHE on the happy path", "COUPLE MOTEUR NON RELACHE" not in out)
+
+print("K. the mode flags reach BOTH preflights, not just the stack")
+rc, out, log = fly(GAMEPAD=1, STOCK_NAV=1, PERSISTENT_MAP=0)
+pre = ran(log, "preflight.py") + ran(log, "preflight_nav.py")
+check("both preflights ran", len(pre) == 2, f"{len(pre)} lines")
+check("the pad gate can fire: GAMEPAD=1 in both",
+      all("GAMEPAD=1" in ln for ln in pre), pre[0][-80:] if pre else "none")
+check("the nav mode crosses too: STOCK_NAV=1 PERSISTENT_MAP=0 in both",
+      all("STOCK_NAV=1" in ln and "PERSISTENT_MAP=0" in ln for ln in pre))
+check("the stack still gets them", any("GAMEPAD=1" in ln and "STOCK_NAV=1" in ln
+                                       for ln in ran(log, "dimos --rerun-open")))
+rc, out, log = fly()
+pre = ran(log, "preflight.py") + ran(log, "preflight_nav.py")
+check("default flight: GAMEPAD=0 in both (the pad stays informative)",
+      len(pre) == 2 and all("GAMEPAD=0" in ln for ln in pre), pre[0][-60:] if pre else "none")
+check("default flight: STOCK_NAV=0 PERSISTENT_MAP=1 in both",
+      all("STOCK_NAV=0" in ln and "PERSISTENT_MAP=1" in ln for ln in pre))
+# the other end of the wire: the gate on the rover reads the name we send
+check("preflight.py's pad gate reads that very variable",
+      'os.environ.get("GAMEPAD", "0") == "1"' in (ROOT / "tools" / "preflight.py").read_text())
 
 print("H. the scripts parse")
 for f in (FLY, ARM, STUB_FILE):
