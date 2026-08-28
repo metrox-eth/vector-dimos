@@ -209,15 +209,16 @@ check(clouds[0].frame_id == "lidar_link", "frame_id survives ModuleConfig")
 # 3. yanked mid-scan: logged, closing steps all fail, loop keeps going.
 published_before = len(clouds)
 shutdowns_before = bench.shutdowns
+opens_before = len(bench.opens)
 bench.unplugged = True
 check(wait_for(lambda: spy.count("returned no data") >= 1, 3.0),
       "unplugged mid-scan -> the lib error is logged")
 check(wait_for(lambda: bench.shutdowns > shutdowns_before, 2.0),
       "the close sequence runs even though the port is gone")
 check(lidar_module._thread.is_alive(), "loop survives the unplug")
-check(wait_for(lambda: len(bench.opens) > published_before, 3.0)
+check(wait_for(lambda: len(bench.opens) > opens_before, 3.0)
       and len(clouds) == published_before,
-      "retrying, and no cloud published while unplugged")
+      f"re-opens the port ({opens_before} -> {len(bench.opens)}), no cloud published while unplugged")
 
 # 4. plugged back in: publishing resumes.
 resumed_at = len(clouds)
