@@ -174,6 +174,10 @@ class World:
     # at the edge of what that run saw. It is opaque to the simulated lidar (the
     # sim may not invent knowledge) but the body passes through it.
     clearance: np.ndarray = field(default=None, repr=False)  # type: ignore[assignment]
+    # True where the real run actually observed the cell, captured BEFORE
+    # `unknown_is_wall` turns every unseen cell into a wall. After that fill,
+    # `truth != UNKNOWN` is the whole grid, not the observed area.
+    observed: np.ndarray = field(default=None, repr=False)  # type: ignore[assignment]
 
     def cell(self, x: float, y: float) -> tuple[int, int]:
         h, w = self.truth.shape
@@ -191,6 +195,11 @@ class World:
     @property
     def free_area_m2(self) -> float:
         return float((self.truth == FREE).sum()) * self.res * self.res
+
+    @property
+    def observed_area_m2(self) -> float:
+        """What the real run ever saw - free floor plus the obstacles bounding it."""
+        return float(self.observed.sum()) * self.res * self.res
 
     def visible_area_m2(self, start: tuple[float, float], lattice_m: float = 0.5) -> float:
         """The ceiling: everything this map can ever show a 0.50 m rover with a
@@ -246,6 +255,7 @@ def load_world(path: str, keepout_path: str | None, unknown_is_wall: bool = True
     truth = np.full(z["lidar"].shape, UNKNOWN, dtype=np.int8)
     truth[z["seen"]] = FREE
     truth[score >= OCCUPIED_AT] = OCCUPIED
+    observed = truth != UNKNOWN          # read it before the fill below erases it
     if unknown_is_wall:
         truth[truth == UNKNOWN] = OCCUPIED
     res, ox, oy = float(z["res"]), float(z["ox"]), float(z["oy"])
@@ -255,7 +265,7 @@ def load_world(path: str, keepout_path: str | None, unknown_is_wall: bool = True
     keepout = (persistent_map.keepout_mask(forbidden, res, ox, oy, n) if forbidden else None)
     clearance = ndimage.distance_transform_edt(truth < OCCUPIED) * res
     return World(truth=truth, res=res, ox=ox, oy=oy, keepout=keepout, zones=zones,
-                 clearance=clearance)
+                 clearance=clearance, observed=observed)
 
 
 def scan(world: World, discovered: np.ndarray, x: float, y: float) -> None:
@@ -1097,7 +1107,7 @@ def print_report(old: dict, new: dict, old_run: Run, new_run: Run, world: World,
                   f"v2 {n_at:.1f} m   ratio {n_at / f_at:.2f} "
                   f"({100 * (n_at / f_at - 1):+.0f}%)")
     print(f"ground truth: {world.free_area_m2:.1f} m2 of free floor, "
-          f"{(world.truth != UNKNOWN).sum() * world.res ** 2:.1f} m2 ever observed by the real run; "
+          f"{world.observed_area_m2:.1f} m2 ever observed by the real run; "
           f"ceiling for this start = {CEILING[0]:.1f} m2")
     print()
     rows = [("old", old, old_run), ("v2 ", new, new_run)]
