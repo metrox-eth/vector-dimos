@@ -1198,6 +1198,11 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
             self._state = ExploreState()
             self._last_goal: tuple[float, float] | None = None
             self._last_goal_ok: bool | None = None
+            # True while a goal that timed out unanswered can still be answered.
+            # goal_reached is a bare Bool with no goal identity in it, and the
+            # planner's monitor thread (10 Hz) can cancel the OLD goal at any
+            # point after the new one has been published.
+            self._late_answer_owed = False
             self._tuning = Tuning(
                 lethal_clearance_m=self.config.lethal_clearance_m,
                 pivot_clearance_m=self.config.pivot_clearance_m,
@@ -1221,6 +1226,17 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
         # module ignores it and sleeps its whole goal_timeout for nothing
         # (measured 23/08: 15 s per failed goal).
         def _on_goal_reached(self, msg: Bool) -> None:
+            if self._late_answer_owed:
+                # The previous goal's verdict, landing after the current goal was
+                # published. Crediting it would exclude a frontier the rover has
+                # never driven to. At most one is owed: the planner cancels the
+                # old goal once, then adopts the new one.
+                self._late_answer_owed = False
+                # No "waiting" in this line and no "goal " to start it:
+                # tools/replay_decision.py reads the log by those words.
+                logger.info("late goal_reached: the previous goal's verdict, not this one's - "
+                            "the goal in flight keeps its own timeout")
+                return
             self._last_goal_ok = bool(getattr(msg, "data", False))
             self.goal_reached_event.set()
 
@@ -1276,6 +1292,13 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
                 goal.orientation.w = 1.0
                 goal.frame_id = "world"
                 goal.ts = costmap.ts
+                # The goal being replaced timed out unanswered: the planner still
+                # owes it a verdict, so the first goal_reached after this publish
+                # belongs to it, not to the goal below. Swallow that one. The
+                # cost when it was in fact this goal's own "no path" is one
+                # goal_timeout instead of an instant wake - and the timeout
+                # branch then decides on the gap actually closed, in metres.
+                self._late_answer_owed = self._last_goal is not None and self._last_goal_ok is None
                 self._last_goal = (float(goal.position.x), float(goal.position.y))
                 self._last_goal_ok = None
                 gap_at_issue = self._gap_to(self._last_goal)
