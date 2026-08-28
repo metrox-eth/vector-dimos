@@ -10,6 +10,11 @@ rotation prior is worse than none. This bench measures instead of guessing:
   4. verdict: SAME sign and similar magnitude -> the mapping is right;
      OPPOSITE sign -> flip it; garbage -> the mapping axis is wrong.
 
+A rung only counts once the LIDAR SAW the body turn (MIN_TURN_DEG). With no
+such rung the bench measured nothing and refuses to conclude: a run where the
+rover stood still (e-stop, wheels off the ground, drives not armed) must never
+validate the mapping.
+
 Known input -> known output, in degrees (the functional-test rule).
 
 Run on the Jetson WITH the stack up (needs imu + odom on the bus and the
@@ -34,6 +39,27 @@ from dimos.msgs.sensor_msgs.Imu import Imu
 TURN_RAD_S = 0.3
 TURN_DEG = 30.0
 GYRO_AXIS = "-y"          # the mapping under test (lidar_odometry.gyro_axis)
+MIN_TURN_DEG = 5.0        # below this the lidar saw no turn: the rung measures nothing
+
+
+def verdict(results: list[tuple[str, float, float]]) -> tuple[str, int]:
+    """(message, exit code) from the rungs [(label, gyro deg, lidar deg), ...].
+
+    Needs at least ONE rung the lidar credits with a real turn - all() over an
+    empty set is True and used to congratulate a rover that never moved.
+    """
+    turned = [(g, l) for _, g, l in results if abs(l) > MIN_TURN_DEG]
+    if not turned:
+        return (f"VERDICT: INCONCLUSIVE - no rung turned the body by more than "
+                f"{MIN_TURN_DEG:.0f} deg of lidar yaw, so nothing was measured "
+                f"(e-stop engaged? wheels off the ground? drives not armed?)", 3)
+    if all(g * l > 0 and 0.5 < abs(g / l) < 2.0 for g, l in turned):
+        return (f"VERDICT: mapping '{GYRO_AXIS}' CORRECT - the gyro may serve as "
+                f"rotation prior ({len(turned)}/{len(results)} rungs measured)", 0)
+    if all(g * l < 0 for g, l in turned):
+        flip = GYRO_AXIS[1:] if GYRO_AXIS.startswith("-") else "-" + GYRO_AXIS
+        return (f"VERDICT: SIGN FLIPPED - use '{flip}'", 2)
+    return ("VERDICT: axis mapping WRONG or gyro not delivering - check the other axes", 2)
 
 
 def _axis_value(msg: Imu) -> float:
@@ -116,16 +142,10 @@ def main() -> int:
         results.append((label, gyro_deg, lidar))
         print(f"{label}: gyro({GYRO_AXIS}) = {gyro_deg:+.1f} deg | lidar yaw = {lidar:+.1f} deg")
 
-    ok = all(g * l > 0 and 0.5 < abs(g / l) < 2.0 for _, g, l in results if abs(l) > 5)
-    flipped = all(g * l < 0 for _, g, l in results if abs(l) > 5)
-    if ok:
-        print(f"VERDICT: mapping '{GYRO_AXIS}' CORRECT - the gyro may serve as rotation prior")
-    elif flipped:
-        print(f"VERDICT: SIGN FLIPPED - use '{GYRO_AXIS[1:] if GYRO_AXIS.startswith('-') else '-' + GYRO_AXIS}'")
-    else:
-        print("VERDICT: axis mapping WRONG or gyro not delivering - check the other axes")
+    message, code = verdict(results)
+    print(message)
     b.running = False
-    return 0 if ok else 2
+    return code
 
 
 if __name__ == "__main__":
