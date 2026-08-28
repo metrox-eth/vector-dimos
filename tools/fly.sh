@@ -157,14 +157,16 @@ nohup python3 "$(dirname "$0")/udp_forward.py" "$WT_PORT" 192.168.0.56 "$RELAY_E
 for p in $(ss -tlnp 2>/dev/null | grep -oE "127.0.0.1:7780.*pid=[0-9]+" | grep -oE "pid=[0-9]+" | cut -d= -f2 | sort -u); do kill "$p"; done 2>/dev/null
 timeout 15 ssh -fN -L 7780:127.0.0.1:7780 -L 8900:127.0.0.1:8900 $ROVER
 # the deno cockpit server sometimes takes longer than one probe (fly25 and
-# fly28 were refused on a single 2 s-late curl): bounded retry, 10 x 3 s.
+# fly28 were refused on a single 2 s-late curl). Widened to 30 x 3 s
+# (2026-08-28): cold after a reboot it needs well over 30 s - fly50 was
+# refused for being exactly 30 s patient with the one slow thing.
 COCKPIT_OK=0
-for _ in 1 2 3 4 5 6 7 8 9 10; do
+for _ in $(seq 1 30); do
   curl -sf -m 5 -o /dev/null "http://127.0.0.1:7780/" && { COCKPIT_OK=1; break; }
   sleep 3
 done
 [ "$COCKPIT_OK" = "1" ] \
-  || { echo "NO COCKPIT PAGE (30 s de retries) - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
+  || { echo "NO COCKPIT PAGE (90 s de retries) - no flight"; ssh $ROVER '~/vector-dimos/.venv/bin/dimos stop'; exit 1; }
 echo "cockpit relayed on QUIC port $WT_PORT - RELOAD your pinned cockpit tab (address never changes)"
 
 if [ "$DRY" = "1" ]; then
