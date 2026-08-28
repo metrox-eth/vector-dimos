@@ -742,6 +742,13 @@ class VectorBaseAdapter:
 
         A complete transaction is also the explicit rearm: it, and only it,
         clears the runtime fault latch set by a refused command.
+
+        In all three phases a RAISE is a refusal (`_took`), never an escape.
+        The `except` below is the last net, and reaching it from inside phase 3
+        would return False with the front axle armed and nothing left to roll
+        it back - the exact defect this transaction exists to kill. It is
+        unreachable today only because Controller._write_registers swallows
+        everything, which is a promise made in another file.
         """
         try:
             with self._lock:
@@ -756,11 +763,35 @@ class VectorBaseAdapter:
     def _sides(self):
         return ((self._front, "front"), (self._back, "back"))
 
+    @staticmethod
+    def _took(step) -> bool:
+        """One drive write. A RAISE COUNTS AS A REFUSAL, exactly like a False.
+
+        Controller._write_register(s) and _read swallow every serial exception
+        today, so nothing below raises in practice - and that is the ONLY thing
+        that made the transaction safe (review of 3ea2a00, 28/08). It is a
+        property of zlac8015d.py, not of this file: a driver rewrite, a
+        pymodbus that throws on a closed socket, a `unit` the client rejects,
+        and the guarantee is gone. A raise crossing _arm_both lands in
+        write_enable's outer `except`, which returns False having rolled back
+        NOTHING - the audit's own defect, an armed front axle hiding behind a
+        False. Same guard `_stand_down` already puts on the rollback steps.
+        """
+        try:
+            return bool(step())
+        except Exception:  # noqa: BLE001 - a drive that raises is a drive that refused
+            return False
+
     def _disarm_both(self) -> bool:
-        """Drop the ENABLE bit on both. Never blocked by the fault latch."""
+        """Drop the ENABLE bit on both. Never blocked by the fault latch.
+
+        Both are asked even when the first one refuses: a raise on the front
+        used to skip the back's disable entirely, leaving the axle we could
+        still reach under torque.
+        """
         ok = True
         for c, side in self._sides():
-            if not c.disable():
+            if not self._took(c.disable):
                 ok = False
                 _log().error(f"ZLAC8015D id {c.unit} ({side}) refused "
                              "disable (0x200E)")
@@ -793,7 +824,7 @@ class VectorBaseAdapter:
         # ── phase 3: arm, front then back, rolling back on refusal ─────
         armed = []
         for c, side in self._sides():
-            if not c.enable():
+            if not self._took(c.enable):
                 _log().error(f"ZLAC8015D id {c.unit} ({side}) enable "
                              "sequence refused at: enable (0x200E)")
                 for done, done_side in armed:
@@ -810,15 +841,22 @@ class VectorBaseAdapter:
         return True
 
     def _prepare(self, controller) -> list[str]:
-        """Everything but the ENABLE word. Returns the refused steps."""
+        """Everything but the ENABLE word. Returns the refused steps.
+
+        Nothing is armed here, so an escaping raise could not have left an axle
+        under torque - but it DID skip the other controller's preparation, the
+        per-step log naming the culprit, and the `self._enabled = False` that
+        follows a failed transaction, leaving the adapter claiming an armament
+        it no longer has. Every step is a refusal-or-raise (`_took`).
+        """
         failed = []
-        if not controller.set_mode_velocity():
+        if not self._took(controller.set_mode_velocity):
             failed.append("velocity mode (0x200D)")
-        if not controller.set_accel_ms(self._accel_ms, self._accel_ms):
+        if not self._took(lambda: controller.set_accel_ms(self._accel_ms, self._accel_ms)):
             failed.append("accel/decel ramp (0x2080-0x2083)")
-        if not controller.set_comm_offline_ms(self._comm_offline_ms):
+        if not self._took(lambda: controller.set_comm_offline_ms(self._comm_offline_ms)):
             failed.append("comm-offline watchdog (0x2000)")
-        if not controller.set_rpm(0, 0):
+        if not self._took(lambda: controller.set_rpm(0, 0)):
             failed.append("zero target (0x2088) before enable")
         return failed
 
@@ -828,12 +866,17 @@ class VectorBaseAdapter:
         A latched fault is the drive telling us why the last flight ended;
         arming through it was how "enabled WITH FAULTS" became a warning
         nobody read. Unreadable counts as faulted: the answer we did not get
-        is not the answer we wanted. Both controllers are asked even when
-        the first one is dirty, so the log names every bad drive in one go.
+        is not the answer we wanted - and a read that RAISES is the same
+        non-answer, not an exit from the transaction. Both controllers are
+        asked even when the first one is dirty, so the log names every bad
+        drive in one go.
         """
         clear = True
         for c, side in self._sides():
-            faults = c.get_faults()
+            try:
+                faults = c.get_faults()
+            except Exception:  # noqa: BLE001 - a drive we cannot question is a drive we do not arm
+                faults = None
             if faults is None:
                 clear = False
                 _log().error(
