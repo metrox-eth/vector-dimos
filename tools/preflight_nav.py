@@ -8,7 +8,8 @@ come up sane?" without arming a single motor:
   blueprints     base / nav / explore resolve; which explorer the flag selects
   persistent map the saved flat loads; the newest checkpoint loads (a power
                  cut used to leave a corrupt one - save() is atomic since 26/08)
-  keep-out zones the file parses; legacy no_slip_reflex entries are counted
+  keep-out zones the file loads through the map loader itself - the shapes it
+                 accepts (document or bare list) are the ones that fly
   runway         no dimos stack already running, motor + lidar ports free
                  (serial contention has killed whole sessions), disk and RAM
 
@@ -17,7 +18,6 @@ come up sane?" without arming a single motor:
 from __future__ import annotations
 
 import glob
-import json
 import os
 import subprocess
 import sys
@@ -109,14 +109,13 @@ def check_maps() -> None:
             verdict(False, "TOUS les checkpoints corrompus", f"{len(cks)} fichiers")
 
     try:
-        zones = persistent_map.load_keepouts()
-        raw = 0
-        if os.path.isfile(persistent_map.KEEPOUT_PATH):
-            doc = json.load(open(persistent_map.KEEPOUT_PATH))
-            raw = len(doc.get("zones", doc if isinstance(doc, list) else []))
-        legacy = raw - len(zones)
-        verdict(True, "zones keep-out",
-                f"{len(zones)} active(s)" + (f", {legacy} legacy no_slip ignoree(s)" if legacy else ""))
+        # ONE reader: the loader owns the shape contract (the file's
+        # {"frame", "zones"} document AND a bare list of zones). A second
+        # parse here called .get on a bare list, and a file the stack enforces
+        # fine refused the flight as "illisible" (audit 2026-08-28). The
+        # legacy no_slip count died with it - the loader drops those silently.
+        zones = persistent_map.load_keepouts(persistent_map.KEEPOUT_PATH)
+        verdict(True, "zones keep-out", f"{len(zones)} active(s)")
     except Exception as exc:  # noqa: BLE001
         verdict(False, "keepout.json illisible", str(exc))
 
