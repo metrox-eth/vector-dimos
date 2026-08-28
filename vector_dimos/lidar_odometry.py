@@ -119,10 +119,21 @@ CARRY_RESIDUAL_M = 0.35        # the body outran the wheels by this much in CARR
 # dropped revolutions; under load ~35 the worker skips revolutions, per-rev
 # motion doubles past SCAN_JUMP_M on perfectly healthy driving (measured 27/08
 # 16h52: 0.16-0.21 m jumps at 0.45 m/s) and the gate death-spirals into a
-# frozen map. Until the gate is rate-normalized (real dt, not revolutions) and
-# confronted with the dimOS findings, the teleop lap gets this off switch.
-# Default ON: behaviour unchanged.
-ODOM_GUARDS = os.environ.get("ODOM_GUARDS", "1").strip().lower() not in ("0", "false", "no", "off")
+# frozen map.
+# DEFAULT OFF since 2026-08-28 18:37, metrox's order after the external audit:
+# a guard whose own comment documents that it rejects healthy scans under load
+# does not get to be the default. The measurement above IS the regression - it
+# was written here and the default was left ON anyway. ODOM_GUARDS=1 stays the
+# B arm of the A/B, not a fallback. It comes back as the default only when the
+# gate is normalized by REAL dt (a kinematic envelope over elapsed time, with
+# missing revolutions handled explicitly) and validated on loaded replays that
+# show neither doubling nor freezing.
+# What the flip turns off: the per-scan gate, the periodic anchor, the
+# re-anchor on bump, the carry detector. What it does NOT touch: BOOT
+# relocalization, which hangs off persistent_map.enabled() (see __init__) - so
+# the run still lands in the saved frame and the keep-out zones are still
+# active with the guards off.
+ODOM_GUARDS = os.environ.get("ODOM_GUARDS", "0").strip().lower() not in ("0", "false", "no", "off")
 # NOTE: odometry never consumes the relocalization TF. Feeding an accumulated
 # world->map measurement back into the pose origin is a feedback loop that
 # cannot converge (the measurement lags the map, not the pose); dimOS keeps
