@@ -37,20 +37,34 @@ connect() is deliberately strict: it probes both drives read-only and
 returns False if either is silent, which makes dimOS refuse to start with
 "Failed to connect to vector adapter" rather than run blind.
 
-Two things a partial bus failure deliberately does NOT do:
+Arming is TRANSACTIONAL and it is the only thing that clears a fault:
+write_enable(True) prepares both controllers, reads both fault registers,
+and only then writes the two ENABLE words - front, then back, rolling the
+front back if the back refuses. Either both axles end up armed or none
+does. Before 2026-08-28 the loop prepared-and-armed one controller at a
+time, so a refusal on the front still armed the back while _enabled stayed
+False: 27 kg under torque that the software believed disarmed.
+
+What a partial bus failure does, and the one thing it deliberately does NOT:
 
   * it does not dead-reckon. A failed poll freezes the integrated pose
     instead of integrating the last known twist, which would advance
     /odom by ~0.3 m per second of outage at 0.3 m/s with no measurement
     behind it. read_velocities() still serves the last known twist.
 
-  * it does not stop the healthy axle. write_velocities() writes both
-    controllers independently; if one write fails the other still takes
-    the new command, so during a one-sided RS485 outage the surviving
-    axle follows the stick while the silent one holds its last command.
-    Nothing in software can reach a drive that does not answer. Whether
-    the healthy axle should be zeroed instead is a chassis decision, not
-    a default - tests/test_adapter_bus_faults.py pins today's behaviour.
+  * it DOES stop the healthy axle now. The two writes go out back to back
+    and only one of them can fail, so by the time we know, the other axle
+    has already taken the new command: a one-sided RS485 outage used to
+    turn a straight line into a pirouette, with the silent axle holding
+    its last command. A refused write therefore latches the whole base in
+    fault, zeroes and disables BOTH controllers best effort, and every
+    later non-zero command is refused without touching the bus until an
+    explicit rearm. This was a chassis decision, not a default; metrox
+    made it on 2026-08-28 18:37 after the external audit. Nothing in
+    software can reach a drive that does not answer - that one is stopped
+    by its own 0x2000 watchdog, and only because we stop talking to it.
+    The real guarantee is a hardware enable line common to both drives,
+    which this chassis does not have yet.
 
 This is also the last thing the twist passes through before it becomes wheel
 RPM, which is why the sonar proximity brake lives here (see brake_forward and
@@ -95,6 +109,10 @@ SERIAL_TIMEOUT_S = 0.5       # pymodbus response timeout; a silent drive costs i
 # cache is dropped, so a tick that drives does poll.
 FEEDBACK_MAX_AGE_S = 0.015
 READ_WARN_PERIOD_S = 5.0     # rate limit for "read failed" warnings
+# Same idea on the other side: a latched base refuses a command per control
+# tick (100 Hz), and the log has to stay readable while someone drives into
+# the refusal. The first refusal is always logged.
+FAULT_WARN_PERIOD_S = 5.0
 # Real bus: the two sides of the proof in `dimos log`. A changed RPM command is
 # logged at most once per CMD_LOG_PERIOD_S (a zero command always); the
 # encoder feedback is logged once per FEEDBACK_LOG_PERIOD_S while any wheel
@@ -248,6 +266,11 @@ class VectorBaseAdapter:
         self._comm_offline_ms = comm_offline_ms
         self._connected = False
         self._enabled = False
+        # runtime fault latch: (reason, monotonic timestamp) or None. Set by a
+        # refused write, cleared ONLY by a complete write_enable(True).
+        self._faulted: tuple[str, float] | None = None
+        self._refused_cmds = 0
+        self._last_fault_warn_t = 0.0
         self._mock = False
         self._lock = threading.RLock()
         self._front: Controller | None = None
@@ -284,6 +307,15 @@ class VectorBaseAdapter:
     def read_failure_count(self) -> int:
         """Consecutive failed wheel-feedback reads (0 = healthy)."""
         return self._read_failures
+
+    @property
+    def fault_reason(self) -> str | None:
+        """Why the base is latched in fault, or None when it is not.
+
+        Read-only: nothing outside can clear the latch, and nothing should
+        want to - a successful write_enable(True) is the only rearm.
+        """
+        return None if self._faulted is None else self._faulted[0]
 
     # ── sonar proximity brake ──────────────────────────────────────────
     def note_sonar_range(self, distance_m: float) -> None:
@@ -520,32 +552,118 @@ class VectorBaseAdapter:
     def write_velocities(self, velocities: list[float]) -> bool:
         """Command a body twist. False if either controller refused.
 
-        Both controllers are written independently: a failure on one does
-        not hold back the other, so a one-sided bus outage leaves the
-        healthy axle following commands. See the module docstring.
+        A refused write is a fault of the WHOLE base, not of one axle. The
+        two set_rpm calls go out back to back, so when the second one fails
+        the first has already been applied: leaving it there is how a
+        one-sided RS485 outage becomes a pirouette. So a refusal latches the
+        base, tries zero + disable on both controllers, and every later
+        non-zero command is refused right here, without touching the bus,
+        until a complete write_enable(True) rearms it. A zero command is
+        never refused: stopping must always be allowed to reach the bus.
 
         The forward component passes the sonar brake first: this is the last
         place a twist can still be slowed before it is wheel RPM, so nothing
         upstream can drive into the sofa by ignoring it.
         """
-        try:
-            with self._lock:
-                if self._front is None or self._back is None:
-                    return False
+        with self._lock:
+            if self._front is None or self._back is None:
+                return False
+            try:
                 vx, vy, wz = velocities
                 vx = self._brake_vx(vx)
                 w_fl, w_fr, w_bl, w_br = inverse(vx, vy, wz, self._geometry)
                 # left ports inverted (v1 convention: negative = forward)
                 raw = (round(-rads_to_rpm(w_fl)), round(rads_to_rpm(w_fr)),
                        round(-rads_to_rpm(w_bl)), round(rads_to_rpm(w_br)))
+            except Exception:
+                # a malformed twist is a caller bug, not a bus fault: refuse
+                # it, but do not latch the base on it.
+                return False
+            # The gate is the RPM that would reach the drives, not the twist:
+            # a twist too small to round to a single RPM IS a stop.
+            if self._faulted is not None and raw != (0, 0, 0, 0):
+                self._note_refused(raw)
+                return False
+            try:
                 ok_front = self._front.set_rpm(raw[0], raw[1])
                 ok_back = self._back.set_rpm(raw[2], raw[3])
-                if ok_front and ok_back:
-                    self._feedback_t = None   # cached feedback predates it
-                    self._log_cmd((vx, vy, wz), raw)
-                return ok_front and ok_back
-        except Exception:
-            return False
+            except Exception as exc:
+                # Controller._write_registers swallows everything today, so
+                # this is belt and braces - and the belt has to latch too.
+                self._latch_fault(f"the serial layer raised on an RPM "
+                                  f"command (0x2088): {exc!r}")
+                return False
+            if not (ok_front and ok_back):
+                silent = "front" if not ok_front else "back"
+                both = "" if ok_front or ok_back else " (neither answered)"
+                self._latch_fault(f"the {silent} controller refused an RPM "
+                                  f"command (0x2088){both}")
+                return False
+            self._feedback_t = None   # cached feedback predates it
+            self._log_cmd((vx, vy, wz), raw)
+            return True
+
+    # ── runtime fault latch ────────────────────────────────────────────
+    def _latch_fault(self, reason: str) -> None:
+        """Latch the base in fault and try to leave both axles at rest.
+
+        Called with the lock held. Containment is best effort by nature:
+        the controller that just refused a frame is probably the one that
+        will refuse the zero and the disable too. It is still attempted on
+        BOTH - the point is the axle that DOES answer, which is the one
+        physically driving. _enabled goes False because we asked both
+        drives to disarm; the drive we cannot reach stops on its own
+        0x2000 watchdog once we stop commanding it (COMM_OFFLINE_MS).
+
+        Containment runs ONCE, on the transition. The stops that are still
+        allowed through afterwards can fail against the same dead drive,
+        and re-running the whole zero + disable on each of them would pour
+        disable frames onto the bus at the tick rate for nothing: the base
+        is already latched and already told both drives to stand down.
+        """
+        if self._faulted is not None:
+            self._enabled = False
+            return
+        self._faulted = (reason, time.monotonic())
+        self._enabled = False
+        _log().error(f"VECTOR base FAULTED: {reason} - zero + disable on "
+                     "both controllers, non-zero commands refused until "
+                     "a successful write_enable(True)")
+        for c, side in ((self._front, "front"), (self._back, "back")):
+            if c is not None:
+                self._stand_down(c, side)
+
+    def _stand_down(self, controller, side: str) -> None:
+        """Zero the target, then drop the ENABLE bit. Each step guarded.
+
+        The order matters: a drive that takes the zero and then refuses the
+        disable is stopped anyway, while a drive disarmed with a live RPM
+        target would run it the moment anything re-arms it.
+        """
+        steps = (("zero target (0x2088)", lambda: controller.set_rpm(0, 0)),
+                 ("disable (0x200E)", controller.disable))
+        for what, call in steps:
+            try:
+                done = call()
+            except Exception:
+                done = False
+            if not done:
+                _log().error(f"ZLAC8015D id {controller.unit} ({side}) did not "
+                             f"take {what} - it is out of software's reach")
+
+    def _note_refused(self, raw) -> None:
+        """A non-zero command arrived on a latched base. No bus, one log."""
+        self._refused_cmds += 1
+        now = time.monotonic()
+        if (self._refused_cmds == 1
+                or now - self._last_fault_warn_t >= FAULT_WARN_PERIOD_S):
+            self._last_fault_warn_t = now
+            reason, since = self._faulted
+            _log().warning(
+                f"VECTOR base FAULTED {now - since:.1f}s ago ({reason}): "
+                f"refusing wheel RPM {raw} without touching the bus "
+                f"({self._refused_cmds} refused so far) - "
+                "write_enable(True) is the rearm")
 
     def write_stop(self) -> bool:
         try:
@@ -589,86 +707,162 @@ class VectorBaseAdapter:
             f"back L/R={raw[2]:+d}/{raw[3]:+d})")
 
     def write_enable(self, enable: bool) -> bool:
-        """Enable (or disable) both drives. False if any step was refused.
+        """Arm (or disarm) both drives. False if any step was refused.
 
-        A drive is only armed once ALL its prerequisites were accepted
-        (velocity mode, ramps, comm-offline watchdog, zero target). If one of
-        them is refused - a single lost frame on a noisy RS485 bus is enough -
-        the ENABLE bit (0x200E) is NOT written: arming without 0x2000 leaves a
-        drive that keeps turning when the runtime dies, and arming outside
-        velocity mode makes 0x2088 mean something else entirely. dimOS ignores
-        this return value, so that abstention is the protection; the False is
-        only readable in the log.
+        Arming is a TRANSACTION over the pair: either both axles come out
+        armed, or none does. It used to be a loop that prepared and armed
+        one controller before touching the other, which had two ways to
+        leave a single axle under torque behind a False return - a front
+        that refused let the loop `continue` and arm the back, and a back
+        that refused left the front armed with nothing to undo it. dimOS
+        ignores this return value (coordinator.py), so the state we leave
+        the hardware in is the only thing that protects: 27 kg on four
+        mecanum wheels must never be armed by an activation that failed.
 
-        Every failed step is logged with the controller and the register it
-        died on. After a successful enable the fault registers (0x20A5/0x20A6)
-        are read once per controller and logged - a warning when non-zero, an
-        info line otherwise.
+        Three phases, in this order:
+
+          1. prepare BOTH, arm NOBODY: velocity mode, ramps, comm-offline
+             watchdog, zero target. Arming without 0x2000 leaves a drive
+             that keeps turning when the runtime dies; arming outside
+             velocity mode makes 0x2088 mean something else entirely; and a
+             drive keeps its last RPM target across a dirty death of
+             whoever commanded it, so the zero has to land first. Both
+             controllers are prepared even when the first one refuses - the
+             writes cannot arm anything, and the log then says whether one
+             side or the whole bus is broken. One refusal anywhere and
+             nobody gets the ENABLE word.
+          2. read the fault registers (0x20A5/0x20A6) on BOTH, BEFORE any
+             enable. Non-zero, or unreadable, and we stay disarmed (metrox,
+             28/08 18:37: a fault used to be a warning AFTER arming, and
+             write_enable still returned True). A drive we cannot question
+             is a drive we do not arm.
+          3. enable front, then back. If the back refuses, the front is
+             rolled back immediately (zero + disable) - best effort, but it
+             is the axle that answered a second ago.
+
+        A complete transaction is also the explicit rearm: it, and only it,
+        clears the runtime fault latch set by a refused command.
         """
         try:
             with self._lock:
                 if self._front is None or self._back is None:
                     return False
-                ok = True
-                for c, side in ((self._front, "front"), (self._back, "back")):
-                    if enable:
-                        failed = []
-                        if not c.set_mode_velocity():
-                            failed.append("velocity mode (0x200D)")
-                        if not c.set_accel_ms(self._accel_ms, self._accel_ms):
-                            failed.append("accel/decel ramp (0x2080-0x2083)")
-                        if not c.set_comm_offline_ms(self._comm_offline_ms):
-                            failed.append("comm-offline watchdog (0x2000)")
-                        # A drive keeps its last RPM target across a dirty
-                        # death of whoever commanded it; enabling would run
-                        # it. Zero the target before the enable bit.
-                        if not c.set_rpm(0, 0):
-                            failed.append("zero target (0x2088) before enable")
-                        if failed:
-                            # Abstain: an armed drive whose prerequisites were
-                            # refused is worse than a drive that never armed.
-                            ok = False
-                            _log().error(
-                                f"ZLAC8015D id {c.unit} ({side}) NOT armed, "
-                                "ENABLE (0x200E) withheld - refused at: "
-                                f"{', '.join(failed)}")
-                            continue
-                        if not c.enable():
-                            ok = False
-                            _log().error(
-                                f"ZLAC8015D id {c.unit} ({side}) enable "
-                                "sequence refused at: enable (0x200E)")
-                        else:
-                            self._log_faults(c, side)
-                    else:
-                        if not c.disable():
-                            ok = False
-                            _log().error(
-                                f"ZLAC8015D id {c.unit} ({side}) refused "
-                                "disable (0x200E)")
-                if ok:
-                    self._enabled = enable
-                return ok
+                if not enable:
+                    return self._disarm_both()
+                return self._arm_both()
         except Exception:
             return False
 
-    def _log_faults(self, controller, side: str) -> None:
-        """One fault-register read per controller, right after it enabled."""
-        faults = controller.get_faults()
-        if faults is None:
-            _log().warning(
-                f"ZLAC8015D id {controller.unit} ({side}) enabled, but its "
-                "fault registers (0x20A5/0x20A6) did not answer")
+    def _sides(self):
+        return ((self._front, "front"), (self._back, "back"))
+
+    def _disarm_both(self) -> bool:
+        """Drop the ENABLE bit on both. Never blocked by the fault latch."""
+        ok = True
+        for c, side in self._sides():
+            if not c.disable():
+                ok = False
+                _log().error(f"ZLAC8015D id {c.unit} ({side}) refused "
+                             "disable (0x200E)")
+        if ok:
+            self._enabled = False
+        return ok
+
+    def _arm_both(self) -> bool:
+        """The transaction. True only when both axles are armed."""
+        # ── phase 1: prepare both, arm nobody ──────────────────────────
+        prepared = True
+        for c, side in self._sides():
+            failed = self._prepare(c)
+            if failed:
+                prepared = False
+                _log().error(
+                    f"ZLAC8015D id {c.unit} ({side}) NOT armed, ENABLE "
+                    f"(0x200E) withheld - refused at: {', '.join(failed)}")
+        if not prepared:
+            # Nobody was armed: there is nothing to roll back, and the fault
+            # registers are not worth a serial timeout on a bus this sick.
+            self._enabled = False
+            return False
+
+        # ── phase 2: the faults decide, before the ENABLE word ─────────
+        if not self._faults_clear():
+            self._enabled = False
+            return False
+
+        # ── phase 3: arm, front then back, rolling back on refusal ─────
+        armed = []
+        for c, side in self._sides():
+            if not c.enable():
+                _log().error(f"ZLAC8015D id {c.unit} ({side}) enable "
+                             "sequence refused at: enable (0x200E)")
+                for done, done_side in armed:
+                    _log().error(f"ZLAC8015D id {done.unit} ({done_side}) was "
+                                 "already armed - rolling it back (zero + "
+                                 "disable), no axle stays under torque")
+                    self._stand_down(done, done_side)
+                self._enabled = False
+                return False
+            armed.append((c, side))
+
+        self._enabled = True
+        self._clear_fault_latch()
+        return True
+
+    def _prepare(self, controller) -> list[str]:
+        """Everything but the ENABLE word. Returns the refused steps."""
+        failed = []
+        if not controller.set_mode_velocity():
+            failed.append("velocity mode (0x200D)")
+        if not controller.set_accel_ms(self._accel_ms, self._accel_ms):
+            failed.append("accel/decel ramp (0x2080-0x2083)")
+        if not controller.set_comm_offline_ms(self._comm_offline_ms):
+            failed.append("comm-offline watchdog (0x2000)")
+        if not controller.set_rpm(0, 0):
+            failed.append("zero target (0x2088) before enable")
+        return failed
+
+    def _faults_clear(self) -> bool:
+        """Both fault registers read, and both read clean. Nothing armed yet.
+
+        A latched fault is the drive telling us why the last flight ended;
+        arming through it was how "enabled WITH FAULTS" became a warning
+        nobody read. Unreadable counts as faulted: the answer we did not get
+        is not the answer we wanted. Both controllers are asked even when
+        the first one is dirty, so the log names every bad drive in one go.
+        """
+        clear = True
+        for c, side in self._sides():
+            faults = c.get_faults()
+            if faults is None:
+                clear = False
+                _log().error(
+                    f"ZLAC8015D id {c.unit} ({side}) NOT armed: its fault "
+                    "registers (0x20A5/0x20A6) did not answer - a drive we "
+                    "cannot question is a drive we do not arm")
+                continue
+            l_fault, r_fault = faults
+            if l_fault or r_fault:
+                clear = False
+                _log().error(
+                    f"ZLAC8015D id {c.unit} ({side}) NOT armed: FAULTS "
+                    f"L/R=0x{l_fault:04X}/0x{r_fault:04X} - see the ZLAC8015D "
+                    "manual for the bit meanings, then clear them")
+            else:
+                _log().info(f"ZLAC8015D id {c.unit} ({side}) faults L/R=0/0, "
+                            "clear to arm")
+        return clear
+
+    def _clear_fault_latch(self) -> None:
+        """The rearm. Only a complete _arm_both() gets here."""
+        if self._faulted is None:
             return
-        l_fault, r_fault = faults
-        if l_fault or r_fault:
-            _log().warning(
-                f"ZLAC8015D id {controller.unit} ({side}) enabled WITH FAULTS "
-                f"L/R=0x{l_fault:04X}/0x{r_fault:04X} - see the ZLAC8015D "
-                "manual for the bit meanings")
-        else:
-            _log().info(f"ZLAC8015D id {controller.unit} ({side}) enabled, "
-                        "faults L/R=0/0")
+        reason, since = self._faulted
+        self._faulted = None
+        self._refused_cmds = 0
+        self._last_fault_warn_t = 0.0
+        _log().info(f"VECTOR base rearmed after {time.monotonic() - since:.1f}s "
+                    f"in fault ({reason}) - commands flow again")
 
     def read_enabled(self) -> bool:
         return self._enabled
