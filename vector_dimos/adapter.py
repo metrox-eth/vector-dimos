@@ -582,12 +582,19 @@ class VectorBaseAdapter:
     def write_enable(self, enable: bool) -> bool:
         """Enable (or disable) both drives. False if any step was refused.
 
-        dimOS ignores this return value, so a refused enable would otherwise
-        be invisible: every failed step is logged with the controller and the
-        register it died on. After a successful enable the fault registers
-        (0x20A5/0x20A6) are read once per controller and logged - a warning
-        when non-zero, an info line otherwise. Nothing here stops the robot;
-        it only makes the state of the drives readable in the log.
+        A drive is only armed once ALL its prerequisites were accepted
+        (velocity mode, ramps, comm-offline watchdog, zero target). If one of
+        them is refused - a single lost frame on a noisy RS485 bus is enough -
+        the ENABLE bit (0x200E) is NOT written: arming without 0x2000 leaves a
+        drive that keeps turning when the runtime dies, and arming outside
+        velocity mode makes 0x2088 mean something else entirely. dimOS ignores
+        this return value, so that abstention is the protection; the False is
+        only readable in the log.
+
+        Every failed step is logged with the controller and the register it
+        died on. After a successful enable the fault registers (0x20A5/0x20A6)
+        are read once per controller and logged - a warning when non-zero, an
+        info line otherwise.
         """
         try:
             with self._lock:
@@ -608,13 +615,20 @@ class VectorBaseAdapter:
                         # it. Zero the target before the enable bit.
                         if not c.set_rpm(0, 0):
                             failed.append("zero target (0x2088) before enable")
-                        if not c.enable():
-                            failed.append("enable (0x200E)")
                         if failed:
+                            # Abstain: an armed drive whose prerequisites were
+                            # refused is worse than a drive that never armed.
+                            ok = False
+                            _log().error(
+                                f"ZLAC8015D id {c.unit} ({side}) NOT armed, "
+                                "ENABLE (0x200E) withheld - refused at: "
+                                f"{', '.join(failed)}")
+                            continue
+                        if not c.enable():
                             ok = False
                             _log().error(
                                 f"ZLAC8015D id {c.unit} ({side}) enable "
-                                f"sequence refused at: {', '.join(failed)}")
+                                "sequence refused at: enable (0x200E)")
                         else:
                             self._log_faults(c, side)
                     else:
