@@ -207,5 +207,25 @@ e3b._handle_line("SW 0 0 0 1")        # index 3 = avant-droit, a FRONT corner
 _t.sleep(BUMP_HOLD_S + 0.08)
 check("front-right goes out on bump, not bump_rear", e3b.bump.n == 1 and e3b.bump_rear.n == 0)
 
+from vector_dimos.esp_sensors import CONTACT_COOLDOWN_S  # noqa: E402
+
+print(f"E'. contact cooldown ({CONTACT_COOLDOWN_S} s) is per corner, not global")
+e4 = _bare()
+e4._handle_line("SW 1 0 0 0")         # wedging: front-left closes...
+_t.sleep(BUMP_HOLD_S + 0.08)
+e4._handle_line("SW 1 0 1 0")         # ...rear-right closes 0.18 s later, still moving
+_t.sleep(BUMP_HOLD_S + 0.08)
+check("front then rear 0.18 s apart -> ONE bump AND ONE bump_rear (opposite reflexes)",
+      e4.bump.n == 1 and e4.bump_rear.n == 1, f"bump={e4.bump.n} bump_rear={e4.bump_rear.n}")
+
+e5 = _bare()
+e5._handle_line("SW 1 0 0 0")         # front-left held...
+_t.sleep(BUMP_HOLD_S + 0.08)
+e5._handle_line("SW 0 0 0 0")         # ...released...
+e5._handle_line("SW 1 0 0 0")         # ...and closing again 0.18 s later
+_t.sleep(BUMP_HOLD_S + 0.08)
+check("the SAME corner re-closing inside the cooldown -> still ONE bump",
+      e5.bump.n == 1, f"bump={e5.bump.n}")
+
 print(f"{OK} OK, {KO} KO")
 sys.exit(1 if KO else 0)
