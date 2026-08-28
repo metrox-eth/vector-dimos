@@ -38,6 +38,8 @@ second one is not obvious:
 """
 from __future__ import annotations
 
+from typing import Any, Callable
+
 from dimos.control.components import (HardwareComponent, HardwareType,
                                       make_twist_base_joints)
 from dimos.control.coordinator import ControlCoordinator, TaskConfig
@@ -58,6 +60,12 @@ except Exception:  # already registered (e.g. re-import): keep the first one
 from vector_dimos.lcm_latest import install as _install_latest_only  # noqa: E402
 _install_latest_only()
 
+# That clamp is LCM-only, and zenoh's subscriber has no queue bound to set, so
+# the coordinator drops its own stale twists below (vector_dimos.latest_only).
+from vector_dimos.latest_only import LatestOnly  # noqa: E402
+
+LATEST_ONLY_STREAM = "twist_command"
+
 # The shipped dimOS RPC clients address the coordinator by this name; keep it
 # even though the class below is a subclass.
 COORDINATOR_INSTANCE_NAME = "ControlCoordinator"
@@ -77,7 +85,9 @@ class VectorControlCoordinator(ControlCoordinator):
        that adapter's forward brake. The adapter is not a dimOS module - it is
        built by this coordinator, inside this process - so the stream has to
        land here and be handed over. The braking itself lives in
-       adapter.brake_forward, at the point where a twist becomes wheel RPM.
+       adapter.brake_forward, at the point where a twist becomes wheel RPM;
+
+    plus one guard: twist_command is consumed latest-only (see below).
     """
 
     sonar_range: In[Float32]
@@ -95,6 +105,24 @@ class VectorControlCoordinator(ControlCoordinator):
             note = getattr(connected.adapter, "note_sonar_range", None)
             if callable(note):
                 note(distance)
+
+    def _make_stream_cb(self, stream: str) -> Callable[[Any], None]:
+        """Consume twist_command latest-only, whatever the transport.
+
+        lcm_latest clamps the LCM queue to one message; zenoh's subscriber has
+        no such bound and dimOS exposes no capacity for it, so the drop has to
+        happen here. dimOS builds a fresh callback per subscription (hardware
+        add/remove re-syncs them) - keep one drain thread and re-point it.
+        """
+        callback = super()._make_stream_cb(stream)
+        if stream != LATEST_ONLY_STREAM:
+            return callback
+        latest = getattr(self, "_latest_twist", None)
+        if latest is None:
+            latest = self._latest_twist = LatestOnly(callback, name=stream)
+        else:
+            latest.rebind(callback)
+        return latest
 
 
 def _vector_base(hw_id: str = "base",
