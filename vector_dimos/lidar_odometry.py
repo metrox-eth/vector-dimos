@@ -144,6 +144,14 @@ ANCHOR_TURN_RAD = 1.57         # - or this much accumulated turning (drift breed
                                # rejected -> map writes stay FROZEN and the search repeats until
                                # re-anchored. At cruise this is a check every ~10 s of straight
                                # driving and at every quarter-turn.
+NO_REF_MAX = 3                 # searches in a row with NOTHING to match against = give up.
+                               # A search freezes map writing, and a frozen costmap writes no
+                               # checkpoint: waiting for a reference that only an unfrozen map
+                               # could produce is the deadlock of 27/08 16h40 (audit 28/08).
+NO_REF_LOG_EVERY_S = 60.0      # how often to say "nothing to match against yet" while mapping on
+RELOC_READY_EVERY_S = 2.0      # the "is there a reference on disk" answer is re-read from disk at
+                               # most this often: the check runs on every revolution (10 Hz) and
+                               # nothing prunes the run directories, a checkpoint lands every 30 s
 CARRY_WINDOW_S = 1.0
 CARRY_COOLDOWN_S = 15.0
 LOST_SIGMA_M = 1.0             # kiss-icp's adaptive threshold above this...
@@ -197,6 +205,20 @@ class LidarOdometry(Module):
     reloc_frame: Out[PoseStamped]    # which frame this run lives in, republished every revolution (costmap2d listens)
     tf: Out[TFMessage]
 
+    # relocalization bookkeeping, as class defaults too: __init__ sets them for
+    # the live run, and a bench that builds the module with __new__ still gets a
+    # state machine that cannot half-exist. Scalars only.
+    _run_started = 0.0              # wall clock at start(): which checkpoint directory is OURS
+    _reloc_deadline = 0.0           # monotonic: past it, a search gives up whatever its reason
+    _no_ref_tries = 0               # searches in a row that found no reference map
+    _no_ref_logged = 0.0            # monotonic of the last "nothing to match against" line
+    _reloc_ready_at = 0.0           # monotonic of the last disk look for a reference map
+    _reloc_ready_ans = False        # what it found (RELOC_READY_EVERY_S cache)
+    _gave_up_pending = False        # publish reloc:gave_up once, then the frame again
+    _anchor_ref = None              # (x, y, yaw) at the last anchor
+    _anchor_turn = 0.0
+    _scan_rejects = 0
+
     def __init__(self, max_range_m: float = 12.0, min_range_m: float = 0.35,
                  voxel_size_m: float = 0.05, initial_threshold_m: float = 0.3,
                  gyro_axis: str = "-y", use_gyro_prior: bool = True,
@@ -244,6 +266,13 @@ class LidarOdometry(Module):
         # looking while the rover explores and the fresh map keeps building)
         self._reloc_state = "idle"
         self._boot_deadline = 0.0
+        self._reloc_deadline = 0.0      # every search has an end, whatever its reason
+        self._no_ref_tries = 0
+        self._no_ref_logged = 0.0
+        self._reloc_ready_at = 0.0
+        self._reloc_ready_ans = False
+        self._gave_up_pending = False
+        self._run_started = 0.0
         self._anchor_ref: tuple[float, float, float] | None = None   # (x, y, yaw) at the last anchor
         self._anchor_turn = 0.0                                       # |yaw| accumulated since it
         self._scan_rejects = 0                                        # consecutive per-scan gate rejections
@@ -279,8 +308,10 @@ class LidarOdometry(Module):
         logger.info(f"lidar odometry up (kiss-icp, voxel {self.voxel_size_m} m, range "
                     f"{self.min_range_m}-{self.max_range_m} m, prior: gyro={self.use_gyro_prior} "
                     f"axis {self.gyro_axis}, wheels NEVER) -> {self.world_frame}")
+        self._run_started = time.time()   # only THIS run's checkpoints are in THIS run's frame
         if not persistent_map.enabled():
-            logger.info("PERSISTENT_MAP=0: fresh frame, as before this existed")
+            logger.info("PERSISTENT_MAP=0: fresh frame, as before this existed - "
+                        "no relocalization at all, boot or mid-run")
         elif not persistent_map.map_exists():
             logger.info(f"no persistent map at {persistent_map.MAP_PATH} yet: fresh frame, "
                         "and this run will become the first one")
@@ -454,35 +485,98 @@ class LidarOdometry(Module):
         self._reloc_reason = reason
         self._reloc_state = "searching"
         self._lost_since = 0.0
+        self._no_ref_tries = 0
+        self._reloc_deadline = time.monotonic() + BOOT_GRACE_S
         logger.warning(f"relocalization ({reason}): map writing FROZEN, accumulating {RELOC_REVS} revolutions")
 
-    def _reference_map(self) -> str | None:
+    def _reference_map(self, reason: str | None = None) -> str | None:
         """What to match against: the saved flat at boot, the current map after
-        a hand-carry (the freshest checkpoint on disk - same frame, at most one
-        checkpoint period old), the saved flat as a fallback."""
-        if self._reloc_reason == "boot":
+        a hand-carry (the freshest checkpoint THIS RUN wrote - same frame, at
+        most one checkpoint period old), the saved flat as a fallback.
+
+        Never another run's checkpoint (audit 28/08): it is in that run's own
+        arbitrary frame, the match is accepted because the flat really does
+        line up, and the origin then jumps by the offset between the two frames
+        while the costmap keeps writing where it was."""
+        reason = reason or self._reloc_reason
+        if reason == "boot":
             return persistent_map.MAP_PATH if persistent_map.map_exists() else None
-        current = persistent_map.newest_checkpoint()
+        current = persistent_map.newest_checkpoint(persistent_map.current_run_dir(self._run_started))
         if current is not None and time.time() - os.path.getmtime(current) < CURRENT_MAP_MAX_AGE_S:
             return current
         if self._frame == "persistent" and persistent_map.map_exists():
             return persistent_map.MAP_PATH
         return None
 
+    def _reloc_ready(self) -> bool:
+        """May a guard freeze the map to go looking for the rover, right now?
+
+        Two refusals, both from the 28/08 audit:
+          * PERSISTENT_MAP=0 is the whole feature's off switch ("the rover
+            behaves exactly as it did before this existed"). start() honoured
+            it, the guards did not, and the first anchor froze the map anyway.
+          * Nothing to match against - a fresh frame whose run has not
+            checkpointed yet. Freezing there waits for a checkpoint that only
+            an unfrozen costmap can write: the map never moves again. Keep
+            mapping instead; the anchor comes back once a checkpoint exists.
+        """
+        if not persistent_map.enabled():      # the env flag is never cached: it is the off switch
+            return False
+        now = time.monotonic()
+        if now - self._reloc_ready_at >= RELOC_READY_EVERY_S:
+            self._reloc_ready_at = now
+            self._reloc_ready_ans = self._reference_map("anchor") is not None
+            if not self._reloc_ready_ans and now - self._no_ref_logged > NO_REF_LOG_EVERY_S:
+                self._no_ref_logged = now
+                logger.info("relocalization: nothing to match against yet (no checkpoint from this "
+                            "run) - the guards keep mapping instead of freezing")
+        return self._reloc_ready_ans
+
+    def _give_up(self, why: str) -> None:
+        """The universal exit from a search: stop looking, resume mapping in
+        the frame the run is already in.
+
+        Before this (audit 28/08) only the boot path could end: a search opened
+        by an anchor, a bump, a hand-carry or a lost scan stayed "searching"
+        forever when the reference map was missing or refused - no `lidar`
+        published, costmap frozen, hence no checkpoint, hence no reference,
+        for the rest of the run.
+        """
+        self._reloc_gen += 1            # a search still in flight now answers for a state we left
+        self._reloc_state = "idle"
+        self._reloc_pts = []
+        self._reloc_thread = None
+        self._reloc_result = None
+        self._reloc_reason = ""
+        self._no_ref_tries = 0
+        self._scan_rejects = 0
+        self._lost_since = 0.0
+        self._anchor_ref = None
+        self._anchor_turn = 0.0
+        self._carry_cooldown = time.monotonic() + CARRY_COOLDOWN_S   # no instant re-freeze
+        self._gave_up_pending = True
+        logger.warning(f"relocalization: gave up ({why}) - map writing RESUMES in the "
+                       f"{self._frame} frame"
+                       + ("" if self._frame == "persistent" else
+                          ", and the keep-out zones do NOT apply to it "
+                          "(fly.sh refuses to keep exploring in that state)"))
+
     def _accumulate(self, pts: np.ndarray, kiss: tuple[float, float, float]) -> None:
         """One revolution into the search batch, in the kiss-icp frame - the
         frame the search solves for."""
+        # THE EXIT, checked first and every revolution: no reason to be
+        # searching outlives BOOT_GRACE_S, not even a search thread that never
+        # answers. Everything below this line can return early.
+        if self._reloc_state != "idle" and time.monotonic() > self._reloc_deadline:
+            self._give_up(f"{BOOT_GRACE_S:.0f} s of searching ({self._reloc_reason})")
+            return
         c, s = math.cos(kiss[2]), math.sin(kiss[2])
         self._reloc_pts.append(np.stack([c * pts[:, 0] - s * pts[:, 1] + kiss[0],
                                          s * pts[:, 0] + c * pts[:, 1] + kiss[1]], axis=1))
         if len(self._reloc_pts) < RELOC_REVS or self._reloc_thread is not None:
             return
         if self._reloc_state == "retrying" and time.monotonic() > self._boot_deadline:
-            self._reloc_state = "idle"
-            self._reloc_pts = []
-            logger.warning(f"relocalization: gave up after {BOOT_GRACE_S / 60:.0f} min of trying - this run "
-                           "keeps its own fresh frame, and the keep-out zones do NOT apply to it "
-                           "(fly.sh refuses to keep exploring in that state)")
+            self._give_up(f"{BOOT_GRACE_S / 60:.0f} min of boot grace spent")
             return
         if time.monotonic() < self._reloc_next:
             self._reloc_pts = self._reloc_pts[-RELOC_REVS:]
@@ -491,9 +585,15 @@ class LidarOdometry(Module):
         if path is None:
             self._reloc_pts = []
             self._reloc_next = time.monotonic() + RELOC_RETRY_S
+            self._no_ref_tries += 1
+            if self._no_ref_tries >= NO_REF_MAX:
+                self._give_up(f"no map to match against in {NO_REF_MAX} attempts - the rover is "
+                              "somewhere nothing has been saved about")
+                return
             logger.warning("relocalization: no map to match against - map writing stays frozen "
-                           "(the rover is somewhere nothing has been saved about)")
+                           f"(attempt {self._no_ref_tries}/{NO_REF_MAX})")
             return
+        self._no_ref_tries = 0
         batch = np.concatenate(self._reloc_pts)
         self._reloc_pts = []
         self._reloc_thread = threading.Thread(target=self._search, args=(batch, path, self._reloc_gen),
@@ -626,7 +726,7 @@ class LidarOdometry(Module):
         """A contact is a KNOWN jolt: the pose is
         suspect from this instant, so freeze map writes and re-anchor NOW
         instead of letting a shifted map be painted."""
-        if ODOM_GUARDS and self._reloc_state == "idle":
+        if ODOM_GUARDS and self._reloc_state == "idle" and self._reloc_ready():
             self._anchor_ref = None
             logger.warning("SLAM anchor: bump - map writes frozen, re-anchoring against the map")
             self._begin_relocalization("bump", reset_kiss=False)
@@ -693,16 +793,23 @@ class LidarOdometry(Module):
         R2 = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
         world_pts = (pts @ R2.T) + np.array([x, y, LIDAR_HEIGHT_M])
         ts = time.time(); q = _yaw_quat(yaw)
-        if ODOM_GUARDS and self._scan_rejects >= SCAN_REJECT_MAX and self._reloc_state == "idle":
-            logger.warning(f"scan gate: {self._scan_rejects} rejected revolutions in a row - "
-                           "actually lost, full re-anchor (map writes stay frozen)")
-            self._scan_rejects = 0
-            self._begin_relocalization("lost", reset_kiss=False)
+        # the guards may only freeze the map when relocalization is on AND
+        # something exists to relocalize against (see _reloc_ready)
+        ready = ODOM_GUARDS and self._reloc_state == "idle" and self._reloc_ready()
+        if ODOM_GUARDS and self._reloc_state == "idle" and self._scan_rejects >= SCAN_REJECT_MAX:
+            n, self._scan_rejects = self._scan_rejects, 0
+            if ready:
+                logger.warning(f"scan gate: {n} rejected revolutions in a row - "
+                               "actually lost, full re-anchor (map writes stay frozen)")
+                self._begin_relocalization("lost", reset_kiss=False)
+            else:
+                logger.warning(f"scan gate: {n} rejected revolutions in a row - nothing to "
+                               "re-anchor against, the pose stays on prediction and the map keeps writing")
         if self._reloc_state != "idle":
             self._accumulate(pts, kiss)
-        elif ODOM_GUARDS and self._carried(now_wall, x, y):
+        elif ready and self._carried(now_wall, x, y):
             pass                            # _carried() opened a new search; this revolution is not written
-        elif ODOM_GUARDS and self._anchor_due(t0, x, y):
+        elif ready and self._anchor_due(t0, x, y):
             pass                            # anchor check opened; this revolution is not written either
         # odom on the FLOOR PLANE (z=0): dimOS's planner measures 3D distances
         # (goal_tolerance 0.2 m, path checks down to 0.01 m) - an odom published
@@ -711,8 +818,14 @@ class LidarOdometry(Module):
         # lidar height"); the lidar height lives in the tf child and in the
         # world-cloud transform, never in the pose.
         self.odom.publish(PoseStamped(ts, self.world_frame, position=Vector3(x, y, 0.0), orientation=q))
+        state = "searching" if self._searching else self._frame
+        if self._gave_up_pending:
+            # said ONCE, then the frame again: costmap2d unfreezes on any frame
+            # it knows (handle_reloc_frame) and would stay frozen on a state it
+            # does not, so `gave_up` is an announcement, never a state to sit in.
+            state, self._gave_up_pending = "gave_up", False
         self.reloc_frame.publish(PoseStamped(
-            ts, f"reloc:{'searching' if self._searching else self._frame}",
+            ts, f"reloc:{state}",
             position=Vector3(self._origin[0], self._origin[1], 0.0), orientation=_yaw_quat(self._origin[2])))
         if not self._searching:
             cam = self._pending_cam_pts

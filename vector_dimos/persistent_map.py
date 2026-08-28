@@ -71,6 +71,10 @@ CHECKPOINT_DIR = os.path.join(STATE_DIR, "checkpoints")
 MAP_PATH = os.path.join(STATE_DIR, "persistent_map.npz")
 KEEPOUT_PATH = os.path.join(STATE_DIR, "keepout.json")
 GENERATIONS = 5          # previous maps kept, newest first: a bad session is undoable
+RUN_DIR_FMT = "%Y%m%d-%H%M%S"       # how costmap2d names its checkpoint directory
+RUN_DIR_SLACK_S = 60.0              # a run directory is stamped at module construction, a little
+                                    # before the odometry's start(): this much counts as the same run
+CHECKPOINT_TMP_SUFFIX = ".tmp.npz"  # ScoredGrid.save() writes <name>.npz.tmp.npz then renames
 
 FORBIDDEN = "forbidden"            # never enterable: forced occupied, after every layer
 ZONE_TYPES = (FORBIDDEN,)
@@ -135,30 +139,60 @@ def promote(checkpoint_path: str, keep: int = GENERATIONS) -> str:
     return MAP_PATH
 
 
-def newest_checkpoint(run_dir: str | None = None) -> str | None:
-    """The freshest costmap checkpoint on disk (of one run, or of any run).
+def newest_checkpoint(run_dir: str | None) -> str | None:
+    """The freshest costmap checkpoint of ONE run -- never of another one.
 
     Used two ways: to promote a finished run, and to give a mid-run
     relocalization the current map -- at most one checkpoint period old, and
-    already in the frame the run is writing.
+    already in the frame the run is writing. `run_dir` is mandatory for that
+    second reason (audit 28/08): scanning every run directory returned the
+    globally newest .npz, and a previous run's checkpoint lives in that run's
+    own arbitrary frame - matching against it rebased the live pose by the
+    offset between the two frames while the grid kept being written where it
+    was. No run directory, no reference: `None`.
+
+    `ScoredGrid.save()` writes through `<name>.npz.tmp.npz`, which also ends in
+    .npz - a torn write must never be picked as a map, so the temp files the
+    atomic save leaves behind are skipped here too.
     """
-    if run_dir:
-        dirs = [run_dir]
-    elif os.path.isdir(CHECKPOINT_DIR):
-        dirs = [os.path.join(CHECKPOINT_DIR, d) for d in sorted(os.listdir(CHECKPOINT_DIR))]
-    else:
-        dirs = []
+    if not run_dir or not os.path.isdir(run_dir):
+        return None
     best, best_ts = None, -1.0
-    for d in dirs:
-        if not os.path.isdir(d):
+    for f in os.listdir(run_dir):
+        if not f.endswith(".npz") or f.endswith(CHECKPOINT_TMP_SUFFIX):
             continue
-        for f in os.listdir(d):
-            if not f.endswith(".npz"):
-                continue
-            p = os.path.join(d, f)
-            ts = os.path.getmtime(p)
-            if ts > best_ts:
-                best, best_ts = p, ts
+        p = os.path.join(run_dir, f)
+        ts = os.path.getmtime(p)
+        if ts > best_ts:
+            best, best_ts = p, ts
+    return best
+
+
+def current_run_dir(started_at: float, slack_s: float = RUN_DIR_SLACK_S) -> str | None:
+    """The checkpoint directory of the run that started at `started_at` (wall
+    clock seconds), or None if this run has not written one yet.
+
+    costmap2d stamps its directory with the wall clock when the module is
+    CONSTRUCTED, a little before the other modules reach start(), so a
+    directory belongs to this run when its stamp is no older than
+    `started_at - slack_s`. The bias is deliberate: too tight only costs a
+    re-anchor (skipped, the run keeps mapping), too loose costs the pose.
+    """
+    if not started_at or started_at <= 0.0 or not os.path.isdir(CHECKPOINT_DIR):
+        return None
+    best, best_stamp = None, -1.0
+    for d in os.listdir(CHECKPOINT_DIR):
+        path = os.path.join(CHECKPOINT_DIR, d)
+        if not os.path.isdir(path):
+            continue
+        try:
+            stamp = time.mktime(time.strptime(d, RUN_DIR_FMT))
+        except ValueError:
+            continue                     # not a run directory
+        if stamp < started_at - slack_s:
+            continue                     # a previous run, in a previous frame
+        if stamp > best_stamp:
+            best, best_stamp = path, stamp
     return best
 
 
