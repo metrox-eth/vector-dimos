@@ -71,7 +71,7 @@ CORNERS = (   # body 62.5 x 46 cm with the bumper bars (measured)
 SONAR_MAX_TRUSTED = 0.55        # 66 cm measured on the robot, minus a margin
 SONAR_MEDIAN = 3
 SONAR_SPREAD_MAX = 0.10
-CONTACT_COOLDOWN_S = 1.0
+CONTACT_COOLDOWN_S = 1.0  # per CORNER, not global: see _contact()
 BUMP_HOLD_S = 0.10        # a corner must stay closed this long to be a CONTACT.
                           # measured 2026-08-27: both FRONT corners closed 104 ms
                           # apart on a STANDING rover, then more on every
@@ -174,7 +174,7 @@ class EspSensors(Module):
         module without dimOS's Module machinery and has to start exactly
         where the constructor does."""
         self._sw = (0, 0, 0, 0)
-        self._last_contact = 0.0
+        self._last_contact: dict[str, float] = {}   # corner name -> monotonic s
         self._sonar = SonarFilter()
         self._last_sonar_publish = 0.0
         self._clear_since: float | None = None
@@ -270,10 +270,18 @@ class EspSensors(Module):
             self._contact(name, rear)
 
     def _contact(self, name: str, rear: bool) -> None:
+        """The cooldown is per CORNER: it debounces repeats of the SAME
+        contact, which is all it was ever for. One global timestamp also
+        swallowed the other corners - a rover wedging into a corner closes
+        front-left at T and rear-right at T+0.4 s, and bump ('back off') and
+        bump_rear ('move forward') are opposite reflexes, not repeats of each
+        other. The second one used to be dropped with no publication and no
+        log line at all."""
         now = time.monotonic()
-        if now - self._last_contact < CONTACT_COOLDOWN_S:
+        last = self._last_contact.get(name)
+        if last is not None and now - last < CONTACT_COOLDOWN_S:
             return
-        self._last_contact = now
+        self._last_contact[name] = now
         self.contacts += 1
         # Log first, publish second: a contact we saw must be on the record even
         # if the stream refuses it, and a refused stream must not cost the link.
