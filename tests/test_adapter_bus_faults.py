@@ -27,6 +27,12 @@ the snapshot complete and the log readable.
      refused ENABLE on the back rolls the front back to zero + disable.
      dimOS ignores write_enable()'s False, so the hardware state we leave
      behind is the whole protection.
+     A drive that RAISES counts as a drive that refused, in all three phases
+     and on the disarm: zlac8015d swallows every serial exception today, and
+     that promise - made in another file - was the only thing stopping a raise
+     from flying out of _arm_both into write_enable's outer except and
+     returning False with the front axle armed and nothing to roll it back
+     (review of 3ea2a00, 2026-08-28).
   g. THE FAULT REGISTERS DECIDE, and they are read BEFORE the ENABLE word.
      Non-zero on either drive, or a fault register that does not answer, and
      nobody is armed (metrox, 28/08 18:37). "enabled WITH FAULTS" used to be
@@ -589,6 +595,108 @@ check(front_rpm[-1] == (FRONT_ID, (0, 0)),
 rollback = [m for m in LOG.since(mark, "error") if "rolling it back" in m]
 check(len(rollback) == 1, f"the rollback is loud: {rollback}")
 f5.disconnect()
+
+# f6-f10 - the same transaction, against a drive that RAISES instead of
+# answering False. The raise has to be injected at the CONTROLLER, not on the
+# bus: zlac8015d's _write_register / _write_registers / _read swallow every
+# serial exception, and that promise - made in another file - was the only
+# reason an escaping raise never left an axle armed (review of 3ea2a00).
+print("    -- a controller that RAISES instead of returning False --")
+
+
+class RaisingController:
+    """A ZLAC8015D whose `where` method raises; everything else is the real one."""
+
+    def __init__(self, inner, where="enable"):
+        self._inner = inner
+        self._where = where
+
+    def __getattr__(self, name):
+        if name == self._where:
+            def boom(*_a, **_kw):
+                raise OSError("[Errno 5] Input/output error: /dev/ttyUSB0")
+            return boom
+        return getattr(self._inner, name)
+
+
+# f6 - THE audited shape: the front is armed, then the back's enable RAISES.
+# Before this guard the raise flew out of _arm_both into write_enable's outer
+# except: False returned, front axle still under torque, nothing rolled back.
+bus_f6 = PolicyBus()
+f6 = policy_adapter(bus_f6, "a healthy bus whose back drive will raise")
+f6._back = RaisingController(f6._back)
+mark = len(LOG.lines)
+check(f6.write_enable(True) is False, "the back RAISED: write_enable() is False")
+check(f6.read_enabled() is False, "the adapter does not claim to be enabled")
+print(f"      0x200E write attempts: {bus_f6.control_words()}")
+check(bus_f6.control_words() == [(FRONT_ID, ENABLE), (FRONT_ID, DISABLE)],
+      f"the front was armed, the back raised, the front was DISABLED again - "
+      f"a raise rolls back exactly like a refusal {bus_f6.control_words()}")
+check(bus_f6.armed() == [], f"NO axle stays under torque {bus_f6.armed()}")
+check(bus_f6.rpm_cmds(FRONT_ID)[-1] == (FRONT_ID, (0, 0)),
+      f"and the front got a ZERO target before its disable "
+      f"{bus_f6.rpm_cmds(FRONT_ID)[-1]}")
+check(len([m for m in LOG.since(mark, "error") if "rolling it back" in m]) == 1,
+      f"the rollback is as loud as on a refusal: {LOG.since(mark, 'error')}")
+f6.disconnect()
+
+# f7 - the FRONT's enable raises: the back must never see an ENABLE word.
+bus_f7 = PolicyBus()
+f7 = policy_adapter(bus_f7, "a healthy bus whose front drive will raise")
+f7._front = RaisingController(f7._front)
+check(f7.write_enable(True) is False, "write_enable() is False")
+check(bus_f7.control_words() == [],
+      f"not one 0x200E frame: the back is not armed behind a front that raised "
+      f"{bus_f7.control_words()}")
+check(bus_f7.armed() == [] and f7.read_enabled() is False, "nothing armed, nothing claimed")
+f7.disconnect()
+
+# f8 - phase 1 (prepare): nothing is armed there, so a raise could not leave an
+# axle under torque - but it DID skip the other drive's preparation, the log
+# line naming the culprit, and the `_enabled = False` a failed transaction owes.
+bus_f8 = PolicyBus()
+f8 = policy_adapter(bus_f8, "a bus whose front raises on the 0x2000 watchdog")
+f8._front = RaisingController(f8._front, where="set_comm_offline_ms")
+mark = len(LOG.lines)
+check(f8.write_enable(True) is False, "a raise in phase 1 is a refusal, not an escape")
+check(f8.read_enabled() is False, "the adapter does not claim to be enabled")
+check(bus_f8.control_words() == [] and bus_f8.armed() == [],
+      f"0x200E withheld from BOTH {bus_f8.control_words()}")
+check(LOG.since(mark, "error") == [f"ZLAC8015D id {FRONT_ID} (front) NOT armed, "
+                                   "ENABLE (0x200E) withheld - refused at: "
+                                   "comm-offline watchdog (0x2000)"],
+      f"the log still names the drive and the step: {LOG.since(mark, 'error')}")
+check(bus_f8.regs.get((BACK_ID, COMM_OFFLINE_TIME)) == adapter_mod.COMM_OFFLINE_MS,
+      "and the BACK was still prepared - a raise on one side never skips the other")
+f8.disconnect()
+
+# f9 - phase 2: a fault register that RAISES is the same non-answer as one that
+# does not reply. A drive we cannot question is a drive we do not arm.
+bus_f9 = PolicyBus()
+f9 = policy_adapter(bus_f9, "a bus whose front raises on 0x20A5")
+f9._front = RaisingController(f9._front, where="get_faults")
+mark = len(LOG.lines)
+check(f9.write_enable(True) is False, "write_enable() is False")
+check(bus_f9.control_words() == [] and bus_f9.armed() == [], "nobody armed")
+check(any("did not answer" in m for m in LOG.since(mark, "error")),
+      f"read as unreadable, and said so: {LOG.since(mark, 'error')}")
+f9.disconnect()
+
+# f10 - disarming: a raise on one side must not skip the other's disable. The
+# axle we can still reach is the one that matters.
+bus_f10 = PolicyBus()
+f10 = policy_adapter(bus_f10, "a healthy bus, armed, then the front raises on disable")
+check(f10.write_enable(True) is True, "armed on a healthy bus")
+f10._front = RaisingController(f10._front, where="disable")
+mark = len(LOG.lines)
+check(f10.write_enable(False) is False, "a raise on disarm is a refusal too")
+check(bus_f10.armed() == [FRONT_ID],
+      f"the BACK was still asked to disarm and did {bus_f10.armed()}")
+check(f10.read_enabled() is True,
+      "and the adapter still says enabled - the front may well be under torque")
+check(any(f"id {FRONT_ID} (front) refused disable" in m for m in LOG.since(mark, "error")),
+      f"the drive out of reach is named: {LOG.since(mark, 'error')}")
+f10.disconnect()
 
 print("\n(g) the fault registers decide, BEFORE the ENABLE word")
 
