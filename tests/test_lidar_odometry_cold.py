@@ -437,6 +437,11 @@ from vector_dimos.costmap2d import VectorCostMap  # noqa: E402
 cm = VectorCostMap.__new__(VectorCostMap)
 cm._grid, cm._frame, cm._frozen, cm._last_clear = None, None, False, None
 cm._zones, cm._keepout_mtime = [], 0.0
+# the OTHER freeze (mission window, 28/08): handle_reloc_frame reads it to say
+# whether writing really resumed. This section is about the reloc flag alone,
+# so the mission one is held open - the two never cancel each other
+# (tests/test_costmap2d_cold.py owns that composition).
+cm._mission_frozen, cm._mission_over, cm._boot_xy = False, False, None
 
 
 def tell(frame_id):
