@@ -146,6 +146,15 @@ ANCHOR_TURN_RAD = 1.57         # - or this much accumulated turning (drift breed
                                # rejected -> map writes stay FROZEN and the search repeats until
                                # re-anchored. At cruise this is a check every ~10 s of straight
                                # driving and at every quarter-turn.
+ANCHOR_TURN_STEP_RAD = 0.05    # ~3 deg: the smallest yaw difference that counts as ROTATION. The
+                               # accumulator summed |dyaw| on every revolution and moved its yaw
+                               # reference on every revolution, so scan-matching and gyro jitter
+                               # summed too: 0.1 deg per revolution at 10 Hz crossed ANCHOR_TURN_RAD
+                               # in ~90 s on a PARKED rover, freezing the map for nothing (audit
+                               # 28/08). The reference now moves only when a step this big lands, so
+                               # zero-mean jitter never accumulates while a slow real turn still
+                               # counts in full, one step at a time (quantization <= one step, on a
+                               # 90 deg threshold).
 NO_REF_MAX = 3                 # searches in a row with NOTHING to match against = give up.
                                # A search freezes map writing, and a frozen costmap writes no
                                # checkpoint: waiting for a reference that only an unfrozen map
@@ -724,15 +733,20 @@ class LidarOdometry(Module):
 
     def _anchor_due(self, now: float, x: float, y: float) -> bool:
         """The continuous SLAM anchor - triggered by the WORLD (travel or
-        turning), never by a clock. A parked rover proves nothing new."""
+        turning), never by a clock. A parked rover proves nothing new: the turn
+        sum only counts steps of at least ANCHOR_TURN_STEP_RAD, and its yaw
+        reference only moves when one lands, so jitter around a standing yaw
+        cannot sum its way to a quarter-turn (audit 28/08)."""
         yaw = self.pose2d[2]
         if self._anchor_ref is None:
             self._anchor_ref = (x, y, yaw)
             self._anchor_turn = 0.0
             return False
         rx, ry, ryaw = self._anchor_ref
-        self._anchor_turn += abs(math.atan2(math.sin(yaw - ryaw), math.cos(yaw - ryaw)))
-        self._anchor_ref = (rx, ry, yaw)      # position ref fixed, yaw ref follows (incremental turn sum)
+        dyaw = math.atan2(math.sin(yaw - ryaw), math.cos(yaw - ryaw))
+        if abs(dyaw) >= ANCHOR_TURN_STEP_RAD:
+            self._anchor_turn += abs(dyaw)
+            self._anchor_ref = (rx, ry, yaw)  # position ref fixed, yaw ref follows the steps only
         travelled = math.hypot(x - rx, y - ry)
         if travelled < ANCHOR_TRAVEL_M and self._anchor_turn < ANCHOR_TURN_RAD:
             return False
