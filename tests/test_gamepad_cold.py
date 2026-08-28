@@ -1,11 +1,14 @@
 """Cold bench: gamepad mapping (no pygame) + the headless hot-plug cycle.
 
-Three sections:
+Sections:
   A. axes_to_twist - known axis values -> known m/s and rad/s. Pure, no pygame.
   B. the module's hot-plug loop driven by a FAKE pygame: absent pad -> pad
-     plugged in -> pad pulled out -> pad back. Still no pygame needed.
+     plugged in -> deadman released and pressed again -> pad pulled out ->
+     pad back. Still no pygame needed.
   C. real pygame with no display, if it is installed: the dummy SDL drivers
      have to make init()/event.pump() work on a headless Jetson.
+  F. the 27/08 safety nets: trust gate, absolute ceilings, wheel envelope.
+  G. the slew ramp.
 """
 import logging
 import subprocess
@@ -253,6 +256,29 @@ check(wait_for(lambda: published and close(published[-1].linear.x, gp.CLAMP_LINE
 check(close(published[-1].linear.y, 0.0) and close(published[-1].angular.z, 0.0),
       "and vy = 0.0 m/s, wz = 0.0 rad/s on the other axes")
 
+# 2b. deadman RELEASED at speed, then re-pressed with the sticks centred: the
+# slew state has to restart from rest. Before the 28/08 fix prev_vx kept the
+# last driven 0.45 m/s, so the re-press published 0.438 m/s with the sticks at
+# rest and the rover left on its own for ~0.75 s.
+js.pad.buttons[gp.DEADMAN_BUTTON] = 0
+js.pad.axes = [0.0, 0.0, 0.0, 0.0, 0.0, -1.0]   # sticks back to neutral
+check(wait_for(lambda: close(published[-1].linear.x, 0.0), 3.0),
+      "deadman released while driving at the ceiling -> zeros published")
+re_press = len(published)                       # index taken BEFORE the re-press
+js.pad.buttons[gp.DEADMAN_BUTTON] = 1
+check(wait_for(lambda: len(published) - re_press >= 20, 3.0),
+      "deadman pressed again -> the loop keeps publishing")
+after = published[re_press:]
+peak = max(abs(m.linear.x) for m in after)
+check(all(close(m.linear.x, 0.0) and close(m.linear.y, 0.0)
+          and close(m.angular.z, 0.0) for m in after),
+      f"re-press with the sticks centred -> 0.000 m/s from the FIRST command "
+      f"(peak |vx| = {peak:.3f} m/s over {len(after)} messages; 0.438 before the fix)")
+# and the ramp climbs again from rest to the ceiling (drive state restored)
+js.pad.axes = [0.0, -1.0, 0.0, 0.0, 0.0, -1.0]
+check(wait_for(lambda: close(published[-1].linear.x, gp.CLAMP_LINEAR_MS), 3.0),
+      f"stick forward again -> ramps back up to the {gp.CLAMP_LINEAR_MS} m/s ceiling")
+
 # 3. pad pulled out: exactly one zero Twist, then back to waiting.
 sent_before_unplug = len(published)
 js.pad = None
@@ -330,48 +356,47 @@ else:
     check(before == after, f"event.pump() and joystick re-scan work headless "
                            f"({after} pad(s) connected)")
 
-print("\nTEST " + ("PASSED" if ok else "FAILED"))
-raise SystemExit(0 if ok else 1)
-
-
-print("F. les filets du 27/08 (emballement 13h42)")
+print("\nF. the 27/08 safety nets (13h42 runaway)")
 from vector_dimos.gamepad import (
     CLAMP_ANGULAR_RADS, CLAMP_LINEAR_MS, TeleopConfig, axes_neutral, axes_to_twist, clamp_twist,
 )
 
 cfg = TeleopConfig()
 # axes uninitialised at full deflection: neutral was never observed
-check("pleine deflexion = PAS neutre (la porte de confiance la refuse)",
-      axes_neutral(1.0, -1.0, 1.0, cfg.deadzone) is False)
-check("repos manette = neutre (la porte s'ouvre)",
-      axes_neutral(0.01, -0.02, 0.0, cfg.deadzone) is True)
+check(axes_neutral(1.0, -1.0, 1.0, cfg.deadzone) is False,
+      "full deflection = NOT neutral (the trust gate refuses it)")
+check(axes_neutral(0.01, -0.02, 0.0, cfg.deadzone) is True,
+      "pad at rest = neutral (the gate opens)")
 # absolute ceilings: even an insane config never exceeds them
-folle = TeleopConfig(linear_speed=5.0, angular_speed=9.0, boost_multiplier=4.0)
-vx, vy, wz = axes_to_twist(-1.0, -1.0, 1.0, 1.0, folle)
-check(f"plein stick + boost + config folle -> |vx| <= {CLAMP_LINEAR_MS}", abs(vx) <= CLAMP_LINEAR_MS + 1e-9)
-check(f"... et |vy| <= {CLAMP_LINEAR_MS}", abs(vy) <= CLAMP_LINEAR_MS + 1e-9)
-check(f"... et |wz| <= {CLAMP_ANGULAR_RADS}", abs(wz) <= CLAMP_ANGULAR_RADS + 1e-9)
+wild = TeleopConfig(linear_speed=5.0, angular_speed=9.0, boost_multiplier=4.0)
+vx, vy, wz = axes_to_twist(-1.0, -1.0, 1.0, 1.0, wild)
+check(abs(vx) <= CLAMP_LINEAR_MS + 1e-9, f"full stick + boost + insane config -> |vx| <= {CLAMP_LINEAR_MS}")
+check(abs(vy) <= CLAMP_LINEAR_MS + 1e-9, f"... and |vy| <= {CLAMP_LINEAR_MS}")
+check(abs(wz) <= CLAMP_ANGULAR_RADS + 1e-9, f"... and |wz| <= {CLAMP_ANGULAR_RADS}")
 # since 2026-08-27 clamp_twist ends with the wheel envelope (mecanum: the
 # commands ADD UP at the rim - learned on the first piloted lap)
 from vector_dimos.gamepad import MECANUM_LEVER_M, WHEEL_ENVELOPE_MS
 vx, vy, wz = clamp_twist(9.0, -9.0, 9.0)
-check("clamp_twist pur: 9 m/s partout -> jante exactement a l'enveloppe",
-      abs(abs(vx) + abs(vy) + MECANUM_LEVER_M * abs(wz) - WHEEL_ENVELOPE_MS) < 1e-9)
+check(abs(abs(vx) + abs(vy) + MECANUM_LEVER_M * abs(wz) - WHEEL_ENVELOPE_MS) < 1e-9,
+      "pure clamp_twist: 9 m/s everywhere -> rim exactly at the envelope")
 # a single stick at full travel loses NOTHING (the envelope = the feel of one stick alone)
-check("avance pure 0.45 -> inchangee", clamp_twist(0.45, 0.0, 0.0) == (0.45, 0.0, 0.0))
-check("rotation pure 0.8 -> inchangee (jante 0.40 < 0.45)", clamp_twist(0.0, 0.0, 0.8) == (0.0, 0.0, 0.8))
+check(clamp_twist(0.45, 0.0, 0.0) == (0.45, 0.0, 0.0), "pure forward 0.45 -> unchanged")
+check(clamp_twist(0.0, 0.0, 0.8) == (0.0, 0.0, 0.8), "pure rotation 0.8 -> unchanged (rim 0.40 < 0.45)")
 # the mix experienced on the piloted lap: full forward + full rotation
 vx, vy, wz = clamp_twist(0.45, 0.0, 0.8)
 rim = abs(vx) + MECANUM_LEVER_M * abs(wz)
-check(f"mix avance+rotation -> jante {rim:.3f} = enveloppe {WHEEL_ENVELOPE_MS} (avant: 0.85)",
-      abs(rim - WHEEL_ENVELOPE_MS) < 1e-9)
-check("... et les proportions du geste sont gardees (vx/wz constant)",
-      abs(vx / wz - 0.45 / 0.8) < 1e-9)
+check(abs(rim - WHEEL_ENVELOPE_MS) < 1e-9,
+      f"forward+rotation mix -> rim {rim:.3f} = envelope {WHEEL_ENVELOPE_MS} (was 0.85)")
+check(abs(vx / wz - 0.45 / 0.8) < 1e-9,
+      "... and the proportions of the gesture are kept (vx/wz constant)")
 
 
-print("G. la rampe teleop (patinage du 27/08 15h17)")
+print("\nG. the teleop ramp (27/08 15h17 wheelspin)")
 from vector_dimos.gamepad import SLEW_LINEAR_MS2, slew
-check("pas de saut: 0 -> plein stick limite a 0.06 m/s par pas de 0.1 s",
-      abs(slew(0.0, 0.45, 0.1) - 0.06) < 1e-9)
-check("descente aussi limitee (0.45 -> 0)", abs(slew(0.45, 0.0, 0.1) - 0.39) < 1e-9)
-check("cible proche atteinte exactement", slew(0.05, 0.06, 0.1) == 0.06)
+check(abs(slew(0.0, 0.45, 0.1) - 0.06) < 1e-9,
+      "no jump: 0 -> full stick limited to 0.06 m/s per 0.1 s step")
+check(abs(slew(0.45, 0.0, 0.1) - 0.39) < 1e-9, "ramp down limited too (0.45 -> 0)")
+check(slew(0.05, 0.06, 0.1) == 0.06, "a near target is reached exactly")
+
+print("\nTEST " + ("PASSED" if ok else "FAILED"))
+raise SystemExit(0 if ok else 1)
