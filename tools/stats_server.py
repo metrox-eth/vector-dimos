@@ -404,17 +404,30 @@ def _zenoh_listener():
             time.sleep(3.0)
 
 
-def _stack_running():
-    for pid in os.listdir("/proc"):
+def _proc_scan(needle):
+    """True if some process's cmdline contains `needle`. EVERY /proc read is
+    guarded: listing then reading is a TOCTOU by construction and a process
+    that exits inside that window is NORMAL, not a panel failure. An unguarded
+    read here made sensors() raise, /metrics answer {"error": ...} with no
+    "sensors" key, and fly.sh gate 5 abort a built flight (audit 2026-08-28)."""
+    try:
+        pids = os.listdir("/proc")
+    except Exception:
+        return False
+    for pid in pids:
         if not pid.isdigit():
             continue
         try:
             with open(f"/proc/{pid}/cmdline", "rb") as f:
-                if b"bin/dimos" in f.read():
+                if needle in f.read():
                     return True
         except Exception:
             continue
     return False
+
+
+def _stack_running():
+    return _proc_scan(b"bin/dimos")
 
 
 def sensors():
@@ -443,8 +456,7 @@ def sensors():
         rerun_connected = len([ln for ln in ss_out.splitlines() if ":9877" in ln]) > 0
     except Exception:
         rerun_connected = False
-    garde = any("garde_vitesse" in (open(f"/proc/{p}/cmdline", "rb").read().decode(errors="replace") if _os.path.isdir(f"/proc/{p}") else "")
-                for p in _os.listdir("/proc") if p.isdigit()) if _os.path.isdir("/proc") else False
+    garde = _proc_scan(b"garde_vitesse")
     out["software"] = {"stack_running": out.get("stack_running", False),
                        "run_id": run_id,
                        "rerun_connected": rerun_connected,

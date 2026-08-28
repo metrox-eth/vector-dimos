@@ -17,15 +17,20 @@ Read-only: nothing is enabled, written or moved.
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import serial  # noqa: E402
+
+PZEM_PORT = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+STATS_METRICS = "http://127.0.0.1:8900/metrics"  # vector-stats, the process that owns the shunt
 
 RESULTS: list[tuple[bool, str]] = []
 
@@ -43,7 +48,7 @@ def check_ports() -> None:
     for label, path in (("moteurs (FTDI/Waveshare)", MOTOR_PORT),
                         ("lidar C1 (FIREPHX)", LIDAR_PORT),
                         ("ESP32 contacts+sonar", ESP_PORT),
-                        ("shunt PZEM (CH340)", "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0")):
+                        ("shunt PZEM (CH340)", PZEM_PORT)):
         verdict(Path(path).exists(), f"{label} enumere", path.rsplit('/', 1)[-1])
 
 
@@ -71,11 +76,37 @@ def check_motors() -> None:
         verdict(False, "bus moteurs", str(exc))
 
 
+def _stats_metrics():
+    """The always-up vector-stats service's own reading, or None if it is down.
+
+    Two MODBUS masters on one RS-485 link corrupt each other's frames, and
+    stats_server polls the shunt on every /metrics and /panel hit (the panel
+    page refreshes every 2 s). Preflight opening the port itself made a healthy
+    battery read 'shunt muet' and refused the flight (audit 2026-08-28): ask
+    the process that already owns the port instead of fighting it.
+    """
+    try:
+        # no watcher= here: that row belongs to the monitoring vigil
+        with urllib.request.urlopen(STATS_METRICS, timeout=3) as r:
+            return json.load(r)
+    except Exception:  # noqa: BLE001 - service down, the port is ours to open
+        return None
+
+
 def check_battery() -> None:
     print("batterie (PZEM-017 sur le shunt)")
+    d = _stats_metrics()
+    if d is not None:
+        b = d.get("battery") or {}
+        if b.get("available"):
+            v, i, w = b["voltage_v"], b.get("current_a", 0.0), b.get("power_w", 0.0)
+            verdict(v > 20.0, "batterie", f"{v:.2f} V, {i:.2f} A, {w:.1f} W (via vector-stats)")
+        else:
+            verdict(False, "shunt muet", f"{b.get('reason') or d.get('error') or '?'} (via vector-stats)")
+        return
     try:
         from pymodbus.client.sync import ModbusSerialClient
-        c = ModbusSerialClient(method="rtu", port="/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0",
+        c = ModbusSerialClient(method="rtu", port=PZEM_PORT,
                                baudrate=9600, parity="N", stopbits=2, timeout=1.0)
         if not c.connect():
             verdict(False, "shunt: le port ne s'ouvre pas")
@@ -85,7 +116,7 @@ def check_battery() -> None:
             v = r.registers[0] * 0.01
             i = r.registers[1] * 0.01
             w = (r.registers[2] | (r.registers[3] << 16)) * 0.1
-            verdict(v > 20.0, "batterie", f"{v:.2f} V, {i:.2f} A, {w:.1f} W")
+            verdict(v > 20.0, "batterie", f"{v:.2f} V, {i:.2f} A, {w:.1f} W (lecture directe)")
         else:
             verdict(False, "shunt muet", str(r))
         c.close()
