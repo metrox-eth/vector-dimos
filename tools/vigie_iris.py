@@ -50,6 +50,14 @@ def snapshot(prev_bucket: str):
             d = json.load(r)
     except Exception:
         return {"panneau": "INJOIGNABLE"}, None
+    if "sensors" not in d:
+        # stats_server answers 200 with {"error": ...} when a probe fails. A
+        # SICK PANEL is not a dead robot: reading the missing organs as dead
+        # printed the loudest line there is (stack OFF, every organ MORT) during
+        # a healthy flight and flipped back 15 s later (audit 2026-08-28). Own
+        # state, one line - and, like INJOIGNABLE, no organ and no bucket is
+        # touched, so the RAM hysteresis survives the hole.
+        return {"panneau": "EN ERREUR"}, None
     s = d.get("sensors", {})
     sw = s.get("software", {})
     load = d.get("load_1m", 0.0)
