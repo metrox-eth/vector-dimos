@@ -26,20 +26,30 @@ Known input -> known output, in metres:
      camera can take it back
  11. the mount offset (2026-08-28): camera rays start 0.20 m behind the base,
      where the camera is - the carve band opens at 0.45 m, not 0.60 m
+ 12. the mission window (2026-08-28 18:44): 20 revolutions and a passer-by
+     injected on a PARKED rover -> 0 cells; 6 cm of displacement -> the map
+     opens; "exploration complete" -> 0 new cells, and no later motion reopens
+     it. Plus: the pre-mission freeze and the relocalization freeze are two
+     flags on one gate and neither cancels the other.
 """
 
 import asyncio
 import math
 import os
+import sys
 import tempfile
 import time
+from pathlib import Path
 
 import numpy as np
 
+from dimos_lcm.std_msgs import Bool
+
 from vector_dimos import persistent_map
 from vector_dimos.costmap2d import (
-    CAMERA_X_BASE_M, FREE_FLOOR, HIT_CAP, LIDAR_Z_M, LOW_HIT_PROTECT_S, OCCUPIED_AT,
-    SAVE_TMP_SUFFIX, ScoredGrid, VectorCostMap, camera_xy, lidar_returns, prune_checkpoints,
+    CAMERA_X_BASE_M, FREE_FLOOR, HIT_CAP, LIDAR_Z_M, LOW_HIT_PROTECT_S, MISSION_START_M,
+    OCCUPIED_AT, SAVE_TMP_SUFFIX, ScoredGrid, VectorCostMap, camera_xy, lidar_returns,
+    prune_checkpoints,
 )
 
 LEG = np.array([[1.0, 0.0]])
@@ -53,6 +63,26 @@ def _cloud(pts: np.ndarray):
     """A world cloud on the wire, float32 like the real one."""
     from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
     return PointCloud2.from_numpy(pts.astype(np.float32), frame_id="world", timestamp=time.time())
+
+
+def _lidar_cloud(xy: np.ndarray) -> np.ndarray:
+    """(x, y) hits lifted to the lidar's own tag height (see lidar_returns)."""
+    return np.column_stack([xy, np.full(len(xy), np.float32(LIDAR_Z_M))])
+
+
+def _odom(x: float, y: float, yaw: float = 0.0):
+    """A pose on the `odom` stream: position, and an identity-ish quaternion."""
+    from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
+    p = PoseStamped(frame_id="world", ts=time.time())
+    p.position.x, p.position.y, p.position.z = x, y, 0.0
+    p.orientation.w, p.orientation.z = math.cos(yaw / 2), math.sin(yaw / 2)
+    return p
+
+
+def _reloc(state: str):
+    """lidar_odometry's frame verdict, carried in frame_id (`reloc:<state>`)."""
+    from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
+    return PoseStamped(frame_id=f"reloc:{state}", ts=time.time())
 
 
 def test_leg_needs_two_viewpoints_and_ray_is_free() -> None:
@@ -386,6 +416,7 @@ def test_camera_point_at_the_lidar_height_stays_a_camera_point() -> None:
     assert lidar_returns(np.array([[1.0, 0.0, np.float64(np.float32(LIDAR_Z_M))]]))[0], "a real lidar return, after the float32 round trip"
     m = VectorCostMap()
     m._frame, m._grid, m._pose_yaw = "fresh", fresh(), 0.0
+    m._mission_frozen = False                         # on its mission (see the mission-freeze test)
     old = time.monotonic() - 10.0                     # the hits are outside the 3 s protection
     cloud = np.array([[2.0, 0.0, np.float32(LIDAR_Z_M)], [1.0, 0.0, person_z]], dtype=np.float32)
     msg = _cloud(cloud)
@@ -424,6 +455,7 @@ def test_camera_rays_start_at_the_camera_not_the_base() -> None:
     ghost = np.array([[0.525, 0.0]])
     m = VectorCostMap()
     m._frame, m._grid, m._pose_xy, m._pose_yaw = "fresh", fresh(), (0.0, 0.0), 0.0
+    m._mission_frozen = False                         # on its mission (see the mission-freeze test)
     old = time.monotonic() - 10.0
     m._grid.camera_obstacles(ghost, (0.0, 0.00), now=old)      # seed frame (the anti-moving-object gate)
     m._grid.camera_obstacles(ghost, (0.0, 0.00), now=old)
@@ -438,6 +470,177 @@ def test_camera_rays_start_at_the_camera_not_the_base() -> None:
     assert g.value_at(0.525, 0.0) == 100, "cast from the base, the same look leaves the ghost standing"
     print(f"  floor at 3 m: carving starts at {from_camera:.2f} m from the camera vs {from_base:.2f} m from the base; "
           "ghost at 0.53 m killed only by the camera-cast ray")
+
+
+def test_the_map_writes_only_during_the_mission() -> None:
+    """metrox, 2026-08-28 18:44: nothing may be written before ~1 s before the
+    rover physically departs, and obstacle recording STOPS when exploration
+    ends. A rover parked with a spinning lidar thickens the obstacles around
+    its one viewpoint and engraves whoever walks past while it waits.
+
+    Known input -> known output, in metres and in cells: revolutions injected
+    while parked -> 0 cells; 6 cm of displacement -> cells written; the
+    completion signal -> not one new cell, ever again."""
+    m = VectorCostMap()
+    m._frame = "fresh"                        # the frame is settled (PERSISTENT_MAP=0 does this in start())
+    assert m._mission_frozen and not m._mission_over, "the pre-mission freeze is on by default"
+
+    # -- parked at the boot pose: 20 full revolutions and 20 s of waiting ----
+    ang = np.radians(np.arange(0, 360, 2.0))
+    room = np.stack([2.5 * np.cos(ang), 2.5 * np.sin(ang)], 1)     # a 5 m room around it
+    passer_by = np.array([[0.8, 0.0]])                             # somebody standing 0.8 m away
+    for _ in range(20):
+        asyncio.run(m.handle_odom(_odom(0.0, 0.0)))                # wheels still: the pose never moves
+        asyncio.run(m.handle_lidar(_cloud(_lidar_cloud(np.vstack([room, passer_by])))))
+    assert m._grid is not None, "the grid is still BUILT at the boot pose (frame + centre)"
+    parked_cells = int(m._grid.seen.sum())
+    assert parked_cells == 0, f"a parked rover wrote {parked_cells} cells before departing"
+    assert m._grid.value_at(0.8, 0.0) == -1, "the passer-by is not in the map"
+
+    # -- 6 cm of displacement: the mission starts, and the map opens ---------
+    asyncio.run(m.handle_odom(_odom(0.06, 0.0)))
+    assert not m._mission_frozen, "6 cm from the boot pose (>= 5 cm) opens the map"
+    for k in range(6):                                             # driving on, two viewpoints
+        asyncio.run(m.handle_odom(_odom(0.06 + 0.04 * k, 0.0)))
+        asyncio.run(m.handle_lidar(_cloud(_lidar_cloud(np.vstack([room, passer_by])))))
+    driving_cells = int(m._grid.seen.sum())
+    assert driving_cells > 0, "on the mission, the revolutions land in the map"
+    assert m._grid.value_at(2.5, 0.0) == 100, "the wall of the room is mapped while driving"
+
+    # -- exploration complete: refrozen, for good ---------------------------
+    asyncio.run(m.handle_explore_done(Bool(data=True)))
+    assert m._mission_frozen and m._mission_over
+    for k in range(20):
+        asyncio.run(m.handle_odom(_odom(0.30 + 0.05 * k, 0.0)))    # even still rolling
+        asyncio.run(m.handle_lidar(_cloud(_lidar_cloud(np.vstack([room, passer_by])))))
+        asyncio.run(m.handle_camera_floor(_cloud(np.array([[3.0, 0.0, 0.0]], dtype=np.float32))))
+    assert int(m._grid.seen.sum()) == driving_cells, (
+        f"{int(m._grid.seen.sum()) - driving_cells} cells written after the mission ended")
+
+    # ... and standing still again does not re-open it: `_mission_over` is terminal
+    for _ in range(30):
+        asyncio.run(m.handle_odom(_odom(1.25, 0.0)))
+    asyncio.run(m.handle_odom(_odom(1.40, 0.0)))                   # 15 cm, three times the trigger
+    assert m._mission_frozen, "a post-mission displacement must NEVER reopen the map"
+    asyncio.run(m.handle_lidar(_cloud(_lidar_cloud(room))))
+    assert int(m._grid.seen.sum()) == driving_cells, "and nothing was written by it"
+
+    # -- the other end of a mission: somebody asked for the stop ------------
+    s = VectorCostMap()
+    s._frame = "fresh"
+    asyncio.run(s.handle_odom(_odom(0.0, 0.0)))
+    asyncio.run(s.handle_odom(_odom(0.20, 0.0)))
+    assert not s._mission_frozen
+    asyncio.run(s.handle_stop_explore_cmd(Bool(data=True)))
+    assert s._mission_frozen and s._mission_over, "explore_ctl.py stop closes the map too"
+    stopped_cells = int(s._grid.seen.sum())
+    asyncio.run(s.handle_lidar(_cloud(_lidar_cloud(room))))
+    assert int(s._grid.seen.sum()) == stopped_cells
+
+    # -- a Bool(False) is not an end of mission -----------------------------
+    n = VectorCostMap()
+    n._frame = "fresh"
+    asyncio.run(n.handle_odom(_odom(0.0, 0.0)))
+    asyncio.run(n.handle_odom(_odom(0.20, 0.0)))
+    asyncio.run(n.handle_explore_done(Bool(data=False)))
+    asyncio.run(n.handle_stop_explore_cmd(Bool(data=False)))
+    assert not n._mission_frozen and not n._mission_over, "only data=True ends a mission"
+
+    print(f"  parked: 20 revolutions + a passer-by -> {parked_cells} cells; after 6 cm -> "
+          f"{driving_cells} cells and the wall at 2.5 m mapped; after 'exploration complete' -> "
+          f"0 new cells (20 more revolutions), and 15 cm of later motion reopens nothing")
+
+
+def test_the_two_freezes_compose() -> None:
+    """The pre-mission freeze and the relocalization freeze are independent
+    questions with independent answers, OR-ed into one gate: neither may cancel
+    the other. PERSISTENT_MAP=1 flights are the B arm and still hold both."""
+    m = VectorCostMap()
+    # a PERSISTENT_MAP=1 boot: lidar_odometry is still searching for the flat
+    asyncio.run(m.handle_reloc_frame(_reloc("searching")))
+    assert m._frozen and m._mission_frozen, "both freezes are down at boot"
+    # rolling during the search proves nothing: with no frame settled there is
+    # no grid to write and no reference to measure against.
+    for k in range(4):
+        asyncio.run(m.handle_odom(_odom(0.10 * k, 0.0)))
+    assert m._grid is None and m._mission_frozen and m._write_frozen()
+    # the verdict lands. It lifts ITS OWN flag only, and the departure reference
+    # is re-taken in the frame now settled (a late relocalization moves the
+    # whole pose stream, and metres of frame jump are not metres driven).
+    asyncio.run(m.handle_reloc_frame(_reloc("fresh")))
+    assert not m._frozen, "the verdict lifts the relocalization freeze"
+    assert m._mission_frozen and m._write_frozen(), "a verdict is not a departure"
+    assert m._boot_xy is None, "the reference is re-taken in the settled frame"
+    for _ in range(10):
+        asyncio.run(m.handle_odom(_odom(0.30, 0.0)))       # parked in the new frame
+    assert m._grid is not None and int(m._grid.seen.sum()) == 0, "a trusted pose, parked: 0 cells"
+    # NOW it departs: both lifted, the map writes
+    asyncio.run(m.handle_odom(_odom(0.30 + MISSION_START_M + 0.01, 0.0)))
+    assert not m._write_frozen()
+    assert int(m._grid.seen.sum()) > 0, "both lifted -> body_clear writes again"
+
+    # mid-mission, relocalization goes searching again: it shuts the gate on
+    # its OWN flag and leaves the mission flag alone - and lifting it again
+    # does not have to re-earn the 5 cm.
+    written = int(m._grid.seen.sum())
+    asyncio.run(m.handle_reloc_frame(_reloc("searching")))
+    assert m._frozen and not m._mission_frozen and m._write_frozen()
+    asyncio.run(m.handle_odom(_odom(1.0, 0.0)))
+    assert int(m._grid.seen.sum()) == written, "an untrusted pose writes nothing"
+    asyncio.run(m.handle_reloc_frame(_reloc("fresh")))
+    assert not m._write_frozen(), "the pose is trusted again and the mission never stopped"
+
+    # the end of the mission outranks a later relocalization verdict: the
+    # terminal latch is not something a reloc line can lift.
+    asyncio.run(m.handle_explore_done(Bool(data=True)))
+    asyncio.run(m.handle_reloc_frame(_reloc("searching")))
+    asyncio.run(m.handle_reloc_frame(_reloc("fresh")))
+    assert not m._frozen and m._mission_frozen and m._write_frozen(), (
+        "a relocalization verdict must never reopen a finished mission")
+    print("  reloc x mission: 2 flags, 1 gate - a verdict never opens a parked map, a search "
+          "never ends a mission, and the end of the mission outranks both")
+
+
+def test_the_mission_signals_cross_the_process_boundary() -> None:
+    """The two refreeze channels must land on the topics the rest of the stack
+    already uses - not on a private one, and not on a random `short_id` topic.
+
+    dimOS gives a stream the canonical `/<name>` topic only while (name, type)
+    is unique across the blueprint; declare the same name with a DIFFERENT
+    message class and every module on it silently gets a random topic instead.
+    So: same Bool class as the explorer's own, and the stop channel resolved
+    exactly as tools/explore_ctl.py resolves it, on both buses."""
+    from dimos.core.coordination.blueprints import BlueprintAtom
+    from dimos.core.transport_factory import transport_topic
+    from vector_dimos import explorer2 as e2
+
+    cm = {(s.name, s.type): s.direction for s in BlueprintAtom.create(VectorCostMap, {}).streams}
+    assert cm[("explore_done", Bool)] == "in" and cm[("stop_explore_cmd", Bool)] == "in"
+    ex = {(s.name, s.type): s.direction for s in BlueprintAtom.create(e2.Explorer2, {}).streams}
+    assert ex[("explore_done", Bool)] == "out", "explorer2 is the producer of the completion"
+    assert ex[("stop_explore_cmd", Bool)] == "in", "and a consumer of the stop, like us"
+    for name in ("explore_done", "stop_explore_cmd"):
+        types = {t for (n, t) in list(cm) + list(ex) if n == name}
+        assert types == {Bool}, f"{name} declared with {len(types)} classes -> random topics: {types}"
+
+    # A unique (name, type) is what buys the canonical topic; from there dimOS
+    # derives the wire name per bus. Known output: the very string
+    # tools/explore_ctl.py puts the operator's and the watchdog's stop on.
+    from dimos.core.transport_factory import zenoh_key_expr
+    from dimos.protocol.pubsub.impl.lcmpubsub import Topic as LCMTopic
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
+    import explore_ctl
+
+    assert transport_topic("/stop_explore_cmd") == "/stop_explore_cmd"
+    derived = {"lcm": str(LCMTopic("/stop_explore_cmd", Bool)),
+               "zenoh": zenoh_key_expr("/stop_explore_cmd", Bool.msg_name)}
+    for bus, want in derived.items():
+        os.environ["TRANSPORT"] = bus
+        assert explore_ctl.topic("stop") == want, f"{bus}: {explore_ctl.topic('stop')} != {want}"
+    os.environ.pop("TRANSPORT", None)
+    print(f"  explore_done: Out(explorer2) -> In(costmap), one Bool class, topic /explore_done; "
+          f"stop_explore_cmd: the module lands on {derived['lcm']} / {derived['zenoh']} - "
+          "exactly where explore_ctl.py publishes")
 
 
 def test_revolution_cost() -> None:
@@ -469,6 +672,9 @@ if __name__ == "__main__":
               test_checkpoint_retention_survives_midnight,
               test_camera_point_at_the_lidar_height_stays_a_camera_point,
               test_camera_rays_start_at_the_camera_not_the_base,
+              test_the_map_writes_only_during_the_mission,
+              test_the_two_freezes_compose,
+              test_the_mission_signals_cross_the_process_boundary,
               test_revolution_cost):
         print(t.__name__); t()
     print("TEST PASSED")

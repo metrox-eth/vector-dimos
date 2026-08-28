@@ -1187,11 +1187,22 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
         listens to it (stop, escape 0.20 m in reverse, abandon the goal); the
         contact switches publish on the same stream, and a second producer on
         one stream is how this stack is wired.
+
+        Extra Out: `explore_done` - the end of the mission on the bus (28/08).
         """
 
         config: Explorer2Config
 
         bump: Out[Bool]
+        # The end of the mission, said OUT LOUD on the bus. Nothing announced it
+        # before: the loop set exploration_active False, logged one line and
+        # broke, so every other process had to infer the end from silence -
+        # searched 28/08 and there is no other producer, no status stream, no
+        # upstream Out on this end. VectorCostMap subscribes to it and refreezes
+        # the map (a parked rover with a spinning lidar thickens obstacles and
+        # engraves passers-by). ONE publish per run, and only on this exit: the
+        # explicit stops already cross the boundary on `stop_explore_cmd`.
+        explore_done: Out[Bool]
 
         def __init__(self, **kwargs: _Any) -> None:
             super().__init__(**kwargs)
@@ -1256,6 +1267,11 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
                 if target is None:
                     logger.info(f"exploration complete: no reachable frontier left "
                                 f"({state.targets_issued} targets, {elapsed_ms:.0f} ms)")
+                    # said on the bus BEFORE the loop exits: the consumer that
+                    # cares (the costmap) has to stop writing at this instant,
+                    # not whenever someone notices the goals stopped coming.
+                    if self.explore_done.transport is not None:
+                        self.explore_done.publish(Bool(data=True))
                     self.exploration_active = False
                     break
 

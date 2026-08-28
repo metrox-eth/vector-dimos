@@ -34,6 +34,14 @@ The sonar brakes and the contact switches protect - neither leaves a trace in
 the map. What the body drove over (body_clear) is still cleared: that one is a
 physical certainty, not a sensor reading.
 
+Mission doctrine (metrox, 28/08 18:44): the map only writes DURING the mission.
+Nothing before ~1 s before the rover physically departs, nothing after
+exploration ends - a rover parked with a spinning lidar thickens the obstacles
+around its one viewpoint and engraves whoever walks past while it waits. Same
+freeze machinery as the relocalization one, second flag, one gate
+(`_write_frozen`): opened by 5 cm of real displacement, closed for good by the
+end of the exploration.
+
 Numbers (HIT_CAP, FREE_FLOOR, OCCUPIED_AT) are a starting point to be tested.
 """
 
@@ -54,6 +62,7 @@ from dimos.msgs.geometry_msgs.PoseStamped import PoseStamped
 from dimos.msgs.nav_msgs.OccupancyGrid import OccupancyGrid
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.utils.logging_config import setup_logger
+from dimos_lcm.std_msgs import Bool
 
 from vector_dimos import persistent_map
 
@@ -95,6 +104,11 @@ CHECKPOINT_DIR = persistent_map.CHECKPOINT_DIR
 PROMOTE_EVERY_S = 300.0      # the persistent map is refreshed this often (and on a clean stop)
 PROMOTE_MIN_CELLS = 2000     # a run that mapped almost nothing never replaces the saved flat
 FRAME_DECISION_S = 20.0      # if no relocalization verdict arrives by then, start fresh as before
+MISSION_START_M = 0.05       # the map opens when the rover has moved this far from its BOOT pose.
+                             # metrox, 28/08 18:44: nothing may be written before ~1 s before the
+                             # rover physically departs. Measuring the displacement buys that
+                             # without a clock - the wait accumulates nothing however long it
+                             # lasts, and the first useful revolution leaves with the rover.
 WALLED_IN_MIN_M2 = 3.0       # below this reachable free area the map is a prison, not a flat
                              # (explorer2's WALLED-IN threshold) - such a map is never promoted
 
@@ -501,17 +515,23 @@ class VectorCostMap(Module):
     """Replaces dimOS's CostMapper on VECTOR. Ins: `lidar` (world cloud from
     lidar_odometry: lidar returns tagged with z = LIDAR_Z_M exactly, camera
     obstacles at their true height - 0.37 m included, see `lidar_returns`),
-    `camera_floor` (world floor samples, z = 0), `odom` (lidar pose in world).
+    `camera_floor` (world floor samples, z = 0), `odom` (lidar pose in world),
+    `explore_done` + `stop_explore_cmd` (the two ways a mission ends).
     Out: `global_costmap` (the stream name the planner and the explorer
     already listen to).
 
     The lidar and the camera are the only writers: the sonar and the contact
-    switches are reflexes, not mappers (sensor doctrine, 25/08)."""
+    switches are reflexes, not mappers (sensor doctrine, 25/08) - and they only
+    write between departure and the end of exploration (mission doctrine,
+    28/08). Under EXPLORER_V2=0 the 25-26/08 explorer publishes no
+    `explore_done`, so that arm refreezes on `stop_explore_cmd` only."""
 
     lidar: In[PointCloud2]
     camera_floor: In[PointCloud2]
     odom: In[PoseStamped]
     reloc_frame: In[PoseStamped]    # lidar_odometry's verdict: which frame this run lives in, and when to freeze
+    explore_done: In[Bool]          # explorer2 reached "no reachable frontier left": the mission is over
+    stop_explore_cmd: In[Bool]      # the same end, ASKED for (explore_ctl.py stop, the speed watchdog, the deck)
     global_costmap: Out[OccupancyGrid]
 
     def __init__(self, world_frame: str = "world", **kwargs: Any) -> None:
@@ -529,6 +549,16 @@ class VectorCostMap(Module):
         # place and the persistent map could never be continued.
         self._frame: str | None = None
         self._frozen = False                    # relocalizing: write NOTHING, never corrupt the map
+        # The PRE-MISSION freeze, laid down at construction (metrox, 28/08
+        # 18:44). Same machinery as the relocalization one, second flag: a
+        # rover parked with a spinning lidar WRITES the room it is waiting in -
+        # every revolution taken from that one spot thickens the obstacles
+        # around it, and anybody who walks past while it waits is engraved into
+        # the flat. The map opens when the rover physically leaves
+        # (MISSION_START_M) and closes for good when exploration ends.
+        self._mission_frozen = True
+        self._mission_over = False              # terminal: no later stillness ever reopens the map
+        self._boot_xy: tuple[float, float] | None = None   # the departure reference, in the settled frame
         self._t0 = time.monotonic()
         self._last_promote = time.monotonic()
         self._keepout_mtime = 0.0
@@ -564,8 +594,9 @@ class VectorCostMap(Module):
         if self._grid is None:
             self._grid = ScoredGrid(centre=self._pose_xy)
             logger.info(f"costmap: fresh grid centred on ({self._pose_xy[0]:+.2f}, {self._pose_xy[1]:+.2f})")
-        if self._frozen:
-            return                  # the pose is not trusted: not even body_clear
+        self._check_departure()
+        if self._write_frozen():
+            return                  # frozen: not even body_clear
         yaw = self._pose_yaw
         lc = self._last_clear
         if (lc is None
@@ -573,6 +604,70 @@ class VectorCostMap(Module):
                 or abs((yaw - lc[2] + np.pi) % (2 * np.pi) - np.pi) > np.radians(10.0)):
             self._last_clear = (self._pose_xy[0], self._pose_xy[1], yaw)
             self._grid.body_clear(self._last_clear)
+
+    def _write_frozen(self) -> bool:
+        """The ONE write gate: a hit, a miss or a body_clear needs BOTH freezes
+        lifted.
+
+        Two flags, one gate, and they never cancel each other - they answer
+        different questions and are lifted by different events. `_frozen` asks
+        "is the pose trustworthy?" (lifted by a relocalization verdict);
+        `_mission_frozen` asks "is the rover on its mission?" (lifted by 5 cm of
+        real displacement, laid back down when exploration ends). A
+        PERSISTENT_MAP=1 flight holds both at boot and needs both answers before
+        one cell is written; a PERSISTENT_MAP=0 flight - the default since
+        28/08 18:43 - only ever holds the mission one.
+        """
+        return self._frozen or self._mission_frozen
+
+    def _check_departure(self) -> None:
+        """Lift the pre-mission freeze once the rover has left its boot pose.
+
+        Cheap by design: two subtractions on a pose handle_odom already has,
+        and only until it fires once. `_mission_over` makes the end terminal -
+        a rover that stops at the end of its run, or is nudged an hour later,
+        does not reopen the map.
+        """
+        if self._mission_over or not self._mission_frozen or self._pose_xy is None:
+            return
+        if self._boot_xy is None:
+            self._boot_xy = self._pose_xy
+            return
+        dx = self._pose_xy[0] - self._boot_xy[0]
+        dy = self._pose_xy[1] - self._boot_xy[1]
+        if dx * dx + dy * dy < MISSION_START_M * MISSION_START_M:
+            return
+        self._mission_frozen = False
+        logger.info(f"costmap: the rover left its boot pose ({math.hypot(dx, dy) * 100:.0f} cm) - "
+                    "map writing OPEN for the mission")
+
+    def _end_of_mission(self, why: str) -> None:
+        """The mission is over: refreeze, for the rest of the run.
+
+        Past this point the rover is a parked rover again, and a parked rover
+        only ever thickens what it can see from one spot. Nothing is purged:
+        the pre-mission freeze already guaranteed the map holds the mission and
+        nothing else.
+        """
+        if self._mission_over:
+            return
+        self._mission_over = True
+        self._mission_frozen = True
+        logger.warning(f"costmap: {why} - map writing frozen for the rest of the run "
+                       "(no hit, no miss, no body_clear); the map keeps what the mission saw")
+
+    async def handle_explore_done(self, msg: Bool) -> None:
+        """explorer2 ran out of reachable frontier - the only exit of the
+        exploration loop that is not somebody asking it to stop."""
+        if bool(getattr(msg, "data", False)):
+            self._end_of_mission("exploration complete")
+
+    async def handle_stop_explore_cmd(self, msg: Bool) -> None:
+        """The same end, asked for: tools/explore_ctl.py stop, the speed
+        watchdog's own stop, the deck's stop button. This channel already
+        crossed the process boundary - it costs one subscription."""
+        if bool(getattr(msg, "data", False)):
+            self._end_of_mission("exploration stopped")
 
     async def handle_reloc_frame(self, msg: PoseStamped) -> None:
         """lidar_odometry publishes its frame state on every revolution:
@@ -605,11 +700,18 @@ class VectorCostMap(Module):
             self._decide("persistent", "lidar_odometry relocalized during the boot grace window")
         if self._frozen:
             self._frozen = False
-            logger.info(f"costmap: relocalized, map writing resumed in the {self._frame} frame")
+            logger.info(f"costmap: relocalized, map writing resumed in the {self._frame} frame"
+                        + (" - but the pre-mission freeze still holds: the rover has not left yet"
+                           if self._mission_frozen else ""))
 
     def _decide(self, frame: str, why: str) -> None:
         """Settle the frame this run writes in - once, and out loud."""
         self._frame = frame
+        # The departure reference belongs to a FRAME. A late relocalization
+        # moves the whole pose stream into the persistent frame, and a boot pose
+        # kept from the fresh one would read as metres of "departure" without a
+        # wheel turning. Re-taken on the next odom, in the frame now settled.
+        self._boot_xy = None
         if frame == "persistent":
             try:
                 self._grid = ScoredGrid.load(persistent_map.MAP_PATH)
@@ -653,7 +755,7 @@ class VectorCostMap(Module):
         return camera_xy(self._pose_xy, self._pose_yaw)
 
     async def handle_camera_floor(self, msg: PointCloud2) -> None:
-        if self._grid is None or self._frozen:
+        if self._grid is None or self._write_frozen():
             return
         pts = np.asarray(msg.as_numpy()[0], dtype=np.float64)
         if len(pts):
@@ -662,7 +764,7 @@ class VectorCostMap(Module):
                 self._grid.camera_rays(pts, self._camera_xy())
 
     async def handle_lidar(self, msg: PointCloud2) -> None:
-        if self._grid is None or self._pose_xy is None or self._frozen:
+        if self._grid is None or self._pose_xy is None or self._write_frozen():
             return
         pts = np.asarray(msg.as_numpy()[0], dtype=np.float64)
         if len(pts) == 0:

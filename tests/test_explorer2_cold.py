@@ -633,10 +633,27 @@ else:
     START = (1.0, 3.0)          # 1.00 m from it
     STEP_M = 0.4                # what the rover covers per goal: > GOAL_PROGRESS_M
 
+    FRONTIER_LEFT = [True]      # flipped by `explored()`: next_target then returns None
+
     def stub_target(costmap, odom, state, **kwargs):
+        if not FRONTIER_LEFT[0]:
+            return None         # "exploration complete: no reachable frontier left"
         t = PoseStamped(ts=0.0, frame_id="world")
         t.position.x, t.position.y = STUB_GOAL
         return t
+
+    class DoneOut:
+        """The `explore_done` Out, recording what the module publishes on it.
+
+        `transport` None reproduces a module built outside a blueprint - the
+        same guard `bump` uses."""
+
+        def __init__(self, wired=True):
+            self.transport = object() if wired else None
+            self.sent = []
+
+        def publish(self, msg):
+            self.sent.append(bool(getattr(msg, "data", False)))
 
     class Planner:
         """The goal_request Out plus the planner behind it: `script` says what
@@ -670,10 +687,15 @@ else:
     def last(ex):
         ex.exploration_active = False
 
+    def explored(ex):
+        """The flat is fully mapped: the NEXT next_target returns None."""
+        FRONTIER_LEFT[0] = False
+
     def acts(*fns):
         return lambda ex: [f(ex) for f in fns]
 
-    def run_loop(script):
+    def run_loop(script, wired=True):
+        FRONTIER_LEFT[0] = True
         ex = object.__new__(Explorer2)
         ex._state = ExploreState()
         ex._last_goal = None
@@ -687,6 +709,7 @@ else:
         ex.latest_odometry = pose(*START)
         ex.config = type("Cfg", (), {"goal_timeout": GOAL_TIMEOUT_S})()
         ex.bump = type("Bump", (), {"transport": None})()
+        ex.explore_done = DoneOut(wired)
         ex.goal_request = Planner(script)
         ex.goal_request.explorer = ex
         real_next_target = _explorer2_module.next_target
@@ -726,6 +749,24 @@ else:
     ex, planner, ended = run_loop({1: gave_up, 2: acts(gave_up, last)})
     check("two answered goals in a row are both credited (the swallow is one deep)",
           len(ex._state.failed) == 2, f"{ex._state.failed}")
+
+    # -- the end of the mission, SAID on the bus (2026-08-28 18:44) ----------
+    # Before this, the loop set exploration_active False, logged one line and
+    # broke: nothing crossed the process boundary, so the costmap had to infer
+    # the end from silence and kept writing the room around a rover that had
+    # stopped exploring - every revolution from one parked spot thickening the
+    # obstacles, and every passer-by engraved.
+    ex, planner, ended = run_loop({1: acts(explored, gave_up)})
+    check("the loop ends on 'no reachable frontier left'", ex.exploration_active is False)
+    check("and explore_done=True goes out exactly once",
+          ex.explore_done.sent == [True], f"{ex.explore_done.sent}")
+    ex, planner, ended = run_loop({1: acts(gave_up, last)})
+    check("a run stopped from outside publishes NO explore_done "
+          "(that end already crosses on stop_explore_cmd)",
+          ex.explore_done.sent == [], f"{ex.explore_done.sent}")
+    ex, planner, ended = run_loop({1: acts(explored, gave_up)}, wired=False)
+    check("an unwired Out is never published to, and does not crash the loop",
+          ex.explore_done.sent == [] and ex.exploration_active is False)
 
 
 print(f"{OK} OK, {KO} KO")
