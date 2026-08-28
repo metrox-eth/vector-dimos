@@ -21,7 +21,8 @@ input from the dimOS recording and runs the real function over it:
   pose      the `odom` row nearest before the decision, quaternion included.
   state     rebuilt by replaying EVERY decision of the run in order, since
             ExploreState is only ever written by next_target itself (plus the
-            loop's note_failed, which the log reports as "planner gave up").
+            loop's note_failed, which the log reports as "planner gave up" or
+            as a goal timeout that closed too little ground: "... excluded").
             Decision N therefore sees exactly the memory decision N saw.
 
 The cross-check that this is the real decision and not a reconstruction: the
@@ -172,6 +173,15 @@ def read_log(path: str) -> list[LogEvent]:
         if not d.get("logger", "").endswith("explorer2.py"):
             continue
         ev, t = d.get("event", ""), _epoch(d["timestamp"])
+        if ev.startswith("goal timeout"):
+            # Not a decision, the next line is - but the timeout that closed
+            # less than GOAL_PROGRESS_M excludes the goal (explorer2 calls
+            # note_failed there too), so it IS a write to the memory. Tested
+            # before the "goal N:" branch: it starts with "goal " and carries a
+            # colon, so it would otherwise be parsed as a goal (int("timeout")).
+            if ": excluded" in ev:
+                out.append(LogEvent(t=t, kind="failed", text=ev))
+            continue
         if ev.startswith("goal ") and ":" in ev:
             head, rest = ev.split(":", 1)
             n = int(head.split()[1])
@@ -194,8 +204,6 @@ def read_log(path: str) -> list[LogEvent]:
             out.append(LogEvent(t=t, kind="wait", text=ev))
         elif ev.startswith("born cornered"):
             out.append(LogEvent(t=t, kind="back_off", text=ev))
-        elif ev.startswith("goal timeout"):
-            continue      # not a decision, the next line is
     return out
 
 
@@ -366,10 +374,15 @@ def replay(rec: Recording, events: list[LogEvent], tuning: Tuning,
     idx = 0
     for ev in events:
         if ev.kind == "failed":
-            # the loop's own write, reported by the log line
+            # The loop's own write, reported by the log line. Same arguments
+            # explorer2._note_failed passes: where the rover STOOD and the
+            # costmap it held, the two reopening triggers of the exclusion.
             goal = _last_goal(events, ev.t)
             if goal is not None:
-                state.note_failed(goal[0], goal[1], ev.t)
+                stood = rec.pose_at(ev.t)
+                state.note_failed(goal[0], goal[1],
+                                  (stood.position.x, stood.position.y),
+                                  rec.costmap_at(ev.t), tuning.failed_goal_radius_m)
             continue
         if ev.kind not in ("goal", "none", "wait", "back_off"):
             continue
