@@ -14,6 +14,7 @@ are inherited unchanged.
 
 from __future__ import annotations
 
+from dimos.core.core import rpc
 from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
 from dimos.utils.logging_config import setup_logger
 
@@ -52,6 +53,12 @@ class VectorCamera(RealSenseCamera):
         self._motion_sensor = motion_sensor
         logger.info(f"VectorCamera IMU on the main device handle: gyro {gyro.fps()} Hz, accel {accel.fps()} Hz")
 
+    # @rpc is not decoration for its own sake: RealSenseCamera.stop carries it,
+    # and an override that drops it falls out of the class's rpcs table.
+    # dimOS then proxies the call by pickling the module across the worker
+    # pipe, which dies on the pipeline's lock ('cannot pickle _thread.lock'),
+    # so the camera is never stopped and the device stays streaming.
+    @rpc
     def stop(self) -> None:  # type: ignore[override]
         if self._motion_sensor is not None:
             try:
