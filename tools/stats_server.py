@@ -383,9 +383,14 @@ def _zenoh_listener():
     except ImportError:
         return
     def cb(sample):
+        # Copy the payload ONLY when the organ logic reads it (reloc_frame).
+        # Copying every image and cloud made this callback slow enough that
+        # zenoh dropped the big samples entirely: the panel then showed small
+        # topics (imu, odom) alive and every heavy organ (camera, lidar) dead
+        # (measured 2026-08-28: spy saw 14 channels, the panel heard 3).
         try:
             channel = "/" + str(sample.key_expr).lstrip("/")
-            data = bytes(sample.payload)
+            data = bytes(sample.payload) if "reloc_frame" in channel else b""
         except Exception:
             return
         _on_bus_message("zenoh", channel, data)
