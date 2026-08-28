@@ -17,12 +17,29 @@ Known input -> known output, in metres:
      viewpoints, then one more revolution from the spot it is parked on ->
      still HIT_CAP, still occupancy 100 (the viewpoint rule caps the
      increase, it never lowers a score)
+  8. the torn save (2026-08-28): the scratch file of an interrupted checkpoint
+     is not named .npz, so no .npz scan can pick a truncated map
+  9. midnight (2026-08-28): 23xxxx and 00xxxx checkpoints in one run
+     directory -> the pruner keeps the freshest by mtime, not the oldest by name
+ 10. the person at 0.37 m (2026-08-28): a camera point exactly at the lidar's
+     tag height stays a CAMERA point - LOW layer, moving-object gate, and the
+     camera can take it back
+ 11. the mount offset (2026-08-28): camera rays start 0.20 m behind the base,
+     where the camera is - the carve band opens at 0.45 m, not 0.60 m
 """
+
+import asyncio
+import math
+import os
+import tempfile
+import time
 
 import numpy as np
 
+from vector_dimos import persistent_map
 from vector_dimos.costmap2d import (
-    FREE_FLOOR, HIT_CAP, LOW_HIT_PROTECT_S, OCCUPIED_AT, ScoredGrid,
+    CAMERA_X_BASE_M, FREE_FLOOR, HIT_CAP, LIDAR_Z_M, LOW_HIT_PROTECT_S, OCCUPIED_AT,
+    SAVE_TMP_SUFFIX, ScoredGrid, VectorCostMap, camera_xy, lidar_returns, prune_checkpoints,
 )
 
 LEG = np.array([[1.0, 0.0]])
@@ -30,6 +47,12 @@ LEG = np.array([[1.0, 0.0]])
 
 def fresh() -> ScoredGrid:
     return ScoredGrid(span_m=6.0)
+
+
+def _cloud(pts: np.ndarray):
+    """A world cloud on the wire, float32 like the real one."""
+    from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
+    return PointCloud2.from_numpy(pts.astype(np.float32), frame_id="world", timestamp=time.time())
 
 
 def test_leg_needs_two_viewpoints_and_ray_is_free() -> None:
@@ -298,6 +321,125 @@ def test_walled_in_map_is_measured_as_a_prison() -> None:
     print(f"  1x1 m box -> {walled:.1f} m2 (prison, promotion refused); 5 m room -> {open_m2:.1f} m2 (fine)")
 
 
+def test_torn_save_is_invisible_to_every_npz_scan() -> None:
+    """28/08 audit: the scratch file of the atomic save was called
+    `<name>.npz.tmp.npz` (numpy appends .npz to any other suffix), so a save cut
+    by a battery death left a TRUNCATED file that every `.npz` scan accepted -
+    and being the freshest by mtime it won."""
+    d = tempfile.mkdtemp()
+    g = fresh()
+    g.lidar_revolution(LEG, (0.0, 0.0)); g.lidar_revolution(LEG, (0.0, 0.15))
+    path = os.path.join(d, "costmap_120000.npz")
+    g.save(path, (0.0, 0.0))
+    assert os.listdir(d) == ["costmap_120000.npz"], "a finished save leaves the map and nothing else"
+    assert not SAVE_TMP_SUFFIX.endswith(".npz")
+    # the next save dies mid-write: its scratch file stays, freshest on disk
+    torn = os.path.join(d, "costmap_120030.npz" + SAVE_TMP_SUFFIX)
+    with open(torn, "wb") as fh:
+        fh.write(b"PK\x03\x04truncated")
+    os.utime(torn, (time.time() + 60, time.time() + 60))
+    scan = sorted(f for f in os.listdir(d) if f.endswith(".npz"))    # the shape of every scan in the tree
+    assert scan == ["costmap_120000.npz"], f"a torn write must not look like a map: {scan}"
+    assert persistent_map.newest_checkpoint(d) == path
+    assert ScoredGrid.load(path).value_at(1.0, 0.0) == 100, "the map picked is the finished one"
+    # the pre-fix name, same torn bytes: the scan takes it, and it is the newest
+    old_style = "costmap_120030.npz.tmp.npz"
+    os.rename(torn, os.path.join(d, old_style))
+    assert sorted(f for f in os.listdir(d) if f.endswith(".npz")) == ["costmap_120000.npz", old_style]
+    print(f"  torn save named *{SAVE_TMP_SUFFIX} -> invisible to a .npz scan (as *.npz.tmp.npz: picked, and newest)")
+
+
+def test_checkpoint_retention_survives_midnight() -> None:
+    """28/08 audit: checkpoints are stamped %H%M%S and the run directory once,
+    so a run across midnight holds 23xxxx and 00xxxx together. Sorted by NAME
+    the two files just written come first, and the pruner deleted exactly
+    those - every checkpoint of the rest of the night."""
+    d = tempfile.mkdtemp()
+    names = ["costmap_235900.npz", "costmap_235930.npz", "costmap_000000.npz", "costmap_000030.npz"]
+    for i, f in enumerate(names):                      # written in this order, 30 s apart
+        p = os.path.join(d, f)
+        with open(p, "wb") as fh:
+            fh.write(b"x")
+        os.utime(p, (1.0e9 + 30 * i, 1.0e9 + 30 * i))
+    pre_fix_deletes = sorted(f for f in os.listdir(d) if f.endswith(".npz"))[:-2]
+    assert pre_fix_deletes == names[2:], "the name sort deletes the two files written after midnight"
+    scratch = "costmap_000100.npz" + SAVE_TMP_SUFFIX
+    with open(os.path.join(d, scratch), "wb") as fh:
+        fh.write(b"x")
+    gone = prune_checkpoints(d, keep=2)
+    left = sorted(os.listdir(d))
+    assert gone == 2 and [f for f in left if f.endswith(".npz")] == sorted(names[2:]), left
+    assert scratch in left, "a scratch file is not a checkpoint: never counted, never pruned"
+    assert persistent_map.newest_checkpoint(d) == os.path.join(d, "costmap_000030.npz")
+    print("  23:59 + 00:00 checkpoints, keep 2 -> the two MIDNIGHT ones survive (by name: they were the deleted ones)")
+
+
+def test_camera_point_at_the_lidar_height_stays_a_camera_point() -> None:
+    """28/08 audit: the two sensors share one cloud and the lidar's returns are
+    tagged by height (z = 0.37 to the last bit of a float32). Read as a 5 mm
+    BAND, that tag stole every camera point between 0.365 and 0.375 m: written
+    into the lidar layer past the two-frame moving-object gate, and beyond the
+    reach of camera_rays, which only carves `low`."""
+    person_z = 0.372                                  # a person's side, 0.372 m above the floor
+    assert abs(person_z - LIDAR_Z_M) < 0.005, "this is the height the old 5 mm window claimed"
+    assert not lidar_returns(np.array([[1.0, 0.0, person_z]]))[0]
+    assert lidar_returns(np.array([[1.0, 0.0, np.float64(np.float32(LIDAR_Z_M))]]))[0], "a real lidar return, after the float32 round trip"
+    m = VectorCostMap()
+    m._frame, m._grid, m._pose_yaw = "fresh", fresh(), 0.0
+    old = time.monotonic() - 10.0                     # the hits are outside the 3 s protection
+    cloud = np.array([[2.0, 0.0, np.float32(LIDAR_Z_M)], [1.0, 0.0, person_z]], dtype=np.float32)
+    msg = _cloud(cloud)
+    for pose in ((0.0, 0.0), (0.0, 0.0), (0.0, 0.15)):          # two viewpoints, three frames
+        m._pose_xy = pose
+        asyncio.run(m.handle_lidar(msg))
+    gx, gy = m._grid.cell(np.array([1.0]), np.array([0.0]))
+    assert m._grid.low[gy[0], gx[0]] == 2, "the person is in the LOW layer, gated and retractable"
+    assert m._grid.lidar[gy[0], gx[0]] <= 0, "the lidar layer never claimed a cell the lidar never returned"
+    assert m._grid.value_at(1.0, 0.0) == 100
+    m._grid._last_low_hit[:] = old                    # the person walked off: nothing confirms the cell any more
+    m._pose_xy = (0.0, 0.0)                           # back on the axis, looking at the floor 3 m ahead
+    asyncio.run(m.handle_camera_floor(_cloud(np.array([[3.0, 0.0, 0.0]], dtype=np.float32))))
+    assert m._grid.value_at(1.0, 0.0) == 0, "the camera looked through it: a camera claim can be taken back"
+    print(f"  camera point at {person_z} m -> LOW layer (lidar layer untouched), and one look through it -> free")
+
+
+def test_camera_rays_start_at_the_camera_not_the_base() -> None:
+    """28/08 audit: camera_rays started at CAMERA_HEIGHT_M (0.56 m, half the
+    mount constant) but from the BASE position - 0.20 m in front of the camera,
+    while the endpoints carried the full offset. Three cells of corridor were
+    never carved, and off-axis rays swept beside the cells the camera had
+    really looked through."""
+    assert camera_xy((0.0, 0.0), 0.0) == (CAMERA_X_BASE_M, 0.0), "facing +x: the camera is 0.20 m behind"
+    x, y = camera_xy((1.0, 2.0), math.pi / 2)
+    assert abs(x - 1.0) < 1e-9 and abs(y - 1.80) < 1e-9, "turned 90 deg: the offset turns with the rover"
+    # a floor sample 3.0 m ahead of the base: the carve band (z < 0.45) is
+    # crossed 0.43 m ahead of the base, not 0.59 m - one cell resolution: 0.45 vs 0.60
+    def first_carved(origin: tuple[float, float]) -> float:
+        g = fresh()
+        g.camera_rays(np.array([[3.0, 0.0, 0.0]]), origin, now=1000.0)
+        return g.ox + np.nonzero(g.low < 0)[1].min() * g.res
+    from_camera, from_base = first_carved(camera_xy((0.0, 0.0), 0.0)), first_carved((0.0, 0.0))
+    assert abs(from_camera - 0.45) < 1e-9 and abs(from_base - 0.60) < 1e-9, (from_camera, from_base)
+    # a ghost in the 0.15 m the base-cast ray flew over, at the true camera range
+    ghost = np.array([[0.525, 0.0]])
+    m = VectorCostMap()
+    m._frame, m._grid, m._pose_xy, m._pose_yaw = "fresh", fresh(), (0.0, 0.0), 0.0
+    old = time.monotonic() - 10.0
+    m._grid.camera_obstacles(ghost, (0.0, 0.00), now=old)      # seed frame (the anti-moving-object gate)
+    m._grid.camera_obstacles(ghost, (0.0, 0.00), now=old)
+    m._grid.camera_obstacles(ghost, (0.0, 0.15), now=old)
+    assert m._grid.value_at(0.525, 0.0) == 100
+    asyncio.run(m.handle_camera_floor(_cloud(np.array([[3.0, 0.0, 0.0]], dtype=np.float32))))
+    assert m._grid.value_at(0.525, 0.0) == 0, "the ray from the camera crosses the ghost cell low"
+    g = fresh()                                                 # the same scene, ray cast from the base
+    g.camera_obstacles(ghost, (0.0, 0.00), now=old); g.camera_obstacles(ghost, (0.0, 0.00), now=old)
+    g.camera_obstacles(ghost, (0.0, 0.15), now=old)
+    g.camera_rays(np.array([[3.0, 0.0, 0.0]]), (0.0, 0.0), now=time.monotonic())
+    assert g.value_at(0.525, 0.0) == 100, "cast from the base, the same look leaves the ghost standing"
+    print(f"  floor at 3 m: carving starts at {from_camera:.2f} m from the camera vs {from_base:.2f} m from the base; "
+          "ghost at 0.53 m killed only by the camera-cast ray")
+
+
 def test_revolution_cost() -> None:
     import time
     g = fresh()
@@ -323,6 +465,10 @@ if __name__ == "__main__":
               test_fresh_hits_are_protected_from_carving, test_floor_ray_carves_the_low_corridor,
               test_camera_rays_never_touch_the_lidar_layer, test_moving_object_never_writes_the_map,
               test_walled_in_map_is_measured_as_a_prison,
+              test_torn_save_is_invisible_to_every_npz_scan,
+              test_checkpoint_retention_survives_midnight,
+              test_camera_point_at_the_lidar_height_stays_a_camera_point,
+              test_camera_rays_start_at_the_camera_not_the_base,
               test_revolution_cost):
         print(t.__name__); t()
     print("TEST PASSED")

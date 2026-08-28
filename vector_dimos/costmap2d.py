@@ -67,6 +67,7 @@ OCCUPIED_AT = 2              # two hits from two places = an obstacle
 NEW_VIEWPOINT_M = 0.10       # a hit counts only if the rover moved this much since the cell's last hit
 LOW_HIT_PROTECT_S = 3.0      # after a camera obstacle hit, that cell's LOW layer ignores floor samples this long
 LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M)
+LIDAR_Z_TOL_M = 1e-6         # and EXACTLY means exactly: the tag survives the float32 round trip to 5 nm, while the camera's own points span 0.37 m (audit 28/08 - see lidar_returns)
 LIDAR_WRITES_OBSTACLES = True   # doctrine switch: the lidar's job is anchoring the
                                 # map (SLAM), not obstacle detection - flip to False
                                 # once the camera proves its widened coverage in flight; the lidar
@@ -83,11 +84,13 @@ PUBLISH_EVERY = 5            # ~2 Hz in PILOTED mode: in teleop the planner slee
 RAY_MAX_M = 4.0              # rays are carved (misses) up to this range only: 12 m x 0.025 m steps cost 227 ms per revolution (2.3 cores at 10 Hz, 23/08 20:20)
 RAY_EVERY = 2                # carve on every other revolution; hits are taken on all
 CAMERA_HEIGHT_M = 0.56       # = lidar_odometry.CAMERA_XYZ_BASE[2] (rear mast, 24/08) - keep in sync
+CAMERA_X_BASE_M = -0.20      # = lidar_odometry.CAMERA_XYZ_BASE[0]: the camera sits 20 cm BEHIND the lidar axis - the other half of the same mount, and rays must start there too (audit 28/08 - see camera_xy)
 CARVE_Z_BAND = (0.10, 0.45)  # a camera ray crossing a cell at this height proves nothing low stands
                              # there; a higher ray flies OVER boxes (0.9 m up says nothing about a
                              # 0.3 m box) and must not erase them
 CHECKPOINT_EVERY_S = 30.0    # a crash must cost at most a minute of map
 CHECKPOINT_KEEP = 40         # 20 minutes of history
+SAVE_TMP_SUFFIX = ".part"    # the scratch file of an atomic save: NOT .npz, so no .npz scan can ever mistake a torn write for a map (audit 28/08)
 CHECKPOINT_DIR = persistent_map.CHECKPOINT_DIR
 PROMOTE_EVERY_S = 300.0      # the persistent map is refreshed this often (and on a clean stop)
 PROMOTE_MIN_CELLS = 2000     # a run that mapped almost nothing never replaces the saved flat
@@ -377,11 +380,19 @@ class ScoredGrid:
 
         Written to a sibling tmp file then renamed: the 26/08 13h00 battery
         death cut a checkpoint mid-write and the truncated .npz crashed every
-        later reader. os.replace is atomic on the same filesystem."""
-        tmp = path + ".tmp.npz"      # numpy appends .npz to any other suffix
-        np.savez_compressed(tmp, lidar=self.lidar, low=self.low, seen=self.seen, last_hit_xy=self._last_hit_xy,
-                            res=self.res, ox=self.ox, oy=self.oy, n=self.n,
-                            pose_xy=np.array(pose_xy if pose_xy else (np.nan, np.nan)), ts=time.time())
+        later reader. os.replace is atomic on the same filesystem.
+
+        The scratch file must not look like a map: it used to be named
+        `<name>.npz.tmp.npz` (numpy appends .npz to a path with any other
+        suffix), so every scan that filters on `.npz` - the retention below,
+        persistent_map.newest_checkpoint, whatever is written next - saw a torn
+        write as a candidate, and being the freshest it won (audit 28/08).
+        Handed an open FILE, numpy appends nothing: the name stays `.part`."""
+        tmp = path + SAVE_TMP_SUFFIX
+        with open(tmp, "wb") as fh:
+            np.savez_compressed(fh, lidar=self.lidar, low=self.low, seen=self.seen, last_hit_xy=self._last_hit_xy,
+                                res=self.res, ox=self.ox, oy=self.oy, n=self.n,
+                                pose_xy=np.array(pose_xy if pose_xy else (np.nan, np.nan)), ts=time.time())
         os.replace(tmp, path)
         return os.path.getsize(path)
 
@@ -434,12 +445,65 @@ def _zone_summary(zones: list[dict], forbidden_cells: int) -> str:
     return "; ".join(parts)
 
 
+def lidar_returns(pts: np.ndarray) -> np.ndarray:
+    """Which points of the mixed `lidar` cloud actually come from the lidar.
+
+    lidar_odometry stacks two sensors on one channel and tags the lidar's by
+    height: its returns are built flat (z = 0) and lifted by LIDAR_HEIGHT_M,
+    so they carry LIDAR_Z_M to the last bit of a float32. The camera's points
+    carry their TRUE height, anywhere from the floor to 1.30 m - 0.37 m
+    included - so the tag has to be read as one exact value.
+
+    28/08: it was read as a 5 mm band, so every camera point between 0.365 and
+    0.375 m took the lidar branch - written into the `lidar` layer past the
+    two-frame moving-object gate, and out of reach of camera_rays, which only
+    carves `low`. A person's side at 0.37 m became a permanent wall.
+    """
+    return np.abs(pts[:, 2] - LIDAR_Z_M) < LIDAR_Z_TOL_M
+
+
+def camera_xy(pose_xy: tuple[float, float], yaw: float) -> tuple[float, float]:
+    """Where the camera itself is, from the base pose - the mount offset is on
+    the rover's own x axis, so it turns with the rover.
+
+    28/08: camera_rays started its rays at CAMERA_HEIGHT_M (half the mount
+    constant) but cast them from the base position, i.e. 0.20 m in FRONT of
+    the camera, while the endpoints carried the full offset (lidar_odometry
+    applies it). For a floor sample 3.0 m ahead the carve band then opened
+    0.59 m ahead of the base instead of 0.43 m - three cells of corridor never
+    carved - and an off-axis ray swept a band 0.1 m beside the cells the
+    camera had really looked through.
+    """
+    return (pose_xy[0] + CAMERA_X_BASE_M * math.cos(yaw),
+            pose_xy[1] + CAMERA_X_BASE_M * math.sin(yaw))
+
+
+def prune_checkpoints(run_dir: str, keep: int = CHECKPOINT_KEEP) -> int:
+    """Keep the `keep` freshest checkpoints of a run; returns how many went.
+
+    Ranked by MTIME, never by name: the files are stamped `%H%M%S` and the run
+    directory is stamped once, so a run across midnight holds 23xxxx and
+    00xxxx side by side. Sorted by name the newest file comes FIRST, so the
+    pruner deleted the checkpoint it had just written and every one after it,
+    all night (audit 28/08). mtime is also what
+    persistent_map.newest_checkpoint ranks by, so the file kept and the file
+    promoted are the same one.
+    """
+    files = [f for f in os.listdir(run_dir) if f.endswith(".npz")]
+    files.sort(key=lambda f: os.path.getmtime(os.path.join(run_dir, f)))
+    gone = files[:-keep] if keep > 0 else files
+    for f in gone:
+        os.remove(os.path.join(run_dir, f))
+    return len(gone)
+
+
 class VectorCostMap(Module):
     """Replaces dimOS's CostMapper on VECTOR. Ins: `lidar` (world cloud from
-    lidar_odometry: lidar returns at z = 0.37, camera obstacles at other
-    heights), `camera_floor` (world floor samples, z = 0), `odom` (lidar pose
-    in world). Out: `global_costmap` (the stream name the planner and the
-    explorer already listen to).
+    lidar_odometry: lidar returns tagged with z = LIDAR_Z_M exactly, camera
+    obstacles at their true height - 0.37 m included, see `lidar_returns`),
+    `camera_floor` (world floor samples, z = 0), `odom` (lidar pose in world).
+    Out: `global_costmap` (the stream name the planner and the explorer
+    already listen to).
 
     The lidar and the camera are the only writers: the sonar and the contact
     switches are reflexes, not mappers (sensor doctrine, 25/08)."""
@@ -455,6 +519,7 @@ class VectorCostMap(Module):
         self.world_frame = world_frame
         self._grid: ScoredGrid | None = None
         self._pose_xy: tuple[float, float] | None = None
+        self._pose_yaw = 0.0                    # the camera rides 0.20 m behind the base: its rays need the heading
         self._revolutions = 0
         self._ckpt_dir = os.path.join(CHECKPOINT_DIR, time.strftime("%Y%m%d-%H%M%S"))
         self._last_ckpt = time.monotonic()
@@ -490,6 +555,8 @@ class VectorCostMap(Module):
 
     async def handle_odom(self, msg: PoseStamped) -> None:
         self._pose_xy = (float(msg.position.x), float(msg.position.y))
+        q = msg.orientation
+        self._pose_yaw = float(np.arctan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)))
         if self._frame is None:
             if time.monotonic() - self._t0 < FRAME_DECISION_S:
                 return              # waiting for the relocalization verdict: create nothing yet
@@ -499,8 +566,7 @@ class VectorCostMap(Module):
             logger.info(f"costmap: fresh grid centred on ({self._pose_xy[0]:+.2f}, {self._pose_xy[1]:+.2f})")
         if self._frozen:
             return                  # the pose is not trusted: not even body_clear
-        q = msg.orientation
-        yaw = float(np.arctan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)))
+        yaw = self._pose_yaw
         lc = self._last_clear
         if (lc is None
                 or (self._pose_xy[0] - lc[0]) ** 2 + (self._pose_xy[1] - lc[1]) ** 2 > 0.03 ** 2
@@ -580,6 +646,12 @@ class VectorCostMap(Module):
         except Exception:  # noqa: BLE001
             logger.exception("costmap: keep-out zones would not reload - the previous ones stay in force")
 
+    def _camera_xy(self) -> tuple[float, float]:
+        """The ray origin for everything the CAMERA saw: the base pose is where
+        the lidar is, the camera is 0.20 m behind it (see camera_xy)."""
+        assert self._pose_xy is not None
+        return camera_xy(self._pose_xy, self._pose_yaw)
+
     async def handle_camera_floor(self, msg: PointCloud2) -> None:
         if self._grid is None or self._frozen:
             return
@@ -587,7 +659,7 @@ class VectorCostMap(Module):
         if len(pts):
             self._grid.camera_floor(pts[:, :2])
             if self._pose_xy is not None:
-                self._grid.camera_rays(pts, self._pose_xy)
+                self._grid.camera_rays(pts, self._camera_xy())
 
     async def handle_lidar(self, msg: PointCloud2) -> None:
         if self._grid is None or self._pose_xy is None or self._frozen:
@@ -595,12 +667,12 @@ class VectorCostMap(Module):
         pts = np.asarray(msg.as_numpy()[0], dtype=np.float64)
         if len(pts) == 0:
             return
-        is_lidar = np.abs(pts[:, 2] - LIDAR_Z_M) < 0.005
+        is_lidar = lidar_returns(pts)
         if not LIDAR_WRITES_OBSTACLES:
             cam = pts[~is_lidar]
             if len(cam):
                 self._grid.camera_obstacles(cam[:, :2], self._pose_xy)
-                self._grid.camera_rays(cam, self._pose_xy)
+                self._grid.camera_rays(cam, self._camera_xy())
             self._revolutions += int(is_lidar.any())
             if self._revolutions % PUBLISH_EVERY == 0:
                 self._publish()
@@ -617,7 +689,7 @@ class VectorCostMap(Module):
             # hits first: they stamp the 3 s protection, so a frame never
             # carves the very cells it is confirming
             self._grid.camera_obstacles(cam[:, :2], self._pose_xy)
-            self._grid.camera_rays(cam, self._pose_xy)
+            self._grid.camera_rays(cam, self._camera_xy())
         if is_lidar.any():
             self._grid.lidar_revolution(pts[is_lidar][:, :2], self._pose_xy)
             self._revolutions += 1
@@ -633,9 +705,7 @@ class VectorCostMap(Module):
             os.makedirs(self._ckpt_dir, exist_ok=True)
             path = os.path.join(self._ckpt_dir, time.strftime("costmap_%H%M%S.npz"))
             size = self._grid.save(path, self._pose_xy)
-            old = sorted(f for f in os.listdir(self._ckpt_dir) if f.endswith(".npz"))
-            for f in old[:-CHECKPOINT_KEEP]:
-                os.remove(os.path.join(self._ckpt_dir, f))
+            prune_checkpoints(self._ckpt_dir)
             logger.info(f"costmap checkpoint {os.path.basename(path)}: {size / 1024:.0f} kB, {int(self._grid.seen.sum())} cells seen")
             self._reload_keepouts()
             self._promote()
