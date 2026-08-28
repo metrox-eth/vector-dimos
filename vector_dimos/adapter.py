@@ -29,7 +29,9 @@ Two field-survival properties matter here, both dictated by the runtime:
     share a short feedback cache, so a control tick costs one read per
     controller, not two. The window is longer than the 10 ms tick period,
     so an idle tick can also reuse the previous tick's feedback; a tick
-    that writes a command drops the cache and does poll.
+    that writes a command drops the cache and does poll. The window is
+    counted from the END of the poll, so a tick against a drive that
+    times out pays SERIAL_TIMEOUT_S once, not twice.
 
 connect() is deliberately strict: it probes both drives read-only and
 returns False if either is silent, which makes dimOS refuse to start with
@@ -413,10 +415,13 @@ class VectorBaseAdapter:
 
         Cached: read_state() asks for velocities then odometry back to back,
         and the bus is polled at most once per FEEDBACK_MAX_AGE_S. The
-        timestamp marks the last bus *attempt*, so a dead bus is polled at
-        that rate rather than twice per call; a command write drops it,
-        since the feedback it holds predates the command. A failed read
-        serves the last known values and never raises.
+        timestamp is taken when the poll RETURNS, not when it starts: a
+        poll that spent SERIAL_TIMEOUT_S (0.5 s) waiting on a silent drive
+        is 33x older than the 15 ms window by the time it comes back, so
+        stamping it on entry would make the second read of the same tick
+        miss the cache and pay a second full timeout. A command write
+        drops the cache, since the feedback it holds predates the command.
+        A failed read serves the last known values and never raises.
 
         The second controller is not polled when the first one is silent:
         a partial answer is discarded anyway, and on the real bus every
@@ -426,22 +431,26 @@ class VectorBaseAdapter:
         if (self._feedback_t is not None
                 and now - self._feedback_t < FEEDBACK_MAX_AGE_S):
             return self._feedback
-        self._feedback_t = now
-        front = self._front.get_rpm() if self._front is not None else None
-        if front is None:
-            self._note_read_failure("front")
+        try:
+            front = self._front.get_rpm() if self._front is not None else None
+            if front is None:
+                self._note_read_failure("front")
+                return self._feedback
+            back = self._back.get_rpm() if self._back is not None else None
+            if back is None:
+                self._note_read_failure("back")
+                return self._feedback
+            self._note_read_success()
+            fl_raw, fr_raw = front
+            bl_raw, br_raw = back
+            self._feedback = (rpm_to_rads(-fl_raw), rpm_to_rads(fr_raw),
+                              rpm_to_rads(-bl_raw), rpm_to_rads(br_raw))
+            self._log_feedback(-fl_raw, fr_raw, -bl_raw, br_raw)
             return self._feedback
-        back = self._back.get_rpm() if self._back is not None else None
-        if back is None:
-            self._note_read_failure("back")
-            return self._feedback
-        self._note_read_success()
-        fl_raw, fr_raw = front
-        bl_raw, br_raw = back
-        self._feedback = (rpm_to_rads(-fl_raw), rpm_to_rads(fr_raw),
-                          rpm_to_rads(-bl_raw), rpm_to_rads(br_raw))
-        self._log_feedback(-fl_raw, fr_raw, -bl_raw, br_raw)
-        return self._feedback
+        finally:
+            # every exit path, including a raising client: the window opens
+            # when the bus is done with us
+            self._feedback_t = time.monotonic()
 
     def _log_feedback(self, fl: float, fr: float, bl: float, br: float) -> None:
         """Encoder side of the proof, real bus only: wheel RPM as measured
