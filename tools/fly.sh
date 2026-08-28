@@ -107,7 +107,7 @@ ssh $ROVER 'for p in $(pgrep -x deno) $(pgrep -f "[u]dp_forward"); do kill "$p";
 # into a refusal only when GAMEPAD=1, and that variable stopped at the rig, so
 # the pad gate never fired once and a padless GAMEPAD=1 flight walked all seven
 # gates before the operator found nothing could drive (2026-08-28 audit).
-MODE_ENV="GAMEPAD=${GAMEPAD:-0} STOCK_NAV=${STOCK_NAV:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1} EXPLORER_V2=${EXPLORER_V2:-1}"
+MODE_ENV="GAMEPAD=${GAMEPAD:-0} STOCK_NAV=${STOCK_NAV:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-0} EXPLORER_V2=${EXPLORER_V2:-1}"
 echo "== 1/7 preflight hardware =="
 ssh $ROVER "cd ~/vector-dimos && $MODE_ENV .venv/bin/python tools/preflight.py" || { echo "HARDWARE KO - no flight"; exit 1; }
 echo "== 2/7 preflight nav =="
@@ -127,11 +127,16 @@ LAUNCH_MARK=$(ssh $ROVER 'date +%s')
 # the mode flags MUST cross the ssh boundary (2026-08-27 13:38: STOCK_NAV and
 # GAMEPAD were set on the rig and never reached the rover - the midday
 # "stock" flights were not stock)
-# PERSISTENT_MAP=0 = the pre-relocalization behaviour: no relocalization, no
-# freeze, fresh frame (the feature's own off-switch - its doc says "exactly as
-# before this existed"). Default stays 1; 0 is the teleop-lap escape after the
-# 2026-08-27 16:40 deadlock (weak-score checkpoint never matchable -> frozen map
-# -> reference expired -> no exit).
+# PERSISTENT_MAP=0 is the DEFAULT since 2026-08-28 18:43 (metrox's order: back to
+# Sunday's exploration). Every flight now starts on a VIRGIN map: costmap.start()
+# logs "PERSISTENT_MAP=0: no saved map, no relocalization, no keep-out zone" and
+# lidar_odometry opens a fresh frame with no boot relocalization ("as before this
+# existed" - the feature's own off-switch). NOTHING is deleted: keepout.json
+# stays on disk and the zones are a DORMANT bonus, re-armed by PERSISTENT_MAP=1
+# the day persistence is trusted again. What killed the trust: the 2026-08-27
+# 16:40 deadlock (weak-score checkpoint never matchable -> frozen map ->
+# reference expired -> no exit). Together with ODOM_GUARDS=0 below, this IS the
+# configuration Sunday's exploration flew.
 # ODOM_GUARDS=0 is the DEFAULT since 2026-08-28 18:37 (metrox's order after the
 # external audit): the scan gate rejects healthy driving under load and freezes
 # the map (measured 27/08 16h52, and written in lidar_odometry.py's own
@@ -141,7 +146,7 @@ LAUNCH_MARK=$(ssh $ROVER 'date +%s')
 # the default dlopen reserve (~1.6 KB) cannot hold - a 4 MiB reserve gives it
 # room (256 KB was not enough inside loaded workers) (measured 2026-08-27 20:00: without it, "cannot allocate memory in static
 # TLS block").
-ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-1} ODOM_GUARDS=${ODOM_GUARDS:-0} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} EXPLORER_V2=${EXPLORER_V2:-1} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
+ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-0} ODOM_GUARDS=${ODOM_GUARDS:-0} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} EXPLORER_V2=${EXPLORER_V2:-1} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
 sleep 12
 # the run dir must POSTDATE this launch: on 2026-08-26 a failed launch over a live
 # stack passed the lidar check against the PREVIOUS run's log (false IN FLIGHT)
@@ -267,8 +272,8 @@ echo "== 8/8 the rover must understand WHERE IT IS (GATE) =="
 # the flight.
 if [ "${ALLOW_FRESH:-0}" = "1" ]; then
   echo "ALLOW_FRESH=1: fresh-frame flight allowed (first-map bootstrap) - NO keep-out zones"
-elif [ "${PERSISTENT_MAP:-1}" = "0" ] || [ "${STOCK_NAV:-0}" = "1" ]; then
-  echo "!! GATE 8/8 NOT ENFORCED (PERSISTENT_MAP=${PERSISTENT_MAP:-1} STOCK_NAV=${STOCK_NAV:-0}): this mode never relocalizes,"
+elif [ "${PERSISTENT_MAP:-0}" = "0" ] || [ "${STOCK_NAV:-0}" = "1" ]; then
+  echo "!! GATE 8/8 NOT ENFORCED (PERSISTENT_MAP=${PERSISTENT_MAP:-0} STOCK_NAV=${STOCK_NAV:-0}): this mode never relocalizes,"
   echo "   so the flight runs in its OWN frame - NO keep-out zones (bathroom!), no grid alignment. Watch it."
 else
   RELOC_OK=""
