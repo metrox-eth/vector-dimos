@@ -27,6 +27,11 @@ the snapshot complete and the log readable.
      so the failing step and the controller have to be in the log; and a
      drive that enables with a fault flag set gets a warning carrying the
      register value. Logging only - nothing stops the robot.
+  h. a refused PREREQUISITE (one lost frame on the 0x2000 watchdog or the
+     0x200D mode write) makes the adapter ABSTAIN: the ENABLE word
+     (0x200E = 0x08) is never written, so the drive stays unarmed instead of
+     running without its watchdog or outside velocity mode. dimOS ignores the
+     False return - the abstention is what protects.
 """
 import os
 import sys
@@ -40,8 +45,9 @@ from vector_dimos.adapter import (VectorBaseAdapter, BACK_ID, FRONT_ID,
                                   FEEDBACK_MAX_AGE_S)
 from vector_dimos.kinematics import MecanumGeometry, inverse, rads_to_rpm
 from vector_dimos.mock import MockModbusClient
-from vector_dimos.zlac8015d import (CONTROL_REG, L_CMD_RPM, L_FAULT,
-                                    L_FB_RPM, _to_i16)
+from vector_dimos.zlac8015d import (COMM_OFFLINE_TIME, CONTROL_REG, ENABLE,
+                                    L_CMD_RPM, L_FAULT, L_FB_RPM, OPR_MODE,
+                                    VEL_CONTROL, _to_i16)
 
 ok = True
 
@@ -467,6 +473,84 @@ check(LOG.since(mark, "info") == ["ZLAC8015D id 1 (back) enabled, "
                                   "faults L/R=0/0"],
       "the healthy controller still logs its clean fault read")
 h.disconnect()
+
+print("\n(h) a refused prerequisite withholds ENABLE (0x200E is never written)")
+
+# Baseline first, in the drives' own units: a healthy enable leaves the
+# watchdog at COMM_OFFLINE_MS ms, the mode at VEL_CONTROL, and writes the
+# ENABLE word LAST - the order the abstention below depends on.
+bus_i = MockModbusClient()
+i = VectorBaseAdapter(dof=3, client=bus_i, geometry=G)
+check(i.connect() is True, "connect() on a healthy bus")
+check(i.write_enable(True) is True, "healthy bus: write_enable() True")
+wd = {u: bus_i.regs.get((u, COMM_OFFLINE_TIME)) for u in (FRONT_ID, BACK_ID)}
+mode = {u: bus_i.regs.get((u, OPR_MODE)) for u in (FRONT_ID, BACK_ID)}
+ctrl = {u: bus_i.regs.get((u, CONTROL_REG)) for u in (FRONT_ID, BACK_ID)}
+print(f"      healthy enable -> watchdog {wd} ms, mode {mode}, "
+      f"control word {ctrl}")
+check(all(v == adapter_mod.COMM_OFFLINE_MS for v in wd.values()),
+      f"0x2000 watchdog = {adapter_mod.COMM_OFFLINE_MS} ms on both drives {wd}")
+check(all(v == VEL_CONTROL for v in mode.values()),
+      f"0x200D mode = {VEL_CONTROL} (velocity) on both drives {mode}")
+check(all(v == ENABLE for v in ctrl.values()),
+      f"0x200E control = 0x{ENABLE:02X} (ENABLE) on both drives {ctrl}")
+front_seq = [addr for (u, addr, _v) in bus_i.writes if u == FRONT_ID]
+check(front_seq[-1] == CONTROL_REG and COMM_OFFLINE_TIME in front_seq[:-1],
+      f"ENABLE is the LAST write, after the watchdog: "
+      f"{[hex(a) for a in front_seq]}")
+i.disconnect()
+
+
+class DropsResponseBus(MockModbusClient):
+    """One register write goes out but its answer never comes back.
+
+    A single lost or CRC-broken frame on the RS485 run next to the two motor
+    drives. The adapter cannot know whether the drive applied it, so the
+    value is left unset here - exactly the state it has to assume.
+    """
+
+    def __init__(self, dead_addr):
+        super().__init__()
+        self.dead_addr = dead_addr
+
+    def write_register(self, addr, value, unit=0):
+        if addr == self.dead_addr:
+            self.writes.append((unit, addr, [value]))
+            return _ErrorResult()
+        return super().write_register(addr, value, unit=unit)
+
+
+for dead_addr, what, step in (
+        (COMM_OFFLINE_TIME, "the comm-offline watchdog 0x2000",
+         "comm-offline watchdog (0x2000)"),
+        (OPR_MODE, "the velocity mode 0x200D", "velocity mode (0x200D)")):
+    print(f"    -- one dropped response on {what} --")
+    bus_x = DropsResponseBus(dead_addr)
+    x = VectorBaseAdapter(dof=3, client=bus_x, geometry=G)
+    check(x.connect() is True, "connect() succeeds (reads still answer)")
+    mark = len(LOG.lines)
+    check(x.write_enable(True) is False,
+          "write_enable() returns False (dimOS coordinator.py:259 ignores it)")
+    check(x.read_enabled() is False, "the adapter does not claim to be enabled")
+    enable_writes = [w for w in bus_x.writes if w[1] == CONTROL_REG]
+    check(enable_writes == [],
+          f"0x200E was NEVER written - no ENABLE frame on the bus "
+          f"{enable_writes}")
+    armed = {u: bus_x.regs.get((u, CONTROL_REG)) for u in (FRONT_ID, BACK_ID)}
+    print(f"      control word 0x200E per unit: {armed} "
+          f"(ENABLE would be {ENABLE})")
+    check(all(v != ENABLE for v in armed.values()),
+          f"neither drive is armed {armed}")
+    errors = LOG.since(mark, "error")
+    check(errors == [f"ZLAC8015D id {FRONT_ID} (front) NOT armed, ENABLE "
+                     f"(0x200E) withheld - refused at: {step}",
+                     f"ZLAC8015D id {BACK_ID} (back) NOT armed, ENABLE "
+                     f"(0x200E) withheld - refused at: {step}"],
+          f"both controllers name the refused step and the withheld ENABLE: "
+          f"{errors}")
+    check(LOG.since(mark, "info") == [],
+          "no fault-register line: nothing enabled, nothing to report")
+    x.disconnect()
 
 print("\nTEST " + ("PASSED" if ok else "FAILED"))
 raise SystemExit(0 if ok else 1)
