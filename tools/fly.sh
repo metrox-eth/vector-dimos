@@ -84,6 +84,15 @@ echo "== 1/7 preflight hardware =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight.py' || { echo "HARDWARE KO - no flight"; exit 1; }
 echo "== 2/7 preflight nav =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight_nav.py' || { echo "NAV KO - no flight"; exit 1; }
+# STOCK_NAV=1 runs dimOS's CostMapper, which has no zone concept at all: the
+# zones drawn on the persistent map are NOT applied by this flight, and nothing
+# in the run ever says so (2026-08-28 audit). A WARNING, never a refusal - the
+# flag is a deliberate A/B - but the operator hears it before the wheels move,
+# not after the rover has walked into the bathroom.
+if [ "${STOCK_NAV:-0}" = "1" ] && ssh $ROVER 'test -s ~/.local/state/vector/keepout.json' 2>/dev/null; then
+  echo "!! STOCK_NAV=1 AND ZONES DRAWN (~/.local/state/vector/keepout.json): stock nav has NO keep-out"
+  echo "   zones - the bathroom is NOT forbidden this flight. Pilot it, or fly without STOCK_NAV."
+fi
 
 echo "== 3/7 stack =="
 LAUNCH_MARK=$(ssh $ROVER 'date +%s')

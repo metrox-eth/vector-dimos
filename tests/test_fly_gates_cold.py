@@ -15,10 +15,13 @@ command the flight would have run is readable in $FLY_TEST_LOG.
   D. the two modes where the gate's four log lines CANNOT be printed
                      (PERSISTENT_MAP=0, STOCK_NAV=1): a warning, not an abort -
                      the flight lives and says the zones are inactive
-  E. transport     - every ssh that publishes or arms carries the run's bus
-  F. the watchdog  - TRANSPORT crosses arm_garde_vitesse.sh into the python it
+  E. gate 2/7      - STOCK_NAV=1 over a flat with zones drawn: stock nav has no
+                     zone concept, so the operator is warned BEFORE the stack
+                     starts - and only there (custom nav applies them)
+  F. transport     - every ssh that publishes or arms carries the run's bus
+  G. the watchdog  - TRANSPORT crosses arm_garde_vitesse.sh into the python it
                      launches (known input zenoh -> known output zenoh)
-  G. bash -n on fly.sh, the arm script and the stubs
+  H. bash -n on fly.sh, the arm script and the stubs
 
 Run:   PYTHONPATH=. .venv/bin/python3 tests/test_fly_gates_cold.py
        ... tests/test_fly_gates_cold.py <a copy of fly.sh>   (the FLY_TEST hook
@@ -48,6 +51,7 @@ STUBS = r"""# Stand-ins sourced by fly.sh under FLY_TEST=1 (tests/test_fly_gates
 : "${FLY_TEST_LOG:?}"
 : > "$FLY_TEST_LOG"
 FLY_TEST_RELOC="${FLY_TEST_RELOC:-}"     # what gate 8/8 finds in the run log
+FLY_TEST_KEEPOUT="${FLY_TEST_KEEPOUT:-0}"   # 1 = keepout.json exists on the rover
 
 _flyrec() { printf '%s' "$*" | tr '\n' ' ' >> "$FLY_TEST_LOG"; printf '\n' >> "$FLY_TEST_LOG"; }
 
@@ -57,6 +61,7 @@ ssh() {
     *"date +%s"*)                       echo 1755000000 ;;
     *"[b]in/dimos"*)                    return 1 ;;          # no stack already flying
     *wt_url*)                           echo 4433 ;;
+    *keepout.json*)                     [ "$FLY_TEST_KEEPOUT" = "1" ]; return $? ;;
     *"CONTINUING the persistent map"*)  [ -n "$FLY_TEST_RELOC" ] && echo "$FLY_TEST_RELOC" ;;
     *"prior: gyro="*)                   echo "prior: gyro=yes rot=0.02" ;;
   esac
@@ -119,6 +124,7 @@ def fly(reloc="", **env):
         FLY_TEST_STUBS=str(STUB_FILE),
         FLY_TEST_LOG=str(log),
         FLY_TEST_RELOC=reloc,
+        FLY_TEST_KEEPOUT="0",  # no zones drawn on the rover unless a case says so
         REPOSITIONNE="1",      # detached path: no interactive read, no e-stop prompt
     )
     e.update({k: str(v) for k, v in env.items()})
@@ -177,7 +183,23 @@ for label, env in (("PERSISTENT_MAP=0", dict(PERSISTENT_MAP=0)),
 rc, out, log = fly(EXPLORE=1, ALLOW_FRESH=1)
 check("ALLOW_FRESH=1 still skips the gate", rc == 0 and "ALLOW_FRESH=1" in out and not ran(log, "CONTINUING"), f"rc {rc}")
 
-print("E. the run's bus crosses every ssh that publishes or arms")
+print("E. STOCK_NAV=1 over a flat with zones drawn: warned at gate 2/7, never refused")
+rc, out, log = fly(EXPLORE=1, STOCK_NAV=1, FLY_TEST_KEEPOUT=1)
+check("the flight lives (rc 0, IN FLIGHT)", rc == 0 and "IN FLIGHT" in out, f"rc {rc}")
+check("names the file and what stock nav does not apply",
+      "STOCK_NAV=1 AND ZONES DRAWN" in out and "keepout.json" in out and "NO keep-out" in out)
+warn_at, stack_at = out.find("AND ZONES DRAWN"), out.find("== 3/7 stack ==")
+check("warned BEFORE the stack is launched", 0 <= warn_at < stack_at,
+      f"warning at {warn_at}, stack launch at {stack_at}")
+check("the warning stops nothing: no e-stop, no dimos stop",
+      not ran(log, "estop_rs485.py") and not ran(log, "dimos stop"))
+rc, out, log = fly(EXPLORE=1, STOCK_NAV=1, FLY_TEST_KEEPOUT=0)
+check("stock nav, no zones drawn -> silent", rc == 0 and "AND ZONES DRAWN" not in out, f"rc {rc}")
+rc, out, log = fly(EXPLORE=1, FLY_TEST_KEEPOUT=1, reloc="CONTINUING the persistent map")
+check("custom nav applies the zones -> no warning", rc == 0 and "AND ZONES DRAWN" not in out, f"rc {rc}")
+check("custom nav: the rover is not even asked for keepout.json", not ran(log, "keepout.json"))
+
+print("F. the run's bus crosses every ssh that publishes or arms")
 rc, out, log = fly(EXPLORE=1, TRANSPORT="zenoh", reloc="CONTINUING the persistent map")
 pub = ran(log, "explore_ctl.py")
 check("explore start published on zenoh", len(pub) == 1 and "TRANSPORT=zenoh" in pub[0], pub[0][-70:] if pub else "none")
@@ -194,7 +216,7 @@ check("no TRANSPORT set -> lcm everywhere it matters",
       all("TRANSPORT=lcm" in ln for ln in ran(log, "explore_ctl.py") + ran(log, "arm_garde_vitesse.sh")),
       f"{len(ran(log, 'explore_ctl.py') + ran(log, 'arm_garde_vitesse.sh'))} lines")
 
-print("F. TRANSPORT crosses arm_garde_vitesse.sh into the watchdog process")
+print("G. TRANSPORT crosses arm_garde_vitesse.sh into the watchdog process")
 fake = TMPD / "fake_garde_vitesse.py"
 fake.write_text(FAKE_WATCHDOG)
 for want, env in (("zenoh", {"TRANSPORT": "zenoh"}), ("lcm", {})):
@@ -213,7 +235,7 @@ for want, env in (("zenoh", {"TRANSPORT": "zenoh"}), ("lcm", {})):
     except (OSError, ValueError):
         pass
 
-print("G. the scripts parse")
+print("H. the scripts parse")
 for f in (FLY, ARM, STUB_FILE):
     check(f"bash -n {f.name}", subprocess.run(["bash", "-n", str(f)]).returncode == 0)
 
