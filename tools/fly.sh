@@ -71,11 +71,26 @@ echo "== 0/7 rover REPOSITIONNE (torque off) =="
 # Torque OFF before any repositioning: the rover weighs 26-27 kg and cannot be
 # pushed by hand while the motors hold position. The release is part of the gate
 # itself, never goodwill.
+# The release is a RESULT, never an announcement: estop_rs485.py exits 0 only
+# when BOTH drives acked rpm 0 AND disable. Its exit code used to be discarded
+# (a `| tail -1` pipeline whose status is tail's, stderr to /dev/null), so a busy
+# FTDI dongle, a renumbered port or a NAKing drive printed nothing and the script
+# still said "se pousse a la main" - a hand-push invited on 26-27 kg whose drives
+# were still holding position; a dead ssh printed NOTHING AT ALL and that false
+# line was the only thing on screen (2026-08-28 audit).
 if [ "${REPOSITIONNE:-0}" != "1" ]; then
   if [ -t 0 ]; then
-    ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py' 2>/dev/null | tail -1
-    echo "Couple moteurs RELACHE - le rover se pousse a la main."
-    read -r -p "Rover repositionne au point de depart ? [Entree pour confirmer] " _
+    if ESTOP_OUT=$(ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py' 2>&1); then
+      echo "$ESTOP_OUT" | tail -1
+      echo "Couple moteurs RELACHE - le rover se pousse a la main."
+      read -r -p "Rover repositionne au point de depart ? [Entree pour confirmer] " _
+    else
+      [ -n "$ESTOP_OUT" ] && echo "$ESTOP_OUT" | tail -3 | sed 's/^/  /'
+      echo "COUPLE MOTEUR NON RELACHE (estop_rs485.py n'a pas rendu 0) - NE PAS pousser le rover"
+      echo "  a la main: les drives tiennent peut-etre toujours leur position. Couper"
+      echo "  l'alimentation moteur, puis relancer le vol."
+      exit 1
+    fi
   else
     echo "REFUS: lancement detache sans REPOSITIONNE=1 (le rover doit etre replace d'abord - regle 27/08)"
     exit 1

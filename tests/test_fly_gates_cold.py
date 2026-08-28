@@ -23,6 +23,8 @@ command the flight would have run is readable in $FLY_TEST_LOG.
                      launches (known input zenoh -> known output zenoh)
   I. already flying - a live stack is refused BEFORE any kill, any sync and any
                      e-stop: the running flight keeps its panel and its cockpit
+  J. gate 0/7      - on a REAL pty (the interactive path): the hand-push step is
+                     offered only when estop_rs485.py exited 0 on both drives
   H. bash -n on fly.sh, the arm script and the stubs
 
 Run:   PYTHONPATH=. .venv/bin/python3 tests/test_fly_gates_cold.py
@@ -37,6 +39,7 @@ and nothing is killed. Do not run it while a flight is in the air.
 """
 
 import os
+import pty
 import subprocess
 import sys
 import tempfile
@@ -56,6 +59,8 @@ FLY_TEST_RELOC="${FLY_TEST_RELOC:-}"     # what gate 8/8 finds in the run log
 FLY_TEST_KEEPOUT="${FLY_TEST_KEEPOUT:-0}"   # 1 = keepout.json exists on the rover
 FLY_TEST_STACK_UP="${FLY_TEST_STACK_UP:-0}" # 1 = a dimOS stack is ALREADY flying
 FLY_TEST_SYNC_HIT="${FLY_TEST_SYNC_HIT:-0}" # 1 = the rsync updated stats_server.py
+FLY_TEST_ESTOP_RC="${FLY_TEST_ESTOP_RC:-0}" # what tests/estop_rs485.py exits with
+                                            # (255 = the ssh itself never landed)
 
 _flyrec() { printf '%s' "$*" | tr '\n' ' ' >> "$FLY_TEST_LOG"; printf '\n' >> "$FLY_TEST_LOG"; }
 
@@ -63,6 +68,14 @@ ssh() {
   _flyrec "ssh $*"
   case "$*" in
     *"date +%s"*)                       echo 1755000000 ;;
+    *estop_rs485.py*)
+      case "$FLY_TEST_ESTOP_RC" in                     # the real tool's own lines
+        0) echo "unit 1 (front): rpm 0/0 acked=True disable acked=True feedback rpm=(0, 0)"
+           echo "E-STOP DONE: both drives stopped and disabled" ;;
+        1) echo "port /dev/ttyUSB0 did not open - cut the motor power" ;;
+        *) ;;                                          # dead ssh: not one line
+      esac
+      return "$FLY_TEST_ESTOP_RC" ;;
     *"[b]in/dimos"*)                    [ "$FLY_TEST_STACK_UP" = "1" ]; return $? ;;
     *wt_url*)                           echo 4433 ;;
     *keepout.json*)                     [ "$FLY_TEST_KEEPOUT" = "1" ]; return $? ;;
@@ -117,8 +130,7 @@ def flyable(path: Path) -> Path:
 SCRIPT = flyable(FLY)
 
 
-def fly(reloc="", **env):
-    """Run the whole flight cold. Returns (rc, what the operator saw, what it ran)."""
+def _env(reloc, env):
     log = TMPD / f"run_{len(list(TMPD.glob('run_*')))}.log"
     e = dict(os.environ)
     e.pop("EXPLORE", None)
@@ -131,10 +143,34 @@ def fly(reloc="", **env):
         FLY_TEST_KEEPOUT="0",   # no zones drawn on the rover unless a case says so
         FLY_TEST_STACK_UP="0",  # nothing already flying unless a case says so
         FLY_TEST_SYNC_HIT="0",  # the sync touched no stats_server.py
+        FLY_TEST_ESTOP_RC="0",  # both drives ack the release unless a case says so
         REPOSITIONNE="1",       # detached path: no interactive read, no e-stop prompt
     )
     e.update({k: str(v) for k, v in env.items()})
+    return log, e
+
+
+def fly(reloc="", **env):
+    """Run the whole flight cold. Returns (rc, what the operator saw, what it ran)."""
+    log, e = _env(reloc, env)
     p = subprocess.run(["bash", str(SCRIPT)], env=e, capture_output=True, text=True, timeout=180)
+    return p.returncode, p.stdout + p.stderr, (log.read_text() if log.exists() else "")
+
+
+def fly_tty(reloc="", **env):
+    """The INTERACTIVE path (REPOSITIONNE unset): a REAL pty on stdin, so fly.sh's
+    own `[ -t 0 ]` is true, the torque release runs and the read prompt is shown.
+    The answer is pre-typed, so the gate never waits for a human."""
+    log, e = _env(reloc, env)
+    e["REPOSITIONNE"] = "0"
+    master, slave = pty.openpty()
+    os.write(master, b"\n")          # the operator's Enter, already in the buffer
+    try:
+        p = subprocess.run(["bash", str(SCRIPT)], env=e, stdin=slave,
+                           capture_output=True, text=True, timeout=180)
+    finally:
+        os.close(slave)
+        os.close(master)
     return p.returncode, p.stdout + p.stderr, (log.read_text() if log.exists() else "")
 
 
@@ -264,6 +300,25 @@ check("no stack in the air -> the cleanup runs, unchanged",
       and len(ran(log, "rsync")) == 1, f"rc {rc}")
 check("and the cleanup comes AFTER the refusal it used to precede",
       log.find("[b]in/dimos") < log.find("[s]onar_live"))
+
+print("J. gate 0/7 interactive: the hand-push is offered only if the torque IS off")
+for label, rc_estop, reason in (("a drive NAKs / the port is busy", 1, "did not open"),
+                                ("the ssh never landed (not one line)", 255, "")):
+    rc, out, log = fly_tty(FLY_TEST_ESTOP_RC=rc_estop)
+    check(f"{label}: the interactive path really ran", "lancement detache" not in out
+          and len(ran(log, "estop_rs485.py")) == 1, f"{len(ran(log, 'estop_rs485.py'))} e-stops")
+    check(f"{label}: refused (rc 1)", rc == 1, f"rc {rc}")
+    check(f"{label}: NEVER says the rover can be hand-pushed", "se pousse a la main" not in out)
+    check(f"{label}: the operator is never asked to confirm", "Rover repositionne au" not in out)
+    check(f"{label}: says the torque is NOT released", "COUPLE MOTEUR NON RELACHE" in out)
+    if reason:
+        check(f"{label}: keeps the tool's own reason", reason in out)
+    check(f"{label}: the flight stops there", not ran(log, "preflight") and not ran(log, "[s]onar_live"))
+rc, out, log = fly_tty(FLY_TEST_ESTOP_RC=0)
+check("both drives acked: the release is announced and the prompt is reached",
+      "E-STOP DONE" in out and "se pousse a la main" in out and "Rover repositionne au" in out)
+check("and the flight goes on (rc 0, 7/7 DRY)", rc == 0 and "== 7/7 DRY" in out, f"rc {rc}")
+check("no COUPLE MOTEUR NON RELACHE on the happy path", "COUPLE MOTEUR NON RELACHE" not in out)
 
 print("H. the scripts parse")
 for f in (FLY, ARM, STUB_FILE):
