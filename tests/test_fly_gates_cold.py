@@ -21,6 +21,8 @@ command the flight would have run is readable in $FLY_TEST_LOG.
   F. transport     - every ssh that publishes or arms carries the run's bus
   G. the watchdog  - TRANSPORT crosses arm_garde_vitesse.sh into the python it
                      launches (known input zenoh -> known output zenoh)
+  I. already flying - a live stack is refused BEFORE any kill, any sync and any
+                     e-stop: the running flight keeps its panel and its cockpit
   H. bash -n on fly.sh, the arm script and the stubs
 
 Run:   PYTHONPATH=. .venv/bin/python3 tests/test_fly_gates_cold.py
@@ -52,6 +54,8 @@ STUBS = r"""# Stand-ins sourced by fly.sh under FLY_TEST=1 (tests/test_fly_gates
 : > "$FLY_TEST_LOG"
 FLY_TEST_RELOC="${FLY_TEST_RELOC:-}"     # what gate 8/8 finds in the run log
 FLY_TEST_KEEPOUT="${FLY_TEST_KEEPOUT:-0}"   # 1 = keepout.json exists on the rover
+FLY_TEST_STACK_UP="${FLY_TEST_STACK_UP:-0}" # 1 = a dimOS stack is ALREADY flying
+FLY_TEST_SYNC_HIT="${FLY_TEST_SYNC_HIT:-0}" # 1 = the rsync updated stats_server.py
 
 _flyrec() { printf '%s' "$*" | tr '\n' ' ' >> "$FLY_TEST_LOG"; printf '\n' >> "$FLY_TEST_LOG"; }
 
@@ -59,7 +63,7 @@ ssh() {
   _flyrec "ssh $*"
   case "$*" in
     *"date +%s"*)                       echo 1755000000 ;;
-    *"[b]in/dimos"*)                    return 1 ;;          # no stack already flying
+    *"[b]in/dimos"*)                    [ "$FLY_TEST_STACK_UP" = "1" ]; return $? ;;
     *wt_url*)                           echo 4433 ;;
     *keepout.json*)                     [ "$FLY_TEST_KEEPOUT" = "1" ]; return $? ;;
     *"CONTINUING the persistent map"*)  [ -n "$FLY_TEST_RELOC" ] && echo "$FLY_TEST_RELOC" ;;
@@ -67,7 +71,7 @@ ssh() {
   esac
   return 0
 }
-rsync()   { _flyrec "rsync $*"; return 0; }
+rsync()   { _flyrec "rsync $*"; [ "$FLY_TEST_SYNC_HIT" = "1" ] && echo ">f.st...... tools/stats_server.py"; return 0; }
 curl()    { _flyrec "curl $*"; printf '%s' '{"sensors":{"software":{"monitoring":{"alive":true}}}}'; return 0; }
 pkill()   { _flyrec "pkill $*"; return 0; }
 nohup()   { _flyrec "nohup $*"; return 0; }
@@ -124,8 +128,10 @@ def fly(reloc="", **env):
         FLY_TEST_STUBS=str(STUB_FILE),
         FLY_TEST_LOG=str(log),
         FLY_TEST_RELOC=reloc,
-        FLY_TEST_KEEPOUT="0",  # no zones drawn on the rover unless a case says so
-        REPOSITIONNE="1",      # detached path: no interactive read, no e-stop prompt
+        FLY_TEST_KEEPOUT="0",   # no zones drawn on the rover unless a case says so
+        FLY_TEST_STACK_UP="0",  # nothing already flying unless a case says so
+        FLY_TEST_SYNC_HIT="0",  # the sync touched no stats_server.py
+        REPOSITIONNE="1",       # detached path: no interactive read, no e-stop prompt
     )
     e.update({k: str(v) for k, v in env.items()})
     p = subprocess.run(["bash", str(SCRIPT)], env=e, capture_output=True, text=True, timeout=180)
@@ -234,6 +240,30 @@ for want, env in (("zenoh", {"TRANSPORT": "zenoh"}), ("lcm", {})):
         os.kill(int(pid_file.read_text().strip()), 9)
     except (OSError, ValueError):
         pass
+
+print("I. a stack already in the air: refused before ANYTHING is touched")
+rc, out, log = fly(FLY_TEST_STACK_UP=1, FLY_TEST_SYNC_HIT=1)
+check("refused (rc 1)", rc == 1 and "A DIMOS STACK IS ALREADY RUNNING" in out, f"rc {rc}")
+kills = ran(log, "kill")
+check("ZERO kill invoked on the live flight", not kills, kills[0][:90] if kills else "")
+check("its panel, sonar readout, cockpit and relays survive",
+      not (ran(log, "stats_server") or ran(log, "sonar_live")
+           or ran(log, "deno") or ran(log, "udp_forward")))
+check("its wheels are not e-stopped", not ran(log, "estop_rs485.py"))
+check("its code is not even overwritten", not ran(log, "rsync"))
+check("the refusal is the FIRST rover command",
+      bool(log.splitlines()) and "[b]in/dimos" in log.splitlines()[0],
+      log.splitlines()[0][:90] if log.splitlines() else "nothing ran")
+check("no preflight, no stack launch", not ran(log, "preflight") and not ran(log, "dimos --rerun-open"))
+rc, out, log = fly(FLY_TEST_SYNC_HIT=1)
+check("no stack in the air -> the cleanup runs, unchanged",
+      rc == 0
+      and len(ran(log, '[s]tats_server"); do kill')) == 1   # synced: retire the old one
+      and len(ran(log, "[s]onar_live")) == 1
+      and len(ran(log, "pgrep -x deno")) == 1
+      and len(ran(log, "rsync")) == 1, f"rc {rc}")
+check("and the cleanup comes AFTER the refusal it used to precede",
+      log.find("[b]in/dimos") < log.find("[s]onar_live"))
 
 print("H. the scripts parse")
 for f in (FLY, ARM, STUB_FILE):

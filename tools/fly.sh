@@ -38,6 +38,18 @@ TRANSPORT="${TRANSPORT:-lcm}"
 # (tests/test_fly_gates_cold.py). Nothing but that bench ever sets it.
 if [ "${FLY_TEST:-0}" = "1" ]; then . "${FLY_TEST_STUBS:?FLY_TEST=1 needs FLY_TEST_STUBS}"; fi
 
+# A forgotten running stack holds the motor bus and the hardware preflight
+# collides with its feedback polling: both drives read "mute" (2026-08-26 19:00,
+# one hour lost on a stack launched at 18:22 for map viewing and never stopped).
+# THIS REFUSAL COMES FIRST - before one byte is synced, one process killed or one
+# log truncated. It used to sit AFTER the cleanup, so a second invocation tore
+# down the LIVE flight's panel, sonar readout, cockpit server and both relays -
+# and, on the interactive path, e-stopped its wheels - and only THEN refused to
+# fly. Flight 1 kept driving, blind, and nothing restored it (2026-08-28 audit).
+echo "== 0/7 no dimOS stack already flying =="
+ssh $ROVER "pgrep -f \"[b]in/dimos\" >/dev/null" \
+  && { echo "A DIMOS STACK IS ALREADY RUNNING - stop it first (estop, then dimos stop)"; exit 1; }
+
 echo "== SYNC code rig -> rover =="
 # The rover has NO git clone - this rsync IS the deployment (found 2026-08-27:
 # nothing else ships code, so rig and rover can silently diverge). Gate, not
@@ -50,7 +62,7 @@ if echo "$SYNC_OUT" | grep -q "stats_server.py"; then
   echo "stats_server change: ancien processus tue (la porte 5 relance le neuf)"
 fi
 
-echo "== 0/7 rover REPOSITIONNE + no stack already flying =="
+echo "== 0/7 rover REPOSITIONNE (torque off) =="
 # NEVER launch without the rover physically put back on its start point first -
 # between runs it can be anywhere (the 2026-08-27 12:18 run started on a blank
 # map 10 cm from the sofa; its first act was bumping it). Interactive: ask and
@@ -73,12 +85,6 @@ ssh $ROVER 'for p in $(pgrep -f "[s]onar_live"); do kill "$p"; done' 2>/dev/null
 # a STALE deno (cockpit server of a previous run) keeps port 7780 and its QUIC
 # socket, and a stale relay keeps $RELAY_EXT: the new run's cockpit is stillborn
 ssh $ROVER 'for p in $(pgrep -x deno) $(pgrep -f "[u]dp_forward"); do kill "$p"; done' 2>/dev/null
-
-# A forgotten running stack holds the motor bus and the hardware preflight
-# collides with its feedback polling: both drives read "mute" (2026-08-26 19:00,
-# one hour lost on a stack launched at 18:22 for map viewing and never stopped).
-ssh $ROVER "pgrep -f \"[b]in/dimos\" >/dev/null" \
-  && { echo "A DIMOS STACK IS ALREADY RUNNING - stop it first (estop, then dimos stop)"; exit 1; }
 
 echo "== 1/7 preflight hardware =="
 ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tools/preflight.py' || { echo "HARDWARE KO - no flight"; exit 1; }
