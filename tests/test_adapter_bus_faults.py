@@ -32,6 +32,13 @@ the snapshot complete and the log readable.
      (0x200E = 0x08) is never written, so the drive stays unarmed instead of
      running without its watchdog or outside velocity mode. dimOS ignores the
      False return - the abstention is what protects.
+  i. the same tick, against a bus that takes REAL TIME to answer. Every
+     other mock here answers in microseconds, so (b), (c) and (e2) count
+     one poll per tick even with the cache stamped BEFORE the poll - the
+     stamp is still fresh when the second read of the tick arrives. With
+     the 0.5 s serial timeout on the line a poll outlives its own 15 ms
+     window, and only a timestamp taken AFTER the poll keeps the tick at
+     one round-trip per controller.
 """
 import os
 import sys
@@ -42,7 +49,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vector_dimos import adapter as adapter_mod
 from vector_dimos.adapter import (VectorBaseAdapter, BACK_ID, FRONT_ID,
-                                  FEEDBACK_MAX_AGE_S)
+                                  FEEDBACK_MAX_AGE_S, SERIAL_TIMEOUT_S)
 from vector_dimos.kinematics import MecanumGeometry, inverse, rads_to_rpm
 from vector_dimos.mock import MockModbusClient
 from vector_dimos.zlac8015d import (COMM_OFFLINE_TIME, CONTROL_REG, ENABLE,
@@ -551,6 +558,88 @@ for dead_addr, what, step in (
     check(LOG.since(mark, "info") == [],
           "no fault-register line: nothing enabled, nothing to report")
     x.disconnect()
+
+print("\n(i) a bus that takes real time to answer: one poll per tick")
+
+
+class SlowBus(MockModbusClient):
+    """Reads cost wall-clock time; `silent_unit` never answers.
+
+    `armed` keeps connect() instantaneous - the latency is the outage,
+    not the bring-up. A silent drive costs SERIAL_TIMEOUT_S: pymodbus 2.5
+    waits the whole response timeout before handing back its
+    ModbusIOException, so the poll is 33x older than FEEDBACK_MAX_AGE_S
+    when it returns.
+    """
+
+    def __init__(self, latency_s, silent_unit=None):
+        super().__init__()
+        self.latency_s = latency_s
+        self.silent_unit = silent_unit
+        self.armed = False
+
+    def read_holding_registers(self, addr, count, unit=0):
+        if not self.armed:
+            return super().read_holding_registers(addr, count, unit=unit)
+        time.sleep(self.latency_s)
+        if unit == self.silent_unit:
+            self.reads.append((unit, addr, count))
+            return _ErrorResult()
+        return super().read_holding_registers(addr, count, unit=unit)
+
+
+# i1: the front pigtail comes loose - its reads time out
+bus_l = SlowBus(latency_s=SERIAL_TIMEOUT_S, silent_unit=FRONT_ID)
+lat = VectorBaseAdapter(dof=3, client=bus_l, geometry=G)
+check(lat.connect() is True, "connect() while both drives still answer")
+bus_l.armed = True
+time.sleep(FEEDBACK_MAX_AGE_S * 2)
+bus_l.reads.clear()
+t0 = time.monotonic()
+lat.read_velocities()      # what ConnectedTwistBase.read_state() does:
+lat.read_odometry()        # these two, back to back, once per tick
+tick_s = time.monotonic() - t0
+polls = [r for r in bus_l.reads if r[1] == L_FB_RPM]
+print(f"      timeout {SERIAL_TIMEOUT_S:.3f} s vs cache window "
+      f"{FEEDBACK_MAX_AGE_S:.3f} s -> one tick: {len(polls)} poll(s), "
+      f"{tick_s:.3f} s wall")
+check(len(polls) == 1, f"exactly one bus poll for the whole tick {polls}")
+check(lat.read_failure_count == 1,
+      f"one failed poll counted, not two ({lat.read_failure_count})")
+check(tick_s < SERIAL_TIMEOUT_S * 1.5,
+      f"the tick pays ONE timeout: {tick_s:.3f} s < "
+      f"{SERIAL_TIMEOUT_S * 1.5:.3f} s (two would be "
+      f"{SERIAL_TIMEOUT_S * 2:.3f} s)")
+
+# the cache still EXPIRES: a poll timestamped late must not freeze the rate
+time.sleep(FEEDBACK_MAX_AGE_S * 2)
+lat.read_velocities()
+check(lat.read_failure_count == 2,
+      f"the next tick does poll again once the window is over "
+      f"({lat.read_failure_count})")
+lat.disconnect()
+
+# i2: nobody is silent, the bus is just slow (a long RS485 run, 115200 bd).
+# Both drives answer, and one tick must still cost one read per controller.
+bus_s = SlowBus(latency_s=0.05)
+slow = VectorBaseAdapter(dof=3, client=bus_s, geometry=G)
+check(slow.connect() is True, "connect() on the slow-but-healthy bus")
+check(slow.write_velocities([0.30, 0.0, 0.0]), "command 0.30 m/s forward")
+bus_s.armed = True
+bus_s.reads.clear()
+t0 = time.monotonic()
+twist = slow.read_velocities()
+slow.read_odometry()
+tick_s = time.monotonic() - t0
+print(f"      slow healthy bus ({bus_s.latency_s:.3f} s per read): one tick "
+      f"= {len(bus_s.reads)} reads, {tick_s:.3f} s wall, "
+      f"vx={twist[0]:.3f} m/s")
+check(len(bus_s.reads) == 2,
+      f"one read per controller, not two {bus_s.reads}")
+check(abs(twist[0] - 0.30) < 0.02,
+      f"and the feedback is the commanded 0.30 m/s ({twist[0]:.3f})")
+check(slow.read_failure_count == 0, "no failure on a healthy bus")
+slow.disconnect()
 
 print("\nTEST " + ("PASSED" if ok else "FAILED"))
 raise SystemExit(0 if ok else 1)
