@@ -17,6 +17,17 @@ What is replayed is the firmware's actual interleaved output:
     "SONAR <m>"        10 Hz
     "SW a b c d"       500 ms heartbeat + one line per debounced change
 
+Two module decisions taken AFTER this file was written (28/08 audit: the bench
+was asserting behaviour the module no longer has, and was red on both counts):
+
+* ``SONAR_ENABLED = False`` since 26/08 - the ESP still streams SONAR at 10 Hz
+  and the module still reads it, but nothing is published. The sonar checks
+  below follow the flag: they assert silence while it is False, flow when it is
+  True. Either way they prove the SONAR traffic does not disturb the SW path.
+* ``BUMP_HOLD_S = 0.10`` since 27/08 - a corner must stay closed that long to
+  count as a contact. Every touch replayed here is therefore HELD past that
+  window; a shorter one is bar flutter by design and publishes nothing.
+
 Every check reads BOTH channels the module can log on (the dimOS structured
 logger, which reaches the run's main.jsonl, and stderr, which a daemon launch
 stops capturing once the modules are up), because "the switches never fired"
@@ -45,7 +56,19 @@ RUN_LOG_DIR = Path(tempfile.mkdtemp(prefix="esp_rx_runlog_"))
 set_run_log_dir(RUN_LOG_DIR)
 
 from vector_dimos import esp_sensors  # noqa: E402
-from vector_dimos.esp_sensors import CONTACT_COOLDOWN_S, EspSensors  # noqa: E402
+from vector_dimos.esp_sensors import (  # noqa: E402
+    BUMP_HOLD_S,
+    CONTACT_COOLDOWN_S,
+    SONAR_ENABLED,
+    EspSensors,
+)
+
+# Every touch replayed here is held this long: past the flutter window, so the
+# module confirms it. Derived from the module's own constant - the bench must
+# follow the filter if it is ever retuned, not freeze a number next to it.
+REAR_TOUCH_S = 2 * BUMP_HOLD_S
+REAR_TOUCH_AT_S = 3.0                      # when the rear corner is clipped
+REPLAY_END_S = REAR_TOUCH_AT_S + REAR_TOUCH_S + 0.2
 
 OK = 0
 KO = 0
@@ -154,15 +177,19 @@ class Rig:
 
 
 def replay_field_stream(rig):
-    """The firmware's own interleaving, in real time: 3.4 s of a run in which
-    the rover drives into its front-left corner and holds it for 2 s, releases,
-    then clips its rear-left corner with a click.
+    """The firmware's own interleaving, in real time: a run in which the rover
+    drives into its front-left corner and holds it for 2 s, releases, then
+    clips its rear-left corner for REAR_TOUCH_S before backing off.
+
+    The rear touch is short but real: it outlasts BUMP_HOLD_S, so the module
+    must confirm it. It used to be a press and a release in the same instant,
+    which the 27/08 flutter filter drops on purpose.
 
     Returns the lines actually written, for the report.
     """
     rig.send("MUSEAU-ESP v2: switches GPIO 1-4 (active low) + sonar 5/6\r\n")
     state = (0, 0, 0, 0)
-    pressed = released = clicked = False
+    pressed = released = touched = untouched = False
     t0 = time.monotonic()
     last_beat = last_ping = -1.0
     sent = []
@@ -173,7 +200,7 @@ def replay_field_stream(rig):
 
     while True:
         t = time.monotonic() - t0
-        if t >= 3.4:
+        if t >= REPLAY_END_S:
             break
         if t >= 0.5 and not pressed:
             pressed, state = True, (1, 0, 0, 0)      # LONG press, front-left
@@ -181,10 +208,12 @@ def replay_field_stream(rig):
         if t >= 2.5 and pressed and not released:
             released, state = True, (0, 0, 0, 0)     # release
             emit("SW 0 0 0 0")
-        if t >= 3.0 and not clicked:
-            clicked = True
-            emit("SW 0 1 0 0")                       # short CLICK, rear-left
-            emit("SW 0 0 0 0")                       # ... back to rest at once
+        if t >= REAR_TOUCH_AT_S and not touched:
+            touched, state = True, (0, 1, 0, 0)      # short TOUCH, rear-left
+            emit("SW 0 1 0 0")
+        if t >= REAR_TOUCH_AT_S + REAR_TOUCH_S and touched and not untouched:
+            untouched, state = True, (0, 0, 0, 0)    # ... held, then off
+            emit("SW 0 0 0 0")
         if t - last_beat >= 0.5:
             last_beat = t
             emit("SW " + " ".join(str(v) for v in state))
@@ -198,7 +227,7 @@ def replay_field_stream(rig):
 
 # --- A. the field stream -----------------------------------------------------
 
-print("A. the firmware's real interleaved stream, over a real pty (3.4 s)")
+print(f"A. the firmware's real interleaved stream, over a real pty ({REPLAY_END_S:.1f} s)")
 rig = Rig()
 sent = replay_field_stream(rig)
 sw_sent = [line for line in sent if line.startswith("SW")]
@@ -211,7 +240,7 @@ check("a 2 s press on the front-left corner publishes exactly one bump",
       len(rig.bumps) == 1, f"{len(rig.bumps)} for {len(sw_set_sent)} SW lines with a set bit")
 check("the bump Bool carries data=True",
       bool(rig.bumps) and rig.bumps[0].data is True)
-check("the short rear-left click publishes exactly one bump_rear",
+check(f"a {REAR_TOUCH_S:.2f} s touch on the rear-left corner publishes exactly one bump_rear",
       len(rig.rear_bumps) == 1, f"{len(rig.rear_bumps)}")
 check("the BUMP line names the front corner",
       rig.saw("BUMP #1: avant-gauche (front)"))
@@ -222,9 +251,14 @@ check("every SW line with a bit set is traced verbatim",
       f"{rig.count('SW rx:')} traced / {len(sw_set_sent)} sent")
 check("the trace is the line itself",
       rig.saw("SW rx: 1 0 0 0") and rig.saw("SW rx: 0 1 0 0"))
-check("the sonar keeps flowing on the same link (0.42 m, <= 5 Hz)",
-      len(rig.sonars) >= 8 and all(abs(m.data - 0.42) < 1e-6 for m in rig.sonars),
-      f"{len(rig.sonars)} publications")
+if SONAR_ENABLED:
+    check("the sonar keeps flowing on the same link (0.42 m, <= 5 Hz)",
+          len(rig.sonars) >= 8 and all(abs(m.data - 0.42) < 1e-6 for m in rig.sonars),
+          f"{len(rig.sonars)} publications")
+else:
+    check("SONAR_ENABLED False: the 0.42 m stream is read, published nowhere",
+          len(rig.sonars) == 0 and not rig.saw("line dropped"),
+          f"{len(rig.sonars)} publications for {len(sonar_sent)} SONAR lines read")
 check("the link was never lost", not rig.saw("LOST"))
 rig.close()
 
@@ -235,7 +269,9 @@ print("B. a SW line delivered in two chunks (buffering never eats a contact)")
 rig = Rig()
 rig.send("SONAR -1\r\nSW 0 0 1 ")
 time.sleep(0.3)
-rig.send("0\r\nSW 0 0 0 0\r\n")
+rig.send("0\r\n")                        # the other half, one readline() later
+time.sleep(REAR_TOUCH_S)                 # corner HELD past the flutter window
+rig.send("SW 0 0 0 0\r\n")
 time.sleep(0.3)
 check("the halves are reassembled and the rear-right corner fires",
       len(rig.rear_bumps) == 1, f"{len(rig.rear_bumps)}")
@@ -260,8 +296,12 @@ rig.send("SW 0 0 0 1\r\nSONAR 0.300\r\nSONAR 0.300\r\nSONAR 0.300\r\n")
 time.sleep(0.4)
 check("the next contact still reaches the loop (front-right)",
       rig.saw("BUMP #2: avant-droit"))
-check("the sonar still flows after the failure", len(rig.sonars) >= 1,
-      f"{len(rig.sonars)}")
+if SONAR_ENABLED:
+    check("the sonar still flows after the failure", len(rig.sonars) >= 1,
+          f"{len(rig.sonars)}")
+else:
+    check("the sonar lines are still swallowed cleanly after the failure",
+          len(rig.sonars) == 0 and not rig.saw("line dropped"), f"{len(rig.sonars)}")
 rig.close()
 
 
