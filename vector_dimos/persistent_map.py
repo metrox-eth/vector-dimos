@@ -450,6 +450,12 @@ def keepout_mask(zones: list[dict], res: float, ox: float, oy: float, n: int,
     still claims the cell it falls in, so a badly typed 2 cm zone protects
     something rather than nothing. A polygon claims its cell centres plus its
     outline, for the same reason (`polygon_mask`).
+
+    A zone that falls entirely OFF this grid claims nothing at all, both
+    shapes. Each end is clamped on its own side - never both onto the same
+    edge index, which would fold a rectangle drawn on an older flat (or left
+    behind by a rebase) onto a corner cell and forbid it forever, since
+    `occupancy()` applies keep-outs last and nothing can retract them.
     """
     import numpy as np
 
@@ -459,12 +465,12 @@ def keepout_mask(zones: list[dict], res: float, ox: float, oy: float, n: int,
         if pts is not None:
             mask |= polygon_mask(pts, res, ox, oy, n)
             continue
-        x0 = int((z["x0"] - ox) // res)
-        x1 = int((z["x1"] - ox) // res)
-        y0 = int((z["y0"] - oy) // res)
-        y1 = int((z["y1"] - oy) // res)
-        x0, x1 = max(0, min(x0, n - 1)), max(0, min(x1, n - 1))
-        y0, y1 = max(0, min(y0, n - 1)), max(0, min(y1, n - 1))
+        x0 = max(0, int((z["x0"] - ox) // res))
+        x1 = min(n - 1, int((z["x1"] - ox) // res))
+        y0 = max(0, int((z["y0"] - oy) // res))
+        y1 = min(n - 1, int((z["y1"] - oy) // res))
+        if x1 < x0 or y1 < y0:
+            continue                     # the whole rectangle falls off this grid
         mask[y0:y1 + 1, x0:x1 + 1] = True
     return mask
 
