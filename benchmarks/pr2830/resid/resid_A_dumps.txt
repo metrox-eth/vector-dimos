@@ -1,0 +1,554 @@
+PART 1 - class-A RESIDUALS under the remedy stock+M4.3
+=====================================================
+None. No decision in the traced grid had an available frontier within 6 m of route length that the remedy outranked in favour of a crossing.
+
+
+PART 2 - the class-A decisions under stock, i.e. the ones the remedy removed
+======================================================================
+Kept because they are the evidence that class A was real before the remedy.
+
+=== 12m hk_elevator shipped centre stock goal 3 ===
+robot [8.712, 20.398]  prev_goal [12.234652364647905, 20.316652078545633]  chosen [-10.96, 24.24]  jump 23.52 m (threshold 15.14 m)
+k needed 1.868   loses on info_gain   term delta {'info_gain': 0.246, 'explored_goals': 0.125332, 'distance': -0.124186, 'obstacles': 0.065581, 'momentum': -0.044768}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -10.96    24.24   125   21.37   20.04    0.5767     nan    nan    0.576699      *
+  -10.97    24.45   188   21.41   20.09    0.5724     nan    nan    0.572407       
+   12.71    18.26    18    5.15    4.54    0.3087     nan    nan    0.308740       
+   10.53    17.71    26    4.42    3.24    0.2930     nan    nan    0.292977       
+  -10.31    25.82    18   21.30   19.77    0.2883     nan    nan    0.288325       
+  -10.21    25.94    13   21.49   19.72    0.2717     nan    nan    0.271702       
+   10.53    17.93    19    4.53    3.07    0.2586     nan    nan    0.258578       
+   -8.36    26.30    11   19.93   18.06    0.2397     nan    nan    0.239708       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.188652, 'distance': 0.012466, 'obstacles': 0.075581, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.054, 'explored_goals': 0.06332, 'distance': 0.136652, 'obstacles': 0.01, 'momentum': 0.044768}
+
+=== 12m hk_elevator shipped mid1 stock goal 2 ===
+robot [-2.83, 21.793]  prev_goal [3.822265815734862, 20.149739487965913]  chosen [-12.412, 19.218]  jump 16.26 m (threshold 15.14 m)
+k needed 1.318   loses on explored_goals   term delta {'info_gain': 0.105, 'explored_goals': 0.162807, 'distance': -0.070748, 'obstacles': 0.008105, 'momentum': -0.048108}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -12.41    19.22   458   13.52    9.92    0.6515     nan    nan    0.651517      *
+    7.61    19.68  1991   11.32   10.66    0.6423     nan    nan    0.642306       
+  -14.01    18.71   302   14.83   11.59    0.6354     nan    nan    0.635358       
+    3.01    22.19   137    6.06    5.85    0.6062     nan    nan    0.606159       
+  -13.91    20.65    77   13.74   11.14    0.5821     nan    nan    0.582132       
+   -1.03    17.09    52    7.89    5.04    0.5810     nan    nan    0.581006       
+  -14.00    20.15    56   13.62   11.29    0.5206     nan    nan    0.520561       
+    0.06    18.90    65    5.97    4.09    0.4945     nan    nan    0.494461       
+  -13.92    20.95    38   13.31   11.12    0.4696     nan    nan    0.469636       
+    3.13    16.94    78    8.50    7.69    0.4687     nan    nan    0.468656       
+    3.00    16.56    81    8.71    7.83    0.4670     nan    nan    0.467035       
+   -0.19    16.53    16    7.39    5.89    0.3749     nan    nan    0.374911       
+    0.82    18.09    11    5.63    5.19    0.3735     nan    nan    0.373540       
+    0.07    16.69    12    7.12    5.87    0.3692     nan    nan    0.369192       
+    7.47    21.52    17   10.45   10.31    0.3611     nan    nan    0.361118       
+    6.72    21.71    31    9.68    9.56    0.3508     nan    nan    0.350759       
+    7.58    21.32    11   10.61   10.42    0.3503     nan    nan    0.350348       
+    0.39    16.18    12    7.53    6.47    0.3273     nan    nan    0.327342       
+    1.07    17.33    10    6.54    5.93    0.3219     nan    nan    0.321858       
+    1.82    17.57    17    6.86    6.28    0.3012     nan    nan    0.301247       
+    6.80    21.38    10    9.82    9.64    0.2940     nan    nan    0.293953       
+    6.72    21.48    11    9.72    9.56    0.2919     nan    nan    0.291907       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.281688, 'distance': 0.033773, 'obstacles': 0.036056, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.195, 'explored_goals': 0.118881, 'distance': 0.104521, 'obstacles': 0.027951, 'momentum': 0.048108}
+
+=== 12m hk_elevator scoring mid1 stock goal 2 ===
+robot [4.225, 19.937]  prev_goal [4.099808619853637, 19.748563123023384]  chosen [-12.412, 19.218]  jump 16.52 m (threshold 15.14 m)
+k needed 2.580   loses on explored_goals   term delta {'info_gain': 0.195, 'explored_goals': 0.213338, 'distance': -0.041417, 'obstacles': 0.021056, 'momentum': 0.0}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -12.41    19.22   458   21.39   16.65    0.6336     nan    nan    0.633551      *
+  -14.01    18.71   302   22.70   18.27    0.6230     nan    nan    0.623028       
+  -13.91    20.65    77   21.60   18.15    0.5683     nan    nan    0.568256       
+  -14.00    20.15    56   21.48   18.23    0.5072     nan    nan    0.507184       
+  -13.92    20.95    38   21.18   18.17    0.4557     nan    nan    0.455668       
+   12.55    20.43    14    8.49    8.34    0.4152     nan    nan    0.415221       
+   10.51    17.71    20    7.26    6.66    0.4061     nan    nan    0.406108       
+   10.52    17.97    19    7.87    6.59    0.4004     nan    nan    0.400438       
+   12.70    20.73    10    8.78    8.51    0.3986     nan    nan    0.398645       
+    2.84    17.85    35    2.81    2.50    0.2456     nan    nan    0.245574       
+    1.92    18.10    12    4.40    2.95    0.1928     nan    nan    0.192797       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.281688, 'distance': 0.015807, 'obstacles': 0.036056, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.105, 'explored_goals': 0.06835, 'distance': 0.057224, 'obstacles': 0.015, 'momentum': 0.0}
+
+=== 12m hk_elevator shipped mid4 stock goal 4 ===
+robot [5.077, 20.41]  prev_goal [12.878092974240015, 20.108247327312988]  chosen [-13.059, 22.151]  jump 26.02 m (threshold 15.14 m)
+k needed 2.580   loses on info_gain   term delta {'info_gain': 0.264, 'explored_goals': 0.118671, 'distance': -0.081618, 'obstacles': 0.022508, 'momentum': 0.0}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -13.06    22.15   234   20.37   18.22    0.5284     nan    nan    0.528366      *
+   -9.59    22.91   135   16.70   14.88    0.4352     nan    nan    0.435153       
+  -11.34    22.34    64   18.91   16.53    0.3785     nan    nan    0.378539       
+   10.52    17.72    25    6.60    6.07    0.3367     nan    nan    0.336675       
+   10.52    18.04    20    6.75    5.93    0.3175     nan    nan    0.317549       
+  -13.50    22.66    26   20.61   18.71    0.3078     nan    nan    0.307849       
+  -13.25    22.35    16   20.48   18.43    0.2909     nan    nan    0.290859       
+  -13.95    22.43    12   21.14   19.14    0.2665     nan    nan    0.266523       
+    1.94    18.07    12    5.10    3.91    0.2048     nan    nan    0.204804       
+   -9.72    26.07    10   18.52   15.85    0.1214     nan    nan    0.121403       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.183887, 'distance': 0.014065, 'obstacles': 0.030414, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.036, 'explored_goals': 0.065216, 'distance': 0.095683, 'obstacles': 0.007906, 'momentum': 0.0}
+
+=== 12m hk_elevator scoring mid4 stock goal 2 ===
+robot [5.748, 20.077]  prev_goal [5.924011490169893, 19.95819199502804]  chosen [-13.831, 20.144]  jump 19.76 m (threshold 15.14 m)
+k needed 1.382   loses on info_gain   term delta {'info_gain': 0.246, 'explored_goals': 0.085612, 'distance': -0.147896, 'obstacles': 0.02774, 'momentum': -0.049673}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -13.83    20.14    97   24.03   19.58    0.5850     nan    nan    0.584967      *
+   10.52    17.97    19    6.36    5.21    0.4393     nan    nan    0.439327       
+   10.44    17.73    15    5.80    5.24    0.4232     nan    nan    0.423183       
+  -13.54    21.42    58   22.05   19.34    0.4113     nan    nan    0.411272       
+  -11.67    21.73    72   19.96   17.50    0.4005     nan    nan    0.400545       
+  -14.14    21.29    18   22.62   19.92    0.3103     nan    nan    0.310255       
+    2.50    17.87    13    4.18    3.93    0.2662     nan    nan    0.266154       
+   -9.09    22.43    16   17.84   15.03    0.1684     nan    nan    0.168424       
+  weighted terms of the goal taken   {'info_gain': 0.291, 'explored_goals': 0.236617, 'distance': 0.012838, 'obstacles': 0.044511, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.045, 'explored_goals': 0.151005, 'distance': 0.160734, 'obstacles': 0.016771, 'momentum': 0.049673}
+
+=== 12m hk_elevator shipped mid5 stock goal 2 ===
+robot [-3.884, 22.279]  prev_goal [6.0053361591143135, 19.74377460818987]  chosen [-11.989, 22.798]  jump 18.25 m (threshold 15.14 m)
+k needed 1.623   loses on info_gain   term delta {'info_gain': 0.24, 'explored_goals': 0.060021, 'distance': -0.10772, 'obstacles': 0.051838, 'momentum': 0.0}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -11.99    22.80   475    9.32    8.12    0.6357     nan    nan    0.635719      *
+    6.87    19.32  1192   11.99   11.15    0.5417     nan    nan    0.541684       
+    4.32    16.80   207   10.90    9.87    0.4962     nan    nan    0.496239       
+  -12.83    23.04    32   10.01    8.98    0.4060     nan    nan    0.405966       
+   -9.03    23.48    20    5.97    5.28    0.3916     nan    nan    0.391579       
+   -1.15    17.39    22    8.03    5.60    0.3862     nan    nan    0.386223       
+   -9.68    23.35    17    6.78    5.89    0.3764     nan    nan    0.376392       
+  -10.16    25.91    24    7.95    7.25    0.3746     nan    nan    0.374563       
+   -0.51    17.05    10    7.68    6.23    0.3647     nan    nan    0.364678       
+    0.21    16.51    14    8.20    7.07    0.3622     nan    nan    0.362192       
+  -12.15    24.00    12    8.95    8.44    0.3590     nan    nan    0.358999       
+   -0.78    17.44    10    7.38    5.75    0.3530     nan    nan    0.352962       
+  -13.40    23.09    16   10.54    9.55    0.3474     nan    nan    0.347395       
+    3.18    22.27    15    7.54    7.07    0.2938     nan    nan    0.293798       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.207739, 'distance': 0.048528, 'obstacles': 0.079451, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.06, 'explored_goals': 0.147718, 'distance': 0.156248, 'obstacles': 0.027613, 'momentum': 0.0}
+
+=== 12m hk_elevator shipped mid5 stock goal 3 ===
+robot [-7.082, 24.297]  prev_goal [-11.989210335580923, 22.798157799369395]  chosen [6.876, 19.377]  jump 19.17 m (threshold 15.14 m)
+k needed 1.163   loses on obstacles   term delta {'info_gain': 0.087, 'explored_goals': -0.042147, 'distance': -0.05024, 'obstacles': 0.112155, 'momentum': -0.039671}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+    6.88    19.38   886   16.03   14.80    0.4792     nan    nan    0.479184      *
+  -13.61    21.76    81    7.56    7.00    0.4546     nan    nan    0.454575       
+    4.32    16.80   207   14.93   13.65    0.4400     nan    nan    0.439952       
+   -9.65    22.58    71    3.55    3.09    0.4121     nan    nan    0.412086       
+  -11.33    22.20    34    5.15    4.73    0.3391     nan    nan    0.339065       
+  -10.18    25.92    20    3.94    3.50    0.3085     nan    nan    0.308513       
+  -13.93    21.84    23    7.82    7.27    0.2669     nan    nan    0.266932       
+   -1.14    17.38    20   12.06    9.12    0.2655     nan    nan    0.265473       
+  -13.75    22.03    14    7.58    7.04    0.2386     nan    nan    0.238602       
+  -13.82    22.39    13    7.49    7.01    0.2273     nan    nan    0.227265       
+  -13.80    22.52    10    7.42    6.95    0.2179     nan    nan    0.217889       
+    3.18    22.27    15   11.56   10.46    0.2096     nan    nan    0.209580       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.028354, 'distance': 0.018518, 'obstacles': 0.132311, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.213, 'explored_goals': 0.070501, 'distance': 0.068758, 'obstacles': 0.020156, 'momentum': 0.039671}
+
+=== 12m hk_elevator scoring mid5 stock goal 2 ===
+robot [5.83, 19.67]  prev_goal [6.006573466596937, 19.51939645635669]  chosen [-11.989, 22.798]  jump 18.29 m (threshold 15.14 m)
+k needed 1.315   loses on info_gain   term delta {'info_gain': 0.246, 'explored_goals': 0.063287, 'distance': -0.179561, 'obstacles': 0.061951, 'momentum': -0.04756}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -11.99    22.80   475   20.17   18.09    0.6014     nan    nan    0.601383      *
+   10.55    17.93    18    5.69    5.03    0.4573     nan    nan    0.457266       
+  -12.83    23.04    32   20.85   18.96    0.3792     nan    nan    0.379175       
+  -12.15    24.00    12   19.80   18.49    0.3278     nan    nan    0.327788       
+  -13.40    23.09    16   21.38   19.53    0.3242     nan    nan    0.324235       
+  -10.17    25.92    17   18.79   17.17    0.3049     nan    nan    0.304895       
+   -9.68    23.35    17   17.63   15.94    0.2873     nan    nan    0.287268       
+   -9.03    23.48    20   16.82   15.34    0.2530     nan    nan    0.252972       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.207739, 'distance': 0.014193, 'obstacles': 0.079451, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.054, 'explored_goals': 0.144452, 'distance': 0.193754, 'obstacles': 0.0175, 'momentum': 0.04756}
+
+=== 12m hk_entrance shipped mid3 stock goal 4 ===
+robot [2.392, 18.361]  prev_goal [-1.882282726317742, 19.82597975179623]  chosen [25.523, 15.807]  jump 27.7 m (threshold 21.44 m)
+k needed 1.770   loses on explored_goals   term delta {'info_gain': 0.087, 'explored_goals': 0.256136, 'distance': -0.076123, 'obstacles': 0.009684, 'momentum': 0.0}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+   25.52    15.81   271   31.43   23.27    0.6359     nan    nan    0.635873      *
+   -3.60    16.27   291    6.95    6.35    0.6104     nan    nan    0.610353       
+   -4.07    17.21   485    7.87    6.57    0.6084     nan    nan    0.608444       
+   25.75    20.92    62   28.66   23.50    0.5145     nan    nan    0.514457       
+   13.32    19.23    97   49.23   10.96    0.4847     nan    nan    0.484674       
+   23.70    24.80    41   25.09   22.26    0.4771     nan    nan    0.477058       
+   14.05    18.09    81   46.96   11.66    0.4708     nan    nan    0.470846       
+    2.94    27.71   118   32.54    9.36    0.4687     nan    nan    0.468676       
+   25.91    18.57    46   29.71   23.52    0.4673     nan    nan    0.467287       
+   13.36    20.07   153   50.21   11.10    0.4602     nan    nan    0.460158       
+   26.79    17.43    39   31.77   24.42    0.4393     nan    nan    0.439295       
+   21.89    18.54    35   36.02   19.49    0.4162     nan    nan    0.416176       
+   22.50    17.73    22   34.24   20.12    0.3890     nan    nan    0.389013       
+   13.76    18.32    57   47.55   11.37    0.3805     nan    nan    0.380492       
+   11.91    18.45    47   51.88    9.52    0.3776     nan    nan    0.377644       
+   26.59    15.76    18   32.44   24.34    0.3763     nan    nan    0.376335       
+   20.66    18.03    27   37.37   18.27    0.3726     nan    nan    0.372605       
+    5.86    17.11    71    4.01    3.69    0.3592     nan    nan    0.359177       
+    3.84    27.79    60   30.93    9.54    0.3310     nan    nan    0.330971       
+   14.97    17.76    27   46.66   12.59    0.3036     nan    nan    0.303640       
+   -4.37    18.25    14    7.24    6.76    0.2985     nan    nan    0.298458       
+    0.23    24.10    10    8.08    6.13    0.2834     nan    nan    0.283385       
+   -4.85    18.68    12    7.52    7.25    0.2548     nan    nan    0.254839       
+    6.78    27.93    26   43.21   10.53    0.2141     nan    nan    0.214080       
+    6.36    16.98    18    4.73    4.20    0.2110     nan    nan    0.210954       
+    3.40    27.98    11   32.20    9.68    0.1871     nan    nan    0.187061       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.3, 'distance': 0.010378, 'obstacles': 0.025495, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.213, 'explored_goals': 0.043864, 'distance': 0.086501, 'obstacles': 0.015811, 'momentum': 0.0}
+
+=== 12m hk_office shipped mid4 stock goal 6 ===
+robot [-4.007, 2.481]  prev_goal [-5.310206373979092, 0.01132958801498117]  chosen [1.061, 21.307]  jump 22.23 m (threshold 15.45 m)
+k needed 1.442   loses on info_gain   term delta {'info_gain': 0.168, 'explored_goals': 0.087983, 'distance': -0.070825, 'obstacles': 0.001415, 'momentum': -0.049478}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+    1.06    21.31    93   21.67   19.50    0.4472     nan    nan    0.447161      *
+    1.17    15.37   158   15.80   13.89    0.4237     nan    nan    0.423664       
+   -0.33     1.54   124    6.95    3.79    0.4122     nan    nan    0.412190       
+    0.85    21.37    56   21.72   19.51    0.3404     nan    nan    0.340379       
+    1.32    21.22    56   21.67   19.49    0.3331     nan    nan    0.333073       
+   -6.49    -0.14    37    4.14    3.61    0.3101     nan    nan    0.310066       
+   -6.00    -0.80    35    4.16    3.84    0.3030     nan    nan    0.302983       
+    0.94     2.50    15    7.20    4.95    0.2897     nan    nan    0.289683       
+    0.64    21.26    35   21.66   19.34    0.2828     nan    nan    0.282770       
+   -4.94    -1.54    20    4.53    4.12    0.2788     nan    nan    0.278815       
+   -3.33     0.20    18    2.69    2.38    0.2200     nan    nan    0.220028       
+   -4.98     9.59    18    9.37    7.18    0.2110     nan    nan    0.211013       
+   -4.65     5.73    12   10.05    3.31    0.2094     nan    nan    0.209407       
+   -5.56     1.84    12    3.11    1.68    0.1924     nan    nan    0.192352       
+   -5.12     1.36    13    2.28    1.58    0.1869     nan    nan    0.186891       
+    1.07    19.77    19   20.19   18.03    0.1596     nan    nan    0.159642       
+    1.33    17.59    28   18.09   16.03    0.1396     nan    nan    0.139608       
+    1.27    19.52    11   20.02   17.84    0.1353     nan    nan    0.135298       
+    1.41    19.49    11   20.01   17.85    0.1336     nan    nan    0.133578       
+    1.02    18.75    16   19.12   17.03    0.1207     nan    nan    0.120671       
+    0.93    18.85    12   19.18   17.10    0.1145     nan    nan    0.114543       
+  weighted terms of the goal taken   {'info_gain': 0.279, 'explored_goals': 0.123632, 'distance': 0.012906, 'obstacles': 0.031623, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.111, 'explored_goals': 0.035649, 'distance': 0.083731, 'obstacles': 0.030208, 'momentum': 0.049478}
+
+=== 12m hk_office scoring mid4 stock goal 2 ===
+robot [0.753, 16.982]  prev_goal [0.8692449015491409, 17.19066037735849]  chosen [-0.431, 1.69]  jump 15.56 m (threshold 15.45 m)
+k needed 1.257   loses on info_gain   term delta {'info_gain': 0.198, 'explored_goals': 0.08271, 'distance': -0.098533, 'obstacles': -0.026097, 'momentum': -0.045921}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+   -0.43     1.69   250   18.20   15.34    0.5385     nan    nan    0.538499      *
+    0.53    21.25    34    4.46    4.28    0.4283     nan    nan    0.428341       
+    1.55    21.24    21    4.58    4.33    0.3790     nan    nan    0.379008       
+   -0.25     4.25    46   17.17   12.77    0.3085     nan    nan    0.308457       
+   -1.67     4.47    44   14.68   12.75    0.2940     nan    nan    0.294020       
+   -2.95     4.29    20   15.05   13.22    0.2178     nan    nan    0.217768       
+   -1.15    17.30    29    8.32    1.93    0.2102     nan    nan    0.210227       
+   -4.78     9.15    25   14.04    9.59    0.1934     nan    nan    0.193413       
+   -4.53     7.20    10   14.17   11.12    0.1306     nan    nan    0.130640       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.205048, 'distance': 0.017641, 'obstacles': 0.015811, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.102, 'explored_goals': 0.122338, 'distance': 0.116174, 'obstacles': 0.041908, 'momentum': 0.045921}
+
+=== 12m hk_park shipped centre stock goal 4 ===
+robot [-13.8, 15.943]  prev_goal [-11.396160409556302, 23.475170839199027]  chosen [-11.641, -9.281]  jump 32.76 m (threshold 21.82 m)
+k needed 1.308   loses on info_gain   term delta {'info_gain': 0.228, 'explored_goals': 0.138596, 'distance': -0.183407, 'obstacles': -0.000706, 'momentum': -0.049807}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -11.64    -9.28    90   26.14   25.32    0.5635     nan    nan    0.563468      *
+  -13.59    22.31    90    6.76    6.37    0.5326     nan    nan    0.532563       
+  -13.35    22.66   195    7.22    6.74    0.5257     nan    nan    0.525658       
+  -14.03    20.90    14    5.18    4.96    0.4308     nan    nan    0.430792       
+  -13.66    23.20    75    7.64    7.26    0.4215     nan    nan    0.421536       
+  -13.70    19.47    57    3.87    3.53    0.4166     nan    nan    0.416572       
+  -16.71    -4.55    65   22.24   20.70    0.4135     nan    nan    0.413537       
+  -12.51    22.62    65    7.45    6.80    0.3871     nan    nan    0.387132       
+  -10.55    22.67    62    8.07    7.47    0.3784     nan    nan    0.378388       
+  -13.78    21.35    14    5.73    5.41    0.3623     nan    nan    0.362346       
+  -12.76    24.12    66    9.08    8.25    0.3547     nan    nan    0.354704       
+  -16.87    -7.23    28   25.82   23.37    0.3534     nan    nan    0.353390       
+  -17.25    -6.77    26   25.20   22.98    0.3425     nan    nan    0.342459       
+  -12.75    22.41    36    7.26    6.56    0.3156     nan    nan    0.315598       
+  -13.29    -9.31    10   26.00   25.26    0.3008     nan    nan    0.300843       
+  -11.74    23.71    57    8.85    8.04    0.2954     nan    nan    0.295360       
+  -12.06    23.04    44    7.99    7.30    0.2911     nan    nan    0.291101       
+  -13.82    22.93    25    7.33    6.98    0.2869     nan    nan    0.286871       
+  -12.97    -8.10    12   24.65   24.06    0.2726     nan    nan    0.272613       
+  -11.12    -5.16    33   22.78   21.27    0.2490     nan    nan    0.249027       
+  -11.51    -5.11    14   22.00   21.17    0.1930     nan    nan    0.193010       
+  -11.68    22.85    10    7.96    7.23    0.1864     nan    nan    0.186379       
+  -12.45    24.42    10    9.38    8.58    0.1735     nan    nan    0.173538       
+  -11.31    24.78    11   10.04    9.19    0.1699     nan    nan    0.169885       
+  -11.57    23.95    12    9.06    8.31    0.1587     nan    nan    0.158694       
+  weighted terms of the goal taken   {'info_gain': 0.27, 'explored_goals': 0.248996, 'distance': 0.009383, 'obstacles': 0.035089, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.042, 'explored_goals': 0.1104, 'distance': 0.19279, 'obstacles': 0.035795, 'momentum': 0.049807}
+
+=== 12m hk_park shipped mid2 stock goal 5 ===
+robot [-12.919, -10.506]  prev_goal [-14.39632132132132, -12.391366175631504]  chosen [-12.313, 11.501]  jump 23.98 m (threshold 21.82 m)
+k needed 1.646   loses on info_gain   term delta {'info_gain': 0.228, 'explored_goals': 0.04233, 'distance': -0.076504, 'obstacles': 0.03944, 'momentum': -0.049722}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -12.31    11.50   530   22.50   22.02    0.4675     nan    nan    0.467507      *
+  -17.77    -9.04    32   15.26    5.06    0.4434     nan    nan    0.443397       
+  -24.04     1.00    97   33.85   16.00    0.4159     nan    nan    0.415927       
+  -22.99     3.74  2511   35.63   17.44    0.3846     nan    nan    0.384607       
+  -23.36    -0.52    52   32.90   14.44    0.3336     nan    nan    0.333613       
+  -14.44    11.46    65   23.93   22.02    0.3245     nan    nan    0.324493       
+  -24.14     2.50    75   35.16   17.18    0.3109     nan    nan    0.310898       
+  -13.92    11.41    55   23.07   21.94    0.3030     nan    nan    0.302972       
+  -25.07    -1.64    31   23.61   15.04    0.2920     nan    nan    0.291980       
+  -25.40     2.99    63   36.68   18.38    0.2858     nan    nan    0.285751       
+  -13.67   -14.15    24    4.25    3.72    0.2840     nan    nan    0.283962       
+  -25.50    -2.73    16   22.12   14.79    0.2836     nan    nan    0.283638       
+  -11.78   -13.18    45    4.35    2.91    0.2630     nan    nan    0.262958       
+  -23.86    -0.78    25   33.53   14.64    0.2497     nan    nan    0.249745       
+  -13.29   -12.41    27    2.15    1.94    0.2368     nan    nan    0.236845       
+  -14.49     9.84    47   23.56   20.41    0.2347     nan    nan    0.234685       
+  -24.77     6.74    32   39.48   20.92    0.2227     nan    nan    0.222749       
+  -15.24    -9.23    14   18.13    2.65    0.2077     nan    nan    0.207700       
+  -23.64     1.75    29   34.20   16.28    0.2057     nan    nan    0.205671       
+  -23.32     0.71    12   33.01   15.30    0.1980     nan    nan    0.198017       
+  -10.39   -13.24    10    5.23    3.72    0.1920     nan    nan    0.192030       
+  -23.52     1.99    24   34.42   16.39    0.1912     nan    nan    0.191161       
+  -13.45    11.54    19   23.03   22.05    0.1843     nan    nan    0.184311       
+  -14.74     9.81    23   23.72   20.40    0.1801     nan    nan    0.180086       
+  -13.66    11.60    13   23.16   22.12    0.1668     nan    nan    0.166822       
+  -24.11     1.75    16   34.45   16.59    0.1500     nan    nan    0.149993       
+  -24.53     5.69    19   38.75   19.93    0.1498     nan    nan    0.149751       
+  -12.53     9.95    10   21.04   20.46    0.1476     nan    nan    0.147586       
+  -24.70     4.69    15   37.43   19.23    0.1245     nan    nan    0.124519       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.099286, 'distance': 0.011102, 'obstacles': 0.057118, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.072, 'explored_goals': 0.056956, 'distance': 0.087606, 'obstacles': 0.017678, 'momentum': 0.049722}
+
+=== 12m hk_park shipped mid4 stock goal 3 ===
+robot [-14.547, 12.358]  prev_goal [-12.115719696969688, 19.28901534225002]  chosen [-24.505, -4.619]  jump 26.93 m (threshold 21.82 m)
+k needed 1.591   loses on info_gain   term delta {'info_gain': 0.198, 'explored_goals': 0.162046, 'distance': -0.074948, 'obstacles': -0.007001, 'momentum': -0.041221}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -24.50    -4.62   127   26.70   19.68    0.6374     nan    nan    0.637375      *
+  -22.61    -6.65   185   25.52   20.64    0.6295     nan    nan    0.629516       
+  -13.49   -11.72   113   27.01   24.11    0.6281     nan    nan    0.628148       
+  -22.63    -7.59    86   26.68   21.52    0.5822     nan    nan    0.582162       
+  -13.04   -10.43    83   25.48   22.84    0.5721     nan    nan    0.572115       
+  -22.07    -4.84    78   24.02   18.77    0.5635     nan    nan    0.563548       
+  -14.91    23.99   139   11.88   11.63    0.5613     nan    nan    0.561309       
+  -24.98    -4.03    72   26.84   19.42    0.5503     nan    nan    0.550329       
+  -11.13    23.08   234   12.16   11.25    0.5491     nan    nan    0.549065       
+  -13.96    22.03   107   10.21    9.69    0.5393     nan    nan    0.539309       
+  -13.63    22.71   390   10.89   10.39    0.5282     nan    nan    0.528234       
+  -23.21    -2.83    65   25.84   17.48    0.5188     nan    nan    0.518847       
+  -11.71   -12.58    64   26.50   25.10    0.5118     nan    nan    0.511787       
+  -11.52   -14.14    38   28.39   26.67    0.4328     nan    nan    0.432821       
+  -12.88   -10.45    34   24.18   22.87    0.4321     nan    nan    0.432125       
+  -20.78    -5.61    25   23.34   19.02    0.4308     nan    nan    0.430813       
+  -21.04    -6.49    37   24.32   19.93    0.4306     nan    nan    0.430624       
+  -12.28    22.92    69   11.69   10.80    0.4226     nan    nan    0.422612       
+  -21.81    -4.08    29   23.46   17.97    0.4188     nan    nan    0.418812       
+  -21.17    -5.32    17   23.39   18.88    0.4144     nan    nan    0.414442       
+  -21.21    -4.88    16   23.25   18.49    0.4133     nan    nan    0.413345       
+  -21.27    -4.60    16   23.16   18.24    0.4113     nan    nan    0.411285       
+  -20.27    -4.30    21   21.99   17.61    0.4078     nan    nan    0.407794       
+  -21.11    -5.17    12   23.28   18.71    0.4026     nan    nan    0.402626       
+  -16.55    15.49    34    4.20    3.72    0.4005     nan    nan    0.400498       
+  -22.62    -4.54    23   24.48   18.73    0.4003     nan    nan    0.400256       
+  -21.35    -5.92    18   23.93   19.50    0.3994     nan    nan    0.399399       
+  -20.24    -5.56    15   23.00   18.80    0.3933     nan    nan    0.393335       
+  -22.55    -7.14    21   26.03   21.08    0.3929     nan    nan    0.392913       
+  -14.14    22.41    50   10.38   10.06    0.3872     nan    nan    0.387227       
+  -16.68    -6.60    21   27.81   19.08    0.3866     nan    nan    0.386569       
+  -21.30    -4.17    12   23.00   17.86    0.3809     nan    nan    0.380947       
+  -12.40   -10.28    16   23.74   22.73    0.3737     nan    nan    0.373675       
+  -22.00    -5.66    15   24.36   19.50    0.3720     nan    nan    0.372046       
+  -13.03    -8.27    17   21.55   20.68    0.3720     nan    nan    0.372004       
+  -20.21    -5.87    12   23.31   19.09    0.3719     nan    nan    0.371896       
+  -25.15    -3.48    14   27.26   19.06    0.3687     nan    nan    0.368746       
+  -12.55   -10.38    14   23.90   22.82    0.3668     nan    nan    0.366769       
+  -22.62    -6.20    10   25.21   20.24    0.3660     nan    nan    0.366032       
+  -19.82    -6.33    15   23.74   19.42    0.3659     nan    nan    0.365875       
+  -24.76    -2.97    13   27.56   18.41    0.3641     nan    nan    0.364055       
+  -22.73    -3.21    10   24.96   17.58    0.3559     nan    nan    0.355904       
+  -14.34    22.55    26   10.45   10.19    0.3137     nan    nan    0.313705       
+  -13.77    19.43    39    7.60    7.12    0.3076     nan    nan    0.307630       
+  -16.87    13.35    44    5.92    2.52    0.3058     nan    nan    0.305832       
+  -13.18    19.40    43    7.98    7.17    0.2961     nan    nan    0.296055       
+  -14.53    22.80    18   10.62   10.44    0.2879     nan    nan    0.287893       
+  -14.72    22.82    11   10.73   10.47    0.2632     nan    nan    0.263194       
+  -14.66    21.50    14    9.36    9.14    0.2525     nan    nan    0.252516       
+  -13.41    19.39    19    8.39    7.12    0.2344     nan    nan    0.234434       
+  -13.88    20.88    11    9.01    8.54    0.2294     nan    nan    0.229353       
+  -11.80    19.72    20    8.49    7.86    0.1980     nan    nan    0.197960       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.3, 'distance': 0.012753, 'obstacles': 0.024622, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.102, 'explored_goals': 0.137954, 'distance': 0.087701, 'obstacles': 0.031623, 'momentum': 0.041221}
+
+=== 12m hk_park scoring mid4 stock goal 3 ===
+robot [-13.585, 22.275]  prev_goal [-13.372552447552453, 22.284440750175428]  chosen [-24.505, -4.619]  jump 29.12 m (threshold 21.82 m)
+k needed 1.223   loses on explored_goals   term delta {'info_gain': 0.0, 'explored_goals': 0.193589, 'distance': -0.081218, 'obstacles': 0.004006, 'momentum': -0.000927}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -24.50    -4.62   127   36.88   29.03    0.6326     nan    nan    0.632613      *
+  -22.61    -6.65   185   35.70   30.30    0.6251     nan    nan    0.625106       
+  -13.49   -11.72   113   35.99   34.00    0.6249     nan    nan    0.624867       
+  -22.63    -7.59    86   36.86   31.20    0.5781     nan    nan    0.578100       
+  -22.07    -4.84    78   34.20   28.41    0.5582     nan    nan    0.558201       
+  -24.98    -4.03    72   37.06   28.66    0.5478     nan    nan    0.547827       
+   -9.83    22.04   139    4.10    3.76    0.5172     nan    nan    0.517163       
+  -23.21    -2.83    65   36.02   26.88    0.5128     nan    nan    0.512754       
+  -11.71   -12.58    64   36.56   34.91    0.5088     nan    nan    0.508779       
+  -11.52   -14.14    38   38.44   36.48    0.4302     nan    nan    0.430158       
+  -12.88   -10.45    34   34.24   32.73    0.4272     nan    nan    0.427161       
+  -21.04    -6.49    37   34.49   29.71    0.4258     nan    nan    0.425850       
+  -20.78    -5.61    25   33.52   28.80    0.4256     nan    nan    0.425564       
+  -12.97   -10.43    35   34.37   32.71    0.4245     nan    nan    0.424467       
+  -21.81    -4.08    29   33.63   27.61    0.4130     nan    nan    0.412970       
+  -21.17    -5.32    17   33.57   28.62    0.4091     nan    nan    0.409124       
+  -21.21    -4.88    16   33.42   28.21    0.4078     nan    nan    0.407800       
+  -21.27    -4.60    16   33.33   27.95    0.4056     nan    nan    0.405594       
+  -20.27    -4.30    21   32.17   27.40    0.4016     nan    nan    0.401650       
+  -21.11    -5.17    12   33.46   28.45    0.3972     nan    nan    0.397211       
+  -22.62    -4.54    23   34.66   28.30    0.3949     nan    nan    0.394909       
+  -21.35    -5.92    18   34.11   29.25    0.3944     nan    nan    0.394422       
+  -22.55    -7.14    21   36.21   30.75    0.3887     nan    nan    0.388677       
+  -20.24    -5.56    15   33.18   28.62    0.3879     nan    nan    0.387945       
+  -21.30    -4.17    12   33.18   27.55    0.3750     nan    nan    0.375008       
+  -22.00    -5.66    15   34.53   29.18    0.3671     nan    nan    0.367086       
+  -20.21    -5.87    12   33.49   28.91    0.3667     nan    nan    0.366667       
+  -25.15    -3.48    14   37.44   28.23    0.3637     nan    nan    0.363717       
+  -13.03    -8.25    16   31.61   30.53    0.3626     nan    nan    0.362610       
+  -22.62    -6.20    10   35.39   29.88    0.3614     nan    nan    0.361446       
+  -19.82    -6.33    15   33.92   29.28    0.3608     nan    nan    0.360817       
+  -12.40   -10.25    14   33.79   32.55    0.3602     nan    nan    0.360186       
+  -24.76    -2.97    13   37.74   27.60    0.3587     nan    nan    0.358654       
+  -22.73    -3.21    10   35.14   27.07    0.3498     nan    nan    0.349849       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.3, 'distance': 0.007991, 'obstacles': 0.024622, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.3, 'explored_goals': 0.106411, 'distance': 0.089209, 'obstacles': 0.020616, 'momentum': 0.000927}
+
+=== 4m hk_elevator shipped mid1 stock goal 13 ===
+robot [7.536, 19.506]  prev_goal [10.42350765342143, 17.216790949408693]  chosen [-12.06, 20.395]  jump 22.71 m (threshold 15.14 m)
+k needed 1.049   loses on explored_goals   term delta {'info_gain': 0.015, 'explored_goals': 0.063001, 'distance': -0.077932, 'obstacles': 0.03177, 'momentum': -0.015343}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -12.06    20.39    71   23.53   19.62    0.3513     nan    nan    0.351346      *
+   10.49    17.12    66    4.03    3.80    0.3349     nan    nan    0.334850       
+   12.61    17.79    14    6.33    5.36    0.2712     nan    nan    0.271191       
+  -14.05    21.49    58   24.46   21.68    0.2575     nan    nan    0.257530       
+   -6.13    18.82    20   14.78   13.69    0.1975     nan    nan    0.197530       
+  weighted terms of the goal taken   {'info_gain': 0.213, 'explored_goals': 0.066509, 'distance': 0.012808, 'obstacles': 0.051296, 'momentum': 0.007733}
+  weighted terms of the best near    {'info_gain': 0.198, 'explored_goals': 0.003508, 'distance': 0.09074, 'obstacles': 0.019526, 'momentum': 0.023076}
+
+=== 4m hk_elevator shipped mid3 stock goal 10 ===
+robot [-11.747, 20.562]  prev_goal [-11.869666475931803, 20.377666571299258]  chosen [9.117, 20.587]  jump 20.99 m (threshold 15.14 m)
+k needed 1.084   loses on info_gain   term delta {'info_gain': 0.153, 'explored_goals': -0.085954, 'distance': -0.071144, 'obstacles': 0.078938, 'momentum': -0.042429}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+    9.12    20.59   133   24.35   20.86    0.4188     nan    nan    0.418782      *
+  -14.26    18.00    49    3.92    3.59    0.3864     nan    nan    0.386372       
+   -1.06    16.29    62   19.27   11.51    0.3075     nan    nan    0.307531       
+    9.20    16.95    41   25.96   21.26    0.2831     nan    nan    0.283095       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.015238, 'distance': 0.011859, 'obstacles': 0.091686, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.147, 'explored_goals': 0.101192, 'distance': 0.083003, 'obstacles': 0.012748, 'momentum': 0.042429}
+
+=== 4m hk_elevator scoring mid3 stock goal 8 ===
+robot [-11.943, 20.291]  prev_goal [-12.096590718356044, 20.095454450087114]  chosen [8.783, 20.97]  jump 20.9 m (threshold 15.14 m)
+k needed 2.239   loses on info_gain   term delta {'info_gain': 0.27, 'explored_goals': 0.020072, 'distance': -0.057248, 'obstacles': 0.091449, 'momentum': -0.038557}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+    8.78    20.97   221   24.24   20.74    0.5164     nan    nan    0.516376      *
+    9.19    16.99    47   26.27   21.39    0.3086     nan    nan    0.308609       
+   -4.92    17.63    16   14.09    7.51    0.2642     nan    nan    0.264213       
+    9.08    20.62    11   24.68   21.03    0.2452     nan    nan    0.245163       
+   -3.89    17.70    18   14.28    8.46    0.2431     nan    nan    0.243143       
+  -13.96    17.92    10    3.38    3.11    0.2307     nan    nan    0.230660       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.105907, 'distance': 0.011949, 'obstacles': 0.09852, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.03, 'explored_goals': 0.085835, 'distance': 0.069197, 'obstacles': 0.007071, 'momentum': 0.038557}
+
+=== 4m hk_entrance shipped mid1 stock goal 14 ===
+robot [8.544, 22.78]  prev_goal [7.365138503671927, 21.255622837370247]  chosen [26.648, 9.004]  jump 22.85 m (threshold 21.44 m)
+k needed 1.006   loses on explored_goals   term delta {'info_gain': 0.0, 'explored_goals': 0.067581, 'distance': -0.085265, 'obstacles': -0.010851, 'momentum': 0.031944}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+   26.65     9.00   163   30.67   22.75    0.5400     nan    nan    0.539970      *
+    5.88    19.91   138    4.00    3.92    0.5366     nan    nan    0.536562       
+   13.30    20.87    42   10.52    5.13    0.4975     nan    nan    0.497549       
+    3.94    21.16    81   13.05    4.88    0.4539     nan    nan    0.453857       
+    8.87    28.23    68   32.00    5.46    0.4283     nan    nan    0.428274       
+   14.16    20.75    49   11.90    5.97    0.4238     nan    nan    0.423771       
+    1.15    20.97    75   12.52    7.61    0.3780     nan    nan    0.378030       
+    0.35    21.46    59   13.44    8.30    0.3358     nan    nan    0.335821       
+   -0.29    21.45    33   14.26    8.93    0.2726     nan    nan    0.272631       
+    2.46    20.55    38   12.52    6.48    0.2610     nan    nan    0.260975       
+    8.06    18.77    10    4.26    4.03    0.2559     nan    nan    0.255855       
+   13.39    28.68    22   37.72    7.63    0.2422     nan    nan    0.242237       
+    8.18    19.15    10    3.79    3.65    0.2321     nan    nan    0.232088       
+   23.52    10.11    36   32.42   19.62    0.2317     nan    nan    0.231743       
+   12.74    28.36    10   36.84    6.98    0.2036     nan    nan    0.203611       
+   13.10    28.43    10   37.31    7.25    0.1975     nan    nan    0.197521       
+   25.47    21.21    17   20.41   16.99    0.1669     nan    nan    0.166858       
+    1.05    27.98    12   23.09    9.12    0.1566     nan    nan    0.156620       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.127707, 'distance': 0.010667, 'obstacles': 0.05534, 'momentum': 0.046256}
+  weighted terms of the best near    {'info_gain': 0.3, 'explored_goals': 0.060126, 'distance': 0.095932, 'obstacles': 0.066191, 'momentum': 0.014312}
+
+=== 4m hk_entrance scoring mid1 stock goal 17 ===
+robot [26.858, 9.125]  prev_goal [26.64769948187051, 9.003834355828221]  chosen [3.429, 25.909]  jump 28.72 m (threshold 21.44 m)
+k needed 1.139   loses on info_gain   term delta {'info_gain': 0.141, 'explored_goals': -0.007008, 'distance': -0.091987, 'obstacles': 0.015187, 'momentum': -0.005612}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+    3.43    25.91    94   34.59   28.82    0.4239     nan    nan    0.423869      *
+    2.39    23.80    88   39.87   28.53    0.4016     nan    nan    0.401625       
+   13.92    20.53    70   24.24   17.24    0.3769     nan    nan    0.376873       
+   26.05     5.21    47    4.28    4.00    0.3723     nan    nan    0.372289       
+    3.80    27.10    66   35.53   29.23    0.3294     nan    nan    0.329360       
+   16.78    18.86    39   20.62   14.01    0.3215     nan    nan    0.321482       
+   24.62     5.80    24    5.66    4.01    0.2962     nan    nan    0.296243       
+    8.79    28.21    58   42.07   26.28    0.2862     nan    nan    0.286190       
+   22.85     8.44    12    4.29    4.06    0.2551     nan    nan    0.255118       
+   -0.43    23.91    16   42.82   31.04    0.1795     nan    nan    0.179468       
+    0.59    23.67    11   41.43   30.03    0.1699     nan    nan    0.169906       
+   13.05    28.40    13   47.13   23.71    0.1577     nan    nan    0.157664       
+    6.89    28.43    13   39.05   27.77    0.1399     nan    nan    0.139870       
+   25.45    21.17    15   12.58   12.13    0.1395     nan    nan    0.139549       
+  weighted terms of the goal taken   {'info_gain': 0.282, 'explored_goals': 0.108316, 'distance': 0.008058, 'obstacles': 0.025495, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.141, 'explored_goals': 0.115324, 'distance': 0.100045, 'obstacles': 0.010308, 'momentum': 0.005612}
+
+=== 4m hk_entrance scoring mid3 stock goal 14 ===
+robot [25.119, 16.253]  prev_goal [25.001111206478548, 16.085555555555555]  chosen [3.273, 25.78]  jump 23.79 m (threshold 21.44 m)
+k needed 1.300   loses on info_gain   term delta {'info_gain': 0.207, 'explored_goals': -0.006561, 'distance': -0.083488, 'obstacles': 0.015986, 'momentum': -0.030737}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+    3.27    25.78   100   26.93   23.83    0.4428     nan    nan    0.442838      *
+    3.54    27.25   103   27.97   24.22    0.4366     nan    nan    0.436617       
+   13.93    20.54    74   16.23   11.98    0.4074     nan    nan    0.407427       
+   24.33    12.76    60    6.87    3.59    0.3738     nan    nan    0.373807       
+   16.76    18.87    42   12.81    8.76    0.3485     nan    nan    0.348505       
+   27.53    13.24    31    4.49    3.86    0.3406     nan    nan    0.340638       
+   20.62    18.63    12   13.92    5.09    0.3385     nan    nan    0.338534       
+   26.56    12.47    23    4.40    4.05    0.3234     nan    nan    0.323424       
+    2.14    23.15    42   31.21   23.99    0.2881     nan    nan    0.288063       
+   25.47    20.89    23    5.04    4.65    0.2823     nan    nan    0.282293       
+    8.84    28.15    54   35.76   20.17    0.2667     nan    nan    0.266689       
+   10.77    18.73    33   20.69   14.56    0.2516     nan    nan    0.251554       
+    0.75    23.54    31   32.75   25.43    0.2270     nan    nan    0.226958       
+    1.32    23.33    21   32.08   24.83    0.1982     nan    nan    0.198236       
+   23.86    14.24    21    8.79    2.37    0.1922     nan    nan    0.192245       
+   23.06    15.31    18   10.34    2.26    0.1801     nan    nan    0.180119       
+    6.88    28.34    10   31.59   21.88    0.1209     nan    nan    0.120889       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.107754, 'distance': 0.010084, 'obstacles': 0.025, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.093, 'explored_goals': 0.114315, 'distance': 0.093572, 'obstacles': 0.009014, 'momentum': 0.030737}
+
+=== 4m hk_park scoring centre stock goal 6 ===
+robot [-14.388, 21.058]  prev_goal [-14.412499999999998, 21.26350019073486]  chosen [-12.845, -2.054]  jump 23.37 m (threshold 21.82 m)
+k needed 1.095   loses on obstacles   term delta {'info_gain': 0.078, 'explored_goals': -0.002762, 'distance': -0.076777, 'obstacles': 0.083123, 'momentum': -0.035519}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -12.85    -2.05   246   23.74   23.16    0.5285     nan    nan    0.528488      *
+  -11.03    15.70   128    9.05    6.32    0.5176     nan    nan    0.517554       
+  -11.30    23.11    74    3.95    3.71    0.4824     nan    nan    0.482423       
+  -11.04    21.67    74   10.11    3.41    0.4248     nan    nan    0.424812       
+  -14.76    24.99    26    4.14    3.95    0.3471     nan    nan    0.347122       
+  -12.31    24.45    22    4.39    3.98    0.3388     nan    nan    0.338754       
+  -13.87    25.02    13    4.43    3.99    0.3073     nan    nan    0.307331       
+  -11.66    21.97    15   10.15    2.88    0.2272     nan    nan    0.227216       
+  -12.24    21.30    19    9.13    2.16    0.2022     nan    nan    0.202234       
+  weighted terms of the goal taken   {'info_gain': 0.3, 'explored_goals': 0.105775, 'distance': 0.010436, 'obstacles': 0.112278, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.222, 'explored_goals': 0.108537, 'distance': 0.087213, 'obstacles': 0.029155, 'momentum': 0.035519}
+
+=== 4m hk_park scoring mid2 stock goal 12 ===
+robot [-9.911, 22.729]  prev_goal [-9.722058823529412, 22.882353131911334]  chosen [-22.795, -0.978]  jump 27.21 m (threshold 21.82 m)
+k needed 1.162   loses on info_gain   term delta {'info_gain': 0.12, 'explored_goals': 0.105182, 'distance': -0.185772, 'obstacles': 0.017561, 'momentum': 0.0}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -22.80    -0.98    69   45.65   26.98    0.4090     nan    nan    0.409029      *
+  -11.82    -6.59    67   31.85   29.38    0.3806     nan    nan    0.380646       
+  -20.02    -8.46    67   41.13   32.79    0.3744     nan    nan    0.374443       
+  -14.77    23.81    29    5.46    4.97    0.3521     nan    nan    0.352058       
+  -24.27    -2.05    34   43.73   28.64    0.3163     nan    nan    0.316322       
+  -24.66    -4.51    30   38.74   30.98    0.3129     nan    nan    0.312917       
+  -24.59    -4.82    18   38.99   31.22    0.2697     nan    nan    0.269747       
+  -10.55    18.53    12   19.94    4.25    0.2386     nan    nan    0.238572       
+  -17.43    -7.52    35   37.41   31.17    0.2336     nan    nan    0.233615       
+  -19.46    -8.32    10   40.12   32.49    0.1877     nan    nan    0.187692       
+  -14.39    -7.35    12   34.01   30.41    0.1696     nan    nan    0.169617       
+  weighted terms of the goal taken   {'info_gain': 0.207, 'explored_goals': 0.166751, 'distance': 0.008703, 'obstacles': 0.026575, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.087, 'explored_goals': 0.061569, 'distance': 0.194475, 'obstacles': 0.009014, 'momentum': 0.0}
+
+=== 4m hk_park scoring mid3 stock goal 9 ===
+robot [-12.487, 22.663]  prev_goal [-12.334333333333337, 22.812333524068194]  chosen [-17.928, -4.374]  jump 27.76 m (threshold 21.82 m)
+k needed 3.576   loses on info_gain   term delta {'info_gain': 0.171, 'explored_goals': 0.096652, 'distance': -0.032882, 'obstacles': 0.032889, 'momentum': 0.0}
+       x        y  size   geo_m   euc_m  upstream   route    dev         own supp chosen
+  -17.93    -4.37    69   30.69   27.58    0.3716     nan    nan    0.371577      *
+  -12.28    -7.88    55   31.83   30.54    0.3282     nan    nan    0.328155       
+  -16.99    -5.70    33   31.01   28.72    0.2189     nan    nan    0.218862       
+  -11.52    22.01    12    1.70    1.16    0.1039     nan    nan    0.103918       
+  weighted terms of the goal taken   {'info_gain': 0.207, 'explored_goals': 0.115706, 'distance': 0.008482, 'obstacles': 0.040389, 'momentum': 0.0}
+  weighted terms of the best near    {'info_gain': 0.036, 'explored_goals': 0.019054, 'distance': 0.041364, 'obstacles': 0.0075, 'momentum': 0.0}
+

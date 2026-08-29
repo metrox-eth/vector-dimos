@@ -1,0 +1,98 @@
+RESIDUAL CLASSIFICATION - what is declared before the traces are read
+=====================================================================
+2026-08-29, offline, no robot, no git operation, nothing posted.
+
+THE QUESTION
+------------
+The Go2 bench (../sim_2830_go2/rapport_go2.md) established that the cross-map
+ping-pong is present under stock in the maintainer's own conditions, and that
+the remedy (candidate M at GBPlanner's ratio, which on the Go2 body IS the whole
+composite, section 6 of that report) removes some of it and not all of it. This
+job asks one thing about what is LEFT:
+
+    is there an "other half" of the ping-pong problem - a second fixable
+    mechanism the remedy does not touch - or is the residual behaviour
+    legitimate walking?
+
+THE TAXONOMY, UNCHANGED
+-----------------------
+The classes, the radii and the code are ../sim_2830_fix/diagnose_swings.py, as
+declared in ../sim_2830_fix/diagnostic_swings.md:
+
+  N          not a crossing. The swing is defined on the GOAL sequence and the
+             robot was not standing on the previous goal. Excluded before any
+             share is computed, as in the fix job and as in the Go2 bench.
+  A          a near frontier existed, was available, and lost the ranking.
+  A-blocked  a near frontier existed but every one was suppressed by the harness
+             failed-goal filter: the drive planner had already refused it.
+  B          nothing near at the decision, but the cluster blinked out and comes
+             back in the same place later.
+  C          legitimate: nothing near, and nothing comes back.
+
+  R_near     = 6.0 m of GEODESIC route length under the planner's own cost rule.
+  SAME_SPOT  = 1.5 m.  REGION = 6.0 m straight line.
+
+R_near is KEPT AT 6.0 m at both lidar ranges. At 4 m that is 1.5 lidar ranges,
+the value the fix job justified; at 12 m it is 0.5. It is not re-tuned per
+range, because a class share that moves with the radius is not a finding. The
+sensitivity (R = 6 / 9 / 12 m) is printed instead.
+
+"Fixable" = A + A-blocked + B. A-blocked is counted as fixable in the SHARE
+because it is a mechanism failure and not geometry, and it is reported
+separately everywhere so a reader who disagrees can subtract it: re-ranking
+alone cannot reach an A-blocked decision.
+
+WHAT RUNS
+---------
+Arms: stock and stock+M4.3 only. stock+M4.3 is the remedy; per rapport_go2.md
+section 6 the reachability filter drops 0.1 % of candidates on the Go2 body and
+stock+CMP was an identical run to stock+M4.3 on 53 of 54 paired starts, so
+tracing M4.3 traces the remedy. That identity is re-checked run by run here
+(cmp_m43_cmp.py) rather than assumed.
+
+Ranges: 4 m and 12 m. Configs: shipped and scoring. Profile: go2, upstream 15 s
+goal timeout, every dimOS constant untouched.
+
+Maps: hk_office, hk_park, hk_elevator, hk_entrance. hk_allaround is out, as in
+the Go2 bench: its scoring configuration never finished there and its 35.33 m
+swing threshold is not answerable by a 4 m explorer.
+
+Starts: the cells where the recorded Go2 bench produced a real crossing under
+stock, stock+M4.3 or stock+CMP, unioned over the two configs so that no config
+is decided by a start selected on the other one. Both arms are run on every
+selected start, so every comparison is paired.
+
+WHAT THE TRACE ADDS, AND WHAT IT MUST NOT CHANGE
+------------------------------------------------
+The trace is the Go2 bench's own --trace, plus two report-only fields:
+  terms   the five weighted terms of the upstream score per candidate. Four are
+          recomputed from the selector's own config and own read-only helpers;
+          the obstacles term is DERIVED from the total, so the expensive square
+          search is never run twice and the five sum to the returned total.
+  policy  on a policy arm, the policy's own adjusted score per candidate, with
+          the route length and direction deviation it used, recomputed from the
+          policy's own methods immediately after its reorder() returned. It is
+          needed because "the arm's own score" in class A means the policy's
+          score on a policy arm, not the upstream one.
+
+REQUIRED BEFORE SCALING: one traced run must reproduce its recorded counterpart
+exactly, on a bare arm and on a policy arm. Then every traced run is compared to
+its recorded counterpart, and the report states the number of disagreements
+whatever it is.
+
+HOW THE VERDICT IS READ, DECLARED IN ADVANCE
+---------------------------------------------
+1. Under stock, pooled over the maps and configs of a range: fixable share =
+   (A + A-blocked + B) / real crossings. That is the answer to "is their
+   explorer dumb, in their own conditions".
+2. Under stock+M4.3: if A + A-blocked + B is 20 % or less of the residual real
+   crossings, the fixable half is covered and no other half exists. If A alone
+   is above 20 %, an other half exists and its decisions are dumped with their
+   score ratios, distances and losing term.
+3. Class-C crossings the remedy removed are counted cell by cell as
+   max(0, C_stock - C_remedy), and the path and coverage of exactly those cells
+   are printed, because a remedy that suppresses legitimate long walks pays for
+   it in coverage.
+4. Small integers. Every count here is a sum over a handful of paired starts.
+   A difference of one or two events is not evidence on its own and is not
+   reported as one.

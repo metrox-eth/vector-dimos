@@ -1,0 +1,275 @@
+================================================================================
+PRE-DECLARED GRID - the Go2 profile bench, plus the COMPOSITE candidate
+Workspace: scratchpad/sim_2830_go2/
+Written 2026-08-29, BEFORE any comparative run of this job.
+================================================================================
+
+WHAT RAN BEFORE THIS FILE, AND NOTHING ELSE DID
+-----------------------------------------------
+  1. derive_speed.py, on the odom AND lidar streams of nine dimOS recordings. A
+     MEASUREMENT of their robot, not a comparison of arms. Its output is
+     speed_derivation.txt and it fixes three numbers in the profile below:
+     the walking speed, the turn-in-place rate, and the lidar spacing (which
+     is measured in order to justify NOT changing it).
+  2. gate_fleet.py at 4 m on all eleven maps, twice: --profile rover (a
+     reproduction check on the patch) and --profile go2 (the new gate). An
+     ADMISSION test, run before the grid on purpose, and the rover pass
+     reproduces ../sim_2830_fleet/rapport_fleet.md section 3 line for line.
+  3. one mechanical smoke run of fix_composite.py on hk_elevator, two runs, to
+     check the wrapper installs, the nav hook binds and the counters move. Its
+     numbers are not used anywhere.
+  4. one launch of the grid that was KILLED after 20 s and its partial output
+     deleted, before any run finished, when the lidar-spacing question above was
+     raised. Nothing from it survives and nothing from it is read; it is named
+     here because it happened.
+
+No arm was compared with any other arm before this file was written.
+
+================================================================================
+0. WHY THIS BENCH EXISTS
+================================================================================
+Every bench in this workspace so far simulated OUR rover: 0.46 m wide, 0.15 m/s,
+needing a 60 cm aisle. The maintainer's robot, and the robot that RECORDED every
+floor here, is a Unitree Go2: 0.31 m wide, walking. Two consequences:
+
+  - the "passable floor" the whole bench measures coverage against is a
+    skeleton. Measured today at 4 m: the Go2 body opens +11 % to +99 % more
+    floor on the eight admitted maps, +174 % on china_office.
+  - goal_timeout x speed is how far a walk gets before the loop pulls the robot
+    off it. At the UPSTREAM 15 s and our 0.15 m/s that is 2.2 m, which is why
+    ../sim_2830_cand2/rapport_cand2.md section 8 found config `shipped` mostly
+    measuring the timeout (real crossings 34 -> 12, median path -59.5 %). At the
+    Go2's own recorded speed it is 9.0 m.
+
+This bench re-judges the ping-pong question in THEIR conditions.
+
+================================================================================
+1. THE ROBOT PROFILE (go2_profile.py, "go2")
+================================================================================
+SPEED 0.60 m/s. DERIVED, not assumed. derive_speed.py reads the `odom` stream of
+  dimOS' own recordings - the same stores the maps came from - through their own
+  SqliteStore where the pose index columns are empty, and measures speed over
+  sliding 0.5 s windows inside continuous segments, excluding standstill
+  (window speed below 0.05 m/s). Pooled over the FIVE HK recordings: 18 733
+  moving windows, MEDIAN 0.6029 m/s, p90 1.0387 m/s. The headline uses the
+  pooled median, 0.60 m/s. Per-map medians run 0.428 (hk_office) to 0.945
+  (hk_allaround); the alternative pooling, median of the per-map medians, would
+  give 0.94 m/s. The pooled figure is the smaller of the two and is used for
+  that reason: it is the choice least favourable to the claim that the shipped
+  configuration becomes a usable instrument at Go2 speed.
+TURN 0.63 rad/s. DERIVED by the same rule. A window where the body turns
+  (yaw >= 0.10 rad/s) while NOT translating (speed < 0.05 m/s) is a turn IN
+  PLACE, which is what explore_sim.TURN_RATE models; a walking curve is not.
+  Pooled over the five HK recordings: 1 492 pivot windows, median 0.6287 rad/s,
+  p90 1.2968. Turning spends goal-timeout budget, so this is not cosmetic: a
+  180 deg turn costs 5.0 s instead of 6.3 s. The pivot sample is small on three
+  of the five floors and hk_office carries 1 334 of the 1 492 windows; that is
+  a caveat, the direction of the correction is not.
+BODY 0.31 m wide, 0.70 m long. Unitree Go2 published standing size
+  700 x 310 x 400 mm, identical across Air / Pro / Edu.
+MARGINS, the harness' own rules kept proportional:
+  ROBOT_WIDTH_M      0.50 -> 0.35    body + the same 4 cm planner margin
+  BODY_HALF_WIDTH_M  0.23 -> 0.155   body / 2
+  CONTROL_MARGIN_M   0.05 -> 0.05    unchanged, a controller margin
+  LETHAL_CLEARANCE_M 0.30 -> 0.225   the same formula, width/2 + margin
+  PIVOT_CLEARANCE_M  0.39 -> 0.383   the same rule, half the body diagonal
+  (the Go2 is narrower but longer, so only the width-driven numbers move)
+SCAN_EVERY_M 0.25 m, MEASURED AND DELIBERATELY KEPT. The objection this has to
+  survive is that raising the speed while leaving a per-DISTANCE scan rate alone
+  would be an optimistic discovery bias. It was measured, not asserted: from the
+  recordings' own lidar frame timestamps against their own odom, the Go2 travels
+  a median 0.0789 m (p90 0.1457) between two consecutive lidar frames, its
+  stream running at 7.7 Hz. So 0.25 m of walk contains about 3.2 real
+  revolutions at 0.60 m/s and about 12.7 at 0.15 m/s: the simulated
+  one-per-0.25 m is the COARSER of the two at both speeds, information per metre
+  is geometry-limited rather than sensor-limited, and keeping the step in
+  distance isolates the robot profile from the sensor model. The residual, said
+  plainly: the sim under-samples the real Go2 lidar by about 3x per metre, which
+  is conservative about discovery, not optimistic.
+  ARRIVE_M, BUMP_BACKUP_M and the harness stop conditions are unchanged.
+NOT TOUCHED: every dimOS constant. The 0.25 m loop inflation, the 15 s goal
+  timeout, the info-gain self-stop, the failed-goal radius are theirs and stay.
+  Note the sign flip this causes and it is reported, not fixed: the costmap the
+  scorers are handed is inflated 0.25 m while the Go2's lethal radius is
+  0.225 m, so upstream's inflation is now CONSERVATIVE for this body where it
+  was optimistic for ours (cand2 caveat 13).
+
+================================================================================
+2. THE MAPS: HK ONLY
+================================================================================
+The maintainer said the HK dataset is enough to judge the algorithm, so the
+comparative grid is the HK floors and nothing else:
+
+    hk_office, hk_park, hk_elevator, hk_entrance, hk_allaround
+
+All five pass the Go2 gate (gate_go2.txt). No further hk_* recording exists in
+the store, so no map joins them.
+
+NOT IN THE GRID, and said rather than hidden: `china_office` flips REJECT ->
+PASS under the Go2 body (passable floor 9.6 -> 26.3 m2, share beyond one lidar
+range 1.6 % -> 26.5 %). It is not an hk_* floor, so it stays out of the
+comparative grid; the flip is reported in gate_go2.txt and in the report because
+it is a real finding about the gate, not about the arms. `apartment` and
+`markers_go2` stay REJECT under both bodies. `bigoffice`, `bigoffice_hc` and
+`go2_short` are rover-era anchors and are OUT of this grid by the same rule.
+
+PER-MAP THRESHOLDS ARE RECOMPUTED for the Go2-passable floor, because the floor
+grew. Cross-map swing threshold = half the bounding-box diagonal of the
+body-passable floor, the same rule as before, new values:
+
+    hk_office    14.81 -> 15.45 m
+    hk_park      21.53 -> 21.82 m
+    hk_elevator  15.03 -> 15.14 m
+    hk_entrance  20.70 -> 21.44 m
+    hk_allaround 35.13 -> 35.33 m
+
+DECLARED IN ADVANCE: on `hk_allaround` a 4 m explorer cannot plausibly issue two
+consecutive goals 35 m apart, so the crossing metric counts nothing there under
+any arm, exactly as in the fleet and cand2 benches. That map is reported and set
+aside on this metric, never averaged in as a zero. It is NOT dropped: its path,
+coverage and round-trip numbers are read normally.
+
+================================================================================
+3. CONFIGURATIONS
+================================================================================
+shipped   the upstream loop, get_exploration_goal() called as
+          _run_exploration_loop calls it, self-stops on, goal timeout
+          15.0 s = WavefrontConfig.goal_timeout of the installed package (md5
+          e77c328643c959a49077115e8a341f2c = pr2830/selector_base.py). At
+          0.60 m/s that truncates a walk at 9.0 m, so unlike in cand2 this
+          configuration is expected to be able to measure something.
+scoring   detect_frontiers -> _update_exploration_direction ->
+          mark_explored_goal, no self-stop, no goal timeout, plus the harness'
+          failed-goal filter (0.6 m / 60 s) on their ranked list.
+
+KNOWN FREEZE, declared before running: config `scoring` freezes deterministically
+on hk_allaround and hk_entrance (../sim_2830_fleet/rapport_fleet.md section 5).
+DECISION, made now: `scoring` is attempted ONCE on those two maps with a hard
+wall cap of 600 s per run. If it freezes again, those two maps are reported
+`shipped`-only exactly as before, and the fact is stated in the report rather
+than papered over. No second attempt, no tuning to get it to pass.
+
+================================================================================
+4. ARMS
+================================================================================
+    stock            dimensionalOS/dimos @ 6fcc4e2, unmodified
+    pr2830           samuelokpor/dimos @ ff9d5ae (PR #2830 head), unmodified
+    stock+CMP        stock + the COMPOSITE
+    pr2830+CMP       PR head + the COMPOSITE
+    stock+M4.3       stock + candidate M alone, the best single candidate of
+                     ../sim_2830_cand2, present so the report can say what the
+                     composite ADDS over M rather than over nothing
+
+Five arms. The two upstream selector files are read-only and stay byte-identical
+(md5 e77c328643c959a49077115e8a341f2c and 1ccc0c69fe88a72e402565feca988d26).
+Everything added is a harness-side wrapper installed on one selector INSTANCE.
+
+THE COMPOSITE (fix_composite.py, spec `CMP`), three established pieces, no
+fourth mechanism:
+
+  (1) the signed direction term at GBPlanner's ratio 4.3. Sourced in
+      ../sim_2830_fleet/confrontation_externe.md sections (iii) and (v).4:
+      dimOS' own direction term is `max(0.0, dot_product)` at 5 % weight, so a
+      U-turn costs exactly what a sideways move costs, nothing. GBPlanner
+      weights direction 0.3 against 0.07 for path length. Won cand2's declared
+      ratio sweep at 4.3.
+  (2) the distance penalty, `exp(-0.07 * route_m)`, as in cand2's M0 control -
+      the wrapper with the direction term switched off, which reached the same
+      crossings and round trips as every ratio on bigoffice
+      (rapport_cand2.md summary point 2). Pieces (1) and (2) are ONE formula in
+      GBPlanner and one formula here, so `stock+CMP` and `stock+M4.3` differ
+      ONLY by piece (3). fix_momentum.SignedMomentum is IMPORTED, not copied.
+  (3) a reachability filter. A candidate whose goal cell the BODY cannot reach
+      is dropped before ranking. One Dijkstra wave from the robot over the
+      body-inflated costmap - explore_sim's own clearance_cost_map +
+      clear_footprint + the planner's own cost rule, i.e. verbatim what
+      Sim.plan_to builds to decide whether the goal is drivable. Precedent:
+      explore_lite discards frontiers with no valid plan; nav2 refuses a goal
+      that fails feasibility checking. Neither scorer under test models the body
+      at all (cand2 caveat 13). SAFETY VALVE, declared and counted: if the
+      filter would drop EVERY candidate, the list passes through unchanged.
+
+  The policy reads exactly two things from the simulator through one explicit
+  hook: the discovered occupancy grid and the robot pose - what a navigation
+  costmap subscriber has on a real robot. No ground truth, no ceiling.
+
+================================================================================
+5. STARTS, RANGE, BUDGET
+================================================================================
+  6 middle starts per map (midstarts.choose_mid_starts), the same selection code
+    as the fleet and cand2 benches, recomputed for the Go2 body.
+  4 m lidar primary, the maintainer's own suggestion ("use a low-range lidar
+    3-5 m").
+  12 m regression pass on `stock` and `stock+CMP` ONLY, and only if the primary
+    grid leaves budget. If it does not run, that is stated.
+  Per-map chunking, --jobs <= 190, wall cap per run, logs to
+    /root/logs/go2_<map>.log. Any wave exceeding twice its estimate is killed
+    and noted.
+
+================================================================================
+6. METRICS - the cand2 definitions, unchanged
+================================================================================
+REAL CROSSING (primary). Two consecutive published goals more than the map's
+  swing threshold apart AND the robot actually travelled between them. The
+  class-N filter removes the swings where the goal sequence jumped while the
+  robot stood still (a goal timed out before the robot moved). Straight-line
+  here, geodesic in ../sim_2830_fix/diagnose_swings.py; the two agreed on 63 of
+  64 traced swings.
+RAW SWING. The unfiltered count, printed beside the real one, never instead.
+REAL ROUND TRIP. Three consecutive goals A -> B -> A' with A' within the
+  threshold of A, all three legs real.
+TOTAL PATH (m), COVERAGE (% of the Go2-passable ceiling), PATH TO 80 %.
+DECIDE MS, and the policy's own counters.
+
+RE-DERIVATION AND THE ZERO-DISAGREEMENT CHECK. Every crossing count in the
+report is recomputed from the RAW published goal coordinates in the results
+JSON by a second, independent pass (analyse), and compared against the counts
+the bench recorded while running. The report states the number of runs where
+the two disagree. The declaration made now: it must be ZERO, and if it is not,
+the discrepancy is reported and the raw re-derivation is the number of record.
+
+================================================================================
+7. HYPOTHESES - verbatim, before any comparative run
+================================================================================
+
+G1: with the Go2 profile at 15 s shipped, the cross-map swing behavior the
+    maintainer described is present under stock (real crossings > 0 on at least
+    half the discriminating maps).
+
+G2: stock+COMPOSITE reduces real crossings and round trips vs stock in each
+    config, path within +5 %, coverage within -5 %, per map.
+
+G3: pr2830+COMPOSITE same vs pr2830.
+
+G4: COMPOSITE beats stock+M4.3 alone on at least half the discriminating maps
+    without extra path beyond the budget.
+
+READING RULES, fixed now so no verdict can be argued after the fact:
+  - "discriminating maps" = the maps on which the crossing metric CAN fire,
+    i.e. all HK maps except hk_allaround, whose 35.33 m threshold a 4 m explorer
+    cannot reach. That is FOUR maps: hk_office, hk_park, hk_elevator,
+    hk_entrance. "At least half" therefore means at least 2 of 4.
+  - G1 is judged on config `shipped` only, since that is where the timeout
+    lives and what "at 15 s shipped" names.
+  - G2 and G3 are judged PER MAP AND PER CONFIG. A map fails if crossings do not
+    fall, or round trips do not fall, or median total path rises by more than
+    5 %, or median coverage falls by more than 5 percentage points. "Reduces"
+    means strictly fewer where the baseline is above zero; a baseline of zero
+    cannot be reduced and that map is reported as "no events to remove", not as
+    a pass and not as a failure.
+  - G4's "beats" = strictly fewer real crossings than stock+M4.3 on that map,
+    with median total path no more than 5 % above stock+M4.3's.
+  - Every per-map failure is printed. Nothing is pooled INSTEAD of the per-map
+    table; pooled numbers may be printed BESIDE it.
+
+WINNER RULE. No arm is called a fix on a pooled number. An arm is worth taking
+to the maintainer only if it passes its hypothesis on at least half the
+discriminating maps in BOTH configurations. Anything less is reported as what it
+is: a result on some floors.
+
+WHAT WOULD FALSIFY THE WHOLE INVESTIGATION. If G1 fails - if even stock, on the
+maintainer's robot profile, at the upstream timeout, on the maintainer's own
+floors, produces no real crossings - then the behaviour this entire line of work
+has been chasing is not reproducible in the conditions that matter, and that is
+the headline finding of the job. It is to be reported first and not buried.
+================================================================================

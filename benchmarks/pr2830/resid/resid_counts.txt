@@ -1,0 +1,174 @@
+traced runs: 128 from 8 files
+re-derivation check: 128 runs re-derived from raw goal coordinates, 92 of them matched against the recorded Go2 bench on 12 summary fields plus every goal coordinate: 0 disagreements
+
+94 swing decisions traced
+
+rng  arm         config   map             n   N   A Abl   B   C
+---------------------------------------------------------------
+4m   stock       shipped  hk_park         1   0   0   0   0   1
+4m   stock       shipped  hk_elevator     4   0   2   0   1   1
+4m   stock       shipped  hk_entrance     3   0   1   0   1   1
+4m   stock       scoring  hk_park         4   0   3   0   0   1
+4m   stock       scoring  hk_elevator     5   0   1   0   1   3
+4m   stock       scoring  hk_entrance     3   0   2   0   1   0
+4m   stock+M4.3  shipped  hk_office       2   0   0   0   0   2
+4m   stock+M4.3  shipped  hk_park         3   0   0   0   0   3
+4m   stock+M4.3  shipped  hk_elevator     1   0   0   0   0   1
+4m   stock+M4.3  scoring  hk_office       1   0   0   0   0   1
+4m   stock+M4.3  scoring  hk_park         4   0   0   0   2   2
+4m   stock+M4.3  scoring  hk_entrance     1   1   0   0   0   0
+12m  stock       shipped  hk_office       2   0   1   0   0   1
+12m  stock       shipped  hk_park         6   0   3   0   1   2
+12m  stock       shipped  hk_elevator    12   0   5   0   1   6
+12m  stock       shipped  hk_entrance     3   0   1   0   0   2
+12m  stock       scoring  hk_office       4   0   1   0   0   3
+12m  stock       scoring  hk_park         3   1   1   0   0   1
+12m  stock       scoring  hk_elevator     8   0   3   0   0   5
+12m  stock       scoring  hk_entrance     2   0   0   0   0   2
+12m  stock+M4.3  shipped  hk_office       2   0   0   0   1   1
+12m  stock+M4.3  shipped  hk_elevator     4   0   0   0   0   4
+12m  stock+M4.3  shipped  hk_entrance     3   0   0   0   1   2
+12m  stock+M4.3  scoring  hk_office       3   0   0   0   1   2
+12m  stock+M4.3  scoring  hk_park         3   0   0   0   0   3
+12m  stock+M4.3  scoring  hk_elevator     3   0   0   0   0   3
+12m  stock+M4.3  scoring  hk_entrance     4   0   0   0   0   4
+
+POOLED over the four discriminating maps and both configs, real crossings only (class N removed)
+rng  arm          real    A  Abl    B    C |  fixable A+Abl+B   legit C
+-----------------------------------------------------------------------
+4m   stock          20    9    0    4    7 |    13       65 %    7 35 %
+4m   stock+M4.3     11    0    0    2    9 |     2       18 %    9 82 %
+12m  stock          39   15    0    2   22 |    17       44 %   22 56 %
+12m  stock+M4.3     22    0    0    3   19 |     3       14 %   19 86 %
+both stock          59   24    0    6   29 |    30       51 %   29 49 %
+both stock+M4.3     33    0    0    5   28 |     5       15 %   28 85 %
+
+class A in full (24 decisions). 'k' = the arm's own score of the goal taken over the best near candidate's.
+rng  arm         map           start   cfg      goal   jump  chosen@  near@    s_chos    s_near     k  loses on
+12m  stock       hk_elevator   centre  shipped     3   23.5     21.4    5.2    0.5767    0.3087  1.87  info_gain
+12m  stock       hk_elevator   mid1    shipped     2   16.3     13.5    6.0    0.6515    0.4945  1.32  explored_goals
+12m  stock       hk_elevator   mid1    scoring     2   16.5     21.4    2.8    0.6336    0.2456  2.58  explored_goals
+12m  stock       hk_elevator   mid4    shipped     4   26.0     20.4    5.1    0.5284    0.2048  2.58  info_gain
+12m  stock       hk_elevator   mid4    scoring     2   19.8     24.0    5.8    0.5850    0.4232  1.38  info_gain
+12m  stock       hk_elevator   mid5    shipped     2   18.2      9.3    6.0    0.6357    0.3916  1.62  info_gain
+12m  stock       hk_elevator   mid5    shipped     3   19.2     16.0    3.5    0.4792    0.4121  1.16  obstacles
+12m  stock       hk_elevator   mid5    scoring     2   18.3     20.2    5.7    0.6014    0.4573  1.32  info_gain
+12m  stock       hk_entrance   mid3    shipped     4   27.7     31.4    4.0    0.6359    0.3592  1.77  explored_goals
+12m  stock       hk_office     mid4    shipped     6   22.2     21.7    4.1    0.4472    0.3101  1.44  info_gain
+12m  stock       hk_office     mid4    scoring     2   15.6     18.2    4.5    0.5385    0.4283  1.26  info_gain
+12m  stock       hk_park       centre  shipped     4   32.8     26.1    5.2    0.5635    0.4308  1.31  info_gain
+12m  stock       hk_park       mid2    shipped     5   24.0     22.5    4.2    0.4675    0.2840  1.65  info_gain
+12m  stock       hk_park       mid4    shipped     3   26.9     26.7    4.2    0.6374    0.4005  1.59  info_gain
+12m  stock       hk_park       mid4    scoring     3   29.1     36.9    4.1    0.6326    0.5172  1.22  explored_goals
+4m   stock       hk_elevator   mid1    shipped    13   22.7     23.5    4.0    0.3513    0.3349  1.05  explored_goals
+4m   stock       hk_elevator   mid3    shipped    10   21.0     24.4    3.9    0.4188    0.3864  1.08  info_gain
+4m   stock       hk_elevator   mid3    scoring     8   20.9     24.2    3.4    0.5164    0.2307  2.24  info_gain
+4m   stock       hk_entrance   mid1    shipped    14   22.9     30.7    4.0    0.5400    0.5366  1.01  explored_goals
+4m   stock       hk_entrance   mid1    scoring    17   28.7     34.6    4.3    0.4239    0.3723  1.14  info_gain
+4m   stock       hk_entrance   mid3    scoring    14   23.8     26.9    4.5    0.4428    0.3406  1.30  info_gain
+4m   stock       hk_park       centre  scoring     6   23.4     23.7    4.0    0.5285    0.4824  1.10  obstacles
+4m   stock       hk_park       mid2    scoring    12   27.2     45.6    5.5    0.4090    0.3521  1.16  info_gain
+4m   stock       hk_park       mid3    scoring     9   27.8     30.7    1.7    0.3716    0.1039  3.58  info_gain
+
+  k: n=24 min 1.01 median 1.32 max 3.58
+  a margin of k=1.5 would have kept the robot near on 15/24
+  a margin of k=2 would have kept the robot near on 20/24
+  a margin of k=3 would have kept the robot near on 23/24
+  best near candidate at a median 4.2 m of route (range 1.7 to 6.0); the goal taken at a median 23.9 m (range 9.3 to 45.6)
+  the weighted term the near candidate loses most on: {'info_gain': 16, 'explored_goals': 6, 'obstacles': 2}
+
+vicinity sensitivity: at how many traced swings was an AVAILABLE candidate within R metres of route length
+  stock       n= 60  R=6:  26   R=9:  37   R=12:  41   
+  stock+M4.3  n= 34  R=6:   1   R=9:   1   R=12:   1   
+
+class N, the two filters: 94 raw swings; the bench's straight-line rule keeps 92 as real, the geodesic rule used here keeps 92
+
+paired stock -> stock+M4.3, per (range, map, config, start). Only cells where both arms were traced.
+rng  map           cfg      start        real       A     Abl       B       C  dpath%  dcov pt
+----------------------------------------------------------------------------------------------
+12m  hk_elevator   scoring  centre     1->1      0->0     0->0     0->0     1->1       7.7      0.3
+12m  hk_elevator   scoring  mid1       2->1      1->0     0->0     0->0     1->1     -15.4     -0.1
+12m  hk_elevator   scoring  mid2       0->0      0->0     0->0     0->0     0->0      -0.6      0.0
+12m  hk_elevator   scoring  mid3       1->0      0->0     0->0     0->0     1->0     -54.7     -2.0
+12m  hk_elevator   scoring  mid4       2->0      1->0     0->0     0->0     1->0     -43.5     -1.8
+12m  hk_elevator   scoring  mid5       2->1      1->0     0->0     0->0     1->1     -27.2     -0.4
+12m  hk_elevator   shipped  centre     2->1      1->0     0->0     0->0     1->1     -13.4      0.1
+12m  hk_elevator   shipped  mid1       3->1      1->0     0->0     1->0     1->1      -9.8      0.3
+12m  hk_elevator   shipped  mid2       1->1      0->0     0->0     0->0     1->1      -3.8      0.2
+12m  hk_elevator   shipped  mid3       1->0      0->0     0->0     0->0     1->0     -27.9     -0.6
+12m  hk_elevator   shipped  mid4       2->0      1->0     0->0     0->0     1->0     -11.4      0.9
+12m  hk_elevator   shipped  mid5       3->1      2->0     0->0     0->0     1->1      17.5     11.7
+12m  hk_entrance   scoring  mid1       1->1      0->0     0->0     0->0     1->1       0.3     -0.3
+12m  hk_entrance   scoring  mid2       0->1      0->0     0->0     0->0     0->1      18.7     -0.1
+12m  hk_entrance   scoring  mid3       1->1      0->0     0->0     0->0     1->1     -11.9     -0.6
+12m  hk_entrance   scoring  mid5       0->1      0->0     0->0     0->0     0->1     -10.4     -0.3
+12m  hk_entrance   shipped  mid1       1->0      0->0     0->0     0->0     1->0      17.5     -0.0
+12m  hk_entrance   shipped  mid2       0->1      0->0     0->0     0->0     0->1     -27.0    -16.9
+12m  hk_entrance   shipped  mid3       1->1      1->0     0->0     0->0     0->1      47.1     20.6
+12m  hk_entrance   shipped  mid5       1->1      0->0     0->0     0->1     1->0     -20.8     -8.4
+12m  hk_office     scoring  centre     1->2      0->0     0->0     0->0     1->2      11.9      0.1
+12m  hk_office     scoring  mid2       2->1      0->0     0->0     0->1     2->0      20.4      0.7
+12m  hk_office     scoring  mid4       1->0      1->0     0->0     0->0     0->0     -25.7     -0.4
+12m  hk_office     shipped  centre     0->2      0->0     0->0     0->1     0->1      83.9     42.5
+12m  hk_office     shipped  mid2       1->0      0->0     0->0     0->0     1->0      38.0     23.4
+12m  hk_office     shipped  mid4       1->0      1->0     0->0     0->0     0->0     106.4     41.8
+12m  hk_park       scoring  centre     0->0      0->0     0->0     0->0     0->0     -59.1      4.9
+12m  hk_park       scoring  mid1       0->1      0->0     0->0     0->0     0->1     -23.0      2.7
+12m  hk_park       scoring  mid2       1->2      0->0     0->0     0->0     1->2      -7.9     -4.5
+12m  hk_park       scoring  mid3       0->0      0->0     0->0     0->0     0->0     -53.7     -1.8
+12m  hk_park       scoring  mid4       1->0      1->0     0->0     0->0     0->0      51.3     -3.5
+12m  hk_park       shipped  centre     2->0      1->0     0->0     0->0     1->0     -11.6      7.4
+12m  hk_park       shipped  mid1       0->0      0->0     0->0     0->0     0->0      32.1     19.7
+12m  hk_park       shipped  mid2       1->0      1->0     0->0     0->0     0->0       9.2     16.0
+12m  hk_park       shipped  mid3       1->0      0->0     0->0     1->0     0->0     -22.6      8.0
+12m  hk_park       shipped  mid4       2->0      1->0     0->0     0->0     1->0     -45.5     -6.3
+4m   hk_elevator   scoring  centre     2->0      0->0     0->0     1->0     1->0     -39.7     -0.5
+4m   hk_elevator   scoring  mid1       0->0      0->0     0->0     0->0     0->0       4.3      1.1
+4m   hk_elevator   scoring  mid2       1->0      0->0     0->0     0->0     1->0      -4.5      0.2
+4m   hk_elevator   scoring  mid3       2->0      1->0     0->0     0->0     1->0     -10.3      1.4
+4m   hk_elevator   shipped  centre     2->0      0->0     0->0     1->0     1->0     -56.7    -40.8
+4m   hk_elevator   shipped  mid1       1->0      1->0     0->0     0->0     0->0     -40.9     -6.0
+4m   hk_elevator   shipped  mid2       0->1      0->0     0->0     0->0     0->1      12.6      4.9
+4m   hk_elevator   shipped  mid3       1->0      1->0     0->0     0->0     0->0      14.8     12.5
+4m   hk_entrance   scoring  mid1       1->0      1->0     0->0     0->0     0->0     -21.8     -1.9
+4m   hk_entrance   scoring  mid3       1->0      1->0     0->0     0->0     0->0     -35.5     -0.5
+4m   hk_entrance   scoring  mid5       1->0      0->0     0->0     1->0     0->0      64.2      7.4
+4m   hk_entrance   shipped  mid1       2->0      1->0     0->0     0->0     1->0      40.2     24.0
+4m   hk_entrance   shipped  mid3       0->0      0->0     0->0     0->0     0->0     157.1     32.6
+4m   hk_entrance   shipped  mid5       1->0      0->0     0->0     1->0     0->0     -13.4     -0.6
+4m   hk_office     scoring  mid2       0->1      0->0     0->0     0->0     0->1      46.8      0.6
+4m   hk_office     scoring  mid4       0->0      0->0     0->0     0->0     0->0     -26.8     -1.8
+4m   hk_office     shipped  mid2       0->1      0->0     0->0     0->0     0->1       0.0      0.0
+4m   hk_office     shipped  mid4       0->1      0->0     0->0     0->0     0->1      10.2      7.0
+4m   hk_park       scoring  centre     1->0      1->0     0->0     0->0     0->0     -42.0      0.4
+4m   hk_park       scoring  mid1       1->1      0->0     0->0     0->0     1->1     -47.0     -1.3
+4m   hk_park       scoring  mid2       1->1      1->0     0->0     0->0     0->1       0.0      0.1
+4m   hk_park       scoring  mid3       1->1      1->0     0->0     0->1     0->0     -48.0     -0.2
+4m   hk_park       scoring  mid4       0->1      0->0     0->0     0->1     0->0     -67.5      0.0
+4m   hk_park       shipped  centre     0->0      0->0     0->0     0->0     0->0     -23.9    -10.7
+4m   hk_park       shipped  mid1       1->1      0->0     0->0     0->0     1->1       4.1      0.1
+4m   hk_park       shipped  mid2       0->1      0->0     0->0     0->0     0->1      49.5      6.2
+4m   hk_park       shipped  mid3       0->0      0->0     0->0     0->0     0->0       1.8     -2.3
+4m   hk_park       shipped  mid4       0->1      0->0     0->0     0->0     0->1      -2.4      0.9
+
+  paired totals over 64 cells: real 59 -> 33,  A 24 -> 0,  A-blocked 0 -> 0,  B 6 -> 5,  C 29 -> 28
+  class-C crossings the remedy REMOVED, cell by cell: 16; class-C crossings it ADDED: 15; net -1
+  the cells where a class-C crossing disappeared, and what they cost:
+    12m  hk_elevator   scoring  mid3    C 1->0  path   66.2 ->   30.0 m (-54.7 %)  coverage  98.7 ->  96.7 % (-2.0 pt)
+    12m  hk_elevator   scoring  mid4    C 1->0  path   85.1 ->   48.1 m (-43.5 %)  coverage  98.8 ->  97.0 % (-1.8 pt)
+    12m  hk_elevator   shipped  mid3    C 1->0  path   39.0 ->   28.1 m (-27.9 %)  coverage  97.1 ->  96.5 % (-0.6 pt)
+    12m  hk_elevator   shipped  mid4    C 1->0  path   49.2 ->   43.6 m (-11.4 %)  coverage  96.0 ->  96.9 % (+0.9 pt)
+    12m  hk_entrance   shipped  mid1    C 1->0  path   47.1 ->   55.4 m (+17.5 %)  coverage  88.5 ->  88.5 % (-0.0 pt)
+    12m  hk_entrance   shipped  mid5    C 1->0  path   50.7 ->   40.1 m (-20.8 %)  coverage  72.5 ->  64.1 % (-8.4 pt)
+    12m  hk_office     scoring  mid2    C 2->0  path  139.0 ->  167.4 m (+20.4 %)  coverage  88.9 ->  89.6 % (+0.7 pt)
+    12m  hk_office     shipped  mid2    C 1->0  path   41.8 ->   57.6 m (+38.0 %)  coverage  49.2 ->  72.5 % (+23.4 pt)
+    12m  hk_park       shipped  centre  C 1->0  path   29.7 ->   26.3 m (-11.6 %)  coverage  44.1 ->  51.5 % (+7.4 pt)
+    12m  hk_park       shipped  mid4    C 1->0  path   42.0 ->   22.9 m (-45.5 %)  coverage  50.6 ->  44.3 % (-6.3 pt)
+    4m   hk_elevator   scoring  centre  C 1->0  path  118.2 ->   71.3 m (-39.7 %)  coverage  98.4 ->  97.9 % (-0.5 pt)
+    4m   hk_elevator   scoring  mid2    C 1->0  path   97.5 ->   93.1 m (-4.5 %)  coverage  98.4 ->  98.6 % (+0.2 pt)
+    4m   hk_elevator   scoring  mid3    C 1->0  path   96.1 ->   86.2 m (-10.3 %)  coverage  97.1 ->  98.6 % (+1.4 pt)
+    4m   hk_elevator   shipped  centre  C 1->0  path   66.6 ->   28.8 m (-56.7 %)  coverage  94.0 ->  53.2 % (-40.8 pt)
+    4m   hk_entrance   shipped  mid1    C 1->0  path   59.0 ->   82.7 m (+40.2 %)  coverage  57.1 ->  81.1 % (+24.0 pt)
+
+-> /tmp/claude-1000/-home-openclaw-lerobot/c23c4729-e991-4dc8-b2d5-9c140c6a8780/scratchpad/sim_2830_resid/resid_classification.json
+-> /tmp/claude-1000/-home-openclaw-lerobot/c23c4729-e991-4dc8-b2d5-9c140c6a8780/scratchpad/sim_2830_resid/resid_A_dumps.txt  (0 class-A residuals under the remedy)

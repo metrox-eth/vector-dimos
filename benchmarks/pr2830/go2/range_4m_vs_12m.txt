@@ -1,0 +1,58 @@
+Same Go2 profile, same 6 middle starts, same arms. Only the simulated
+lidar range differs. The maintainer suggested 3-5 m to expose the bug on
+OUR rover; at the Go2's own walking speed the answer moves.
+
+map           config    arm          range  runs  REAL cross  round trips  med goals  med path m  med cov %
+-----------------------------------------------------------------------------------------------------------
+hk_office     shipped   stock          4 m     6           0            0        9.5       34.70       39.0
+hk_office     shipped   stock         12 m     6           2            0        8.0       36.87       46.5
+hk_office     shipped   stock+CMP      4 m     6           2            0        9.5       32.11       48.0
+hk_office     shipped   stock+CMP     12 m     6           2            1       12.5       51.02       68.4
+
+hk_office     scoring   stock          4 m     6           0            0        6.0      102.89       88.0
+hk_office     scoring   stock         12 m     6           4            1        5.5      121.13       88.2
+hk_office     scoring   stock+CMP      4 m     6           1            0       10.0      120.77       88.5
+hk_office     scoring   stock+CMP     12 m     6           3            1        7.5      160.91       88.7
+
+hk_park       shipped   stock          4 m     6           1            0       12.5       44.34       48.9
+hk_park       shipped   stock         12 m     6           6            2        7.0       35.35       47.9
+hk_park       shipped   stock+CMP      4 m     6           3            0       11.0       44.72       48.2
+hk_park       shipped   stock+CMP     12 m     6           0            0        8.0       32.65       58.3
+
+hk_park       scoring   stock          4 m     6           4            0       12.5      190.44       76.7
+hk_park       scoring   stock         12 m     6           2            0        5.0      172.12       79.8
+hk_park       scoring   stock+CMP      4 m     6           4            0       15.5      110.89       76.6
+hk_park       scoring   stock+CMP     12 m     6           3            1        7.0      113.93       79.2
+
+hk_elevator   shipped   stock          4 m     6           4            0       13.5       58.42       89.0
+hk_elevator   shipped   stock         12 m     6          12            4        8.0       38.89       96.2
+hk_elevator   shipped   stock+CMP      4 m     6           1            0        8.5       33.41       74.7
+hk_elevator   shipped   stock+CMP     12 m     6           4            0        8.5       40.41       96.8
+
+hk_elevator   scoring   stock          4 m     6           5            1       11.5       88.87       97.6
+hk_elevator   scoring   stock         12 m     6           8            3        5.0       73.00       98.7
+hk_elevator   scoring   stock+CMP      4 m     6           0            0       13.0       81.50       98.1
+hk_elevator   scoring   stock+CMP     12 m     6           3            0        4.5       50.13       97.1
+
+hk_entrance   shipped   stock          4 m     6           3            1       14.0       52.99       53.3
+hk_entrance   shipped   stock         12 m     6           3            0        9.5       48.91       80.5
+hk_entrance   shipped   stock+CMP      4 m     6           0            0       18.5       71.22       69.8
+hk_entrance   shipped   stock+CMP     12 m     6           3            0       11.0       49.16       82.0
+
+hk_entrance   scoring   stock          4 m     6           3            0       17.5      161.46       91.1
+hk_entrance   scoring   stock         12 m     6           2            0        6.0       73.04       92.5
+hk_entrance   scoring   stock+CMP      4 m     6           0            0       15.0      136.58       90.6
+hk_entrance   scoring   stock+CMP     12 m     6           4            0        8.0       77.84       92.3
+
+
+POOLED over the four discriminating maps, stock only:
+  shipped     4 m:  24 runs,   8 real crossings,  1 round trips, median 12.0 goals, median coverage 52.4 %
+  shipped    12 m:  24 runs,  23 real crossings,  6 round trips, median 8.0 goals, median coverage 61.8 %
+  scoring     4 m:  24 runs,  12 real crossings,  1 round trips, median 11.5 goals, median coverage 88.7 %
+  scoring    12 m:  24 runs,  16 real crossings,  4 round trips, median 5.0 goals, median coverage 89.6 %
+
+POOLED, stock+CMP:
+  shipped     4 m:  24 runs,   6 real crossings,  0 round trips, median coverage 58.1 %
+  shipped    12 m:  24 runs,   9 real crossings,  1 round trips, median coverage 74.0 %
+  scoring     4 m:  24 runs,   5 real crossings,  0 round trips, median coverage 88.9 %
+  scoring    12 m:  24 runs,  13 real crossings,  2 round trips, median coverage 89.8 %

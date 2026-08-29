@@ -1,0 +1,29 @@
+
+=== stock+CMP against stock : 54 paired starts ===
+  coverage better on 29, worse on 20, equal on 5
+  5 paired starts lose 10 points of coverage or more:
+    hk_elevator   centre shipped   coverage  94.0 ->  53.2 % (-40.8 pt)   path   66.6 ->   28.8 m
+    hk_elevator   mid5   shipped   coverage  97.1 ->  68.0 % (-29.1 pt)   path   65.3 ->   27.3 m
+    hk_elevator   mid4   shipped   coverage  83.0 ->  68.8 % (-14.2 pt)   path   48.4 ->   32.3 m
+    hk_allaround  mid2   shipped   coverage  43.1 ->  29.9 % (-13.2 pt)   path   88.1 ->   60.2 m
+    hk_park       centre shipped   coverage  43.3 ->  32.7 % (-10.7 pt)   path   45.4 ->   34.5 m
+
+=== pr2830+CMP against pr2830 : 54 paired starts ===
+  coverage better on 7, worse on 15, equal on 32
+  2 paired starts lose 10 points of coverage or more:
+    hk_office     mid1   shipped   coverage  66.5 ->  51.9 % (-14.6 pt)   path   55.5 ->   36.4 m
+    hk_entrance   mid4   scoring   coverage  90.6 ->  78.3 % (-12.3 pt)   path  134.8 ->  101.8 m
+
+=== stock+M4.3 against stock : 54 paired starts ===
+  coverage better on 29, worse on 20, equal on 5
+  5 paired starts lose 10 points of coverage or more:
+    hk_elevator   centre shipped   coverage  94.0 ->  53.2 % (-40.8 pt)   path   66.6 ->   28.8 m
+    hk_elevator   mid5   shipped   coverage  97.1 ->  68.0 % (-29.1 pt)   path   65.3 ->   27.3 m
+    hk_elevator   mid4   shipped   coverage  83.0 ->  68.8 % (-14.2 pt)   path   48.4 ->   32.3 m
+    hk_allaround  mid2   shipped   coverage  43.1 ->  29.9 % (-13.2 pt)   path   88.1 ->   60.2 m
+    hk_park       centre shipped   coverage  43.3 ->  32.7 % (-10.7 pt)   path   45.4 ->   34.5 m
+
+=== stock+CMP against stock+M4.3 : 54 paired starts ===
+  coverage better on 0, worse on 1, equal on 53
+  0 paired starts lose 10 points of coverage or more:
+    (none)

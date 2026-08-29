@@ -1,0 +1,231 @@
+Go2-profile bench, HK floors only. Verdicts exactly as declared in hypotheses_go2.txt section 7.
+
+
+==============================================================================
+G1: with the Go2 profile at 15 s shipped, the cross-map swing behavior
+    the maintainer described is present under stock (real crossings > 0 on
+    at least half the discriminating maps).
+==============================================================================
+map             n  REAL crossings  raw swings  round trips  median goals  median path m  median cov %  fires?
+-------------------------------------------------------------------------------------------------------------
+hk_office       6               0           0            0           9.5          34.70          39.0  no
+hk_park         6               1           1            0          12.5          44.34          48.9  YES
+hk_elevator     6               4           4            0          13.5          58.42          89.0  YES
+hk_entrance     6               3           3            1          14.0          52.99          53.3  YES
+hk_allaround    6               1           1            0          18.0          70.20          30.7  set aside
+
+  3 of 4 discriminating maps show at least one real crossing under stock/shipped. Declared bar: at least 2 of 4.
+  G1: HOLDS
+
+==============================================================================
+G2 material: stock+COMPOSITE against stock
+==============================================================================
+map           config      n    crossings       raw  round trips       median path m        median cov %   cap  verdict
+----------------------------------------------------------------------------------------------------------------------
+hk_office     shipped     6     0 -> 2       0->2        0 -> 0       34.70 -> 32.11    -7.5%   39.0 -> 48.0   +9.0pt  0/0   NO EVENTS
+hk_office     scoring     6     0 -> 1       0->1        0 -> 0      102.89 -> 120.77  +17.4%   88.0 -> 88.5   +0.5pt  0/0   NO EVENTS
+
+hk_park       shipped     6     1 -> 3       1->3        0 -> 0       44.34 -> 44.72    +0.9%   48.9 -> 48.2   -0.7pt  0/0   FAIL  [crossings did not drop]
+hk_park       scoring     6     4 -> 4       4->4        0 -> 0      190.44 -> 110.89  -41.8%   76.7 -> 76.6   -0.2pt  0/0   FAIL  [crossings did not drop]
+
+hk_elevator   shipped     6     4 -> 1       4->1        0 -> 0       58.42 -> 33.41   -42.8%   89.0 -> 74.7  -14.4pt  0/0   FAIL  [coverage -14.4 pt]
+hk_elevator   scoring     6     5 -> 0       5->0        1 -> 0       88.87 -> 81.50    -8.3%   97.6 -> 98.1   +0.5pt  0/0   PASS
+
+hk_entrance   shipped     6     3 -> 0       3->0        1 -> 0       52.99 -> 71.22   +34.4%   53.3 -> 69.8  +16.6pt  0/0   FAIL  [path +34.4 %]
+hk_entrance   scoring     6     3 -> 0       3->1        0 -> 0      161.46 -> 136.58  -15.4%   91.1 -> 90.6   -0.5pt  0/0   PASS
+
+hk_allaround  shipped     6     1 -> 0       1->0        0 -> 0       70.20 -> 75.58    +7.7%   30.7 -> 39.1   +8.4pt  2/2   FAIL  [path +7.7 %]
+
+
+--- G2 ---
+stock+COMPOSITE reduces real crossings and round trips vs stock in each config, path within +5 %, coverage within -5 %, per map.
+  hk_office     shipped=NO EVENTS  scoring=NO EVENTS   -> NO EVENTS
+  hk_park       shipped=FAIL (crossings did not drop)  scoring=FAIL (crossings did not drop)   -> FAIL
+  hk_elevator   shipped=FAIL (coverage -14.4 pt)  scoring=PASS   -> FAIL
+  hk_entrance   shipped=FAIL (path +34.4 %)  scoring=PASS   -> FAIL
+  0 PASS of 4 discriminating maps (3 of them judgeable). Declared bar: at least 2 of 4.
+  G2: FAILS
+  [hk_allaround/shipped, set aside on the crossing metric: path 70.2 -> 75.6 m (+7.7 %), coverage 30.7 -> 39.1 % (+8.4 pt)]
+
+==============================================================================
+G3 material: pr2830+COMPOSITE against pr2830
+==============================================================================
+map           config      n    crossings       raw  round trips       median path m        median cov %   cap  verdict
+----------------------------------------------------------------------------------------------------------------------
+hk_office     shipped     6     2 -> 1       2->1        0 -> 0       33.53 -> 32.03    -4.5%   50.5 -> 46.1   -4.5pt  0/0   PASS
+hk_office     scoring     6     1 -> 1       1->1        0 -> 0      116.19 -> 116.19   +0.0%   88.7 -> 88.7   -0.1pt  0/0   FAIL  [crossings did not drop]
+
+hk_park       shipped     6     2 -> 2       2->2        0 -> 0       42.83 -> 42.83    +0.0%   49.2 -> 49.2   +0.0pt  0/0   FAIL  [crossings did not drop]
+hk_park       scoring     6     4 -> 4       4->4        0 -> 0      108.88 -> 108.88   +0.0%   76.6 -> 76.4   -0.2pt  0/0   FAIL  [crossings did not drop]
+
+hk_elevator   shipped     6     3 -> 2       3->2        0 -> 0       38.89 -> 35.11    -9.7%   73.2 -> 71.9   -1.3pt  0/0   PASS
+hk_elevator   scoring     6     7 -> 4       7->4        1 -> 1       97.65 -> 86.67   -11.2%   98.3 -> 97.8   -0.5pt  0/0   FAIL  [round trips did not drop]
+
+hk_entrance   shipped     6     2 -> 0       2->0        0 -> 0       51.43 -> 54.43    +5.8%   58.7 -> 61.2   +2.6pt  0/0   FAIL  [path +5.8 %]
+hk_entrance   scoring     6     2 -> 0       2->1        0 -> 0      157.46 -> 188.62  +19.8%   90.9 -> 90.5   -0.5pt  0/0   FAIL  [path +19.8 %]
+
+hk_allaround  shipped     6     0 -> 0       0->0        0 -> 0       81.76 -> 79.23    -3.1%   41.5 -> 41.4   -0.1pt  3/3   NO EVENTS
+
+
+--- G3 ---
+pr2830+COMPOSITE same vs pr2830.
+  hk_office     shipped=PASS  scoring=FAIL (crossings did not drop)   -> FAIL
+  hk_park       shipped=FAIL (crossings did not drop)  scoring=FAIL (crossings did not drop)   -> FAIL
+  hk_elevator   shipped=PASS  scoring=FAIL (round trips did not drop)   -> FAIL
+  hk_entrance   shipped=FAIL (path +5.8 %)  scoring=FAIL (path +19.8 %)   -> FAIL
+  0 PASS of 4 discriminating maps (4 of them judgeable). Declared bar: at least 2 of 4.
+  G3: FAILS
+  [hk_allaround/shipped, set aside on the crossing metric: path 81.8 -> 79.2 m (-3.1 %), coverage 41.5 -> 41.4 % (-0.1 pt)]
+
+==============================================================================
+G4 material: stock+COMPOSITE against stock+M4.3 (what the filter adds over M alone)
+==============================================================================
+map           config      n    crossings       raw  round trips       median path m        median cov %   cap  verdict
+----------------------------------------------------------------------------------------------------------------------
+hk_office     shipped     6     2 -> 2       2->2        0 -> 0       32.11 -> 32.11    +0.0%   48.0 -> 48.0   +0.0pt  0/0   FAIL  [crossings did not drop]
+hk_office     scoring     6     1 -> 1       1->1        0 -> 0      120.77 -> 120.77   +0.0%   88.5 -> 88.5   +0.0pt  0/0   FAIL  [crossings did not drop]
+
+hk_park       shipped     6     3 -> 3       3->3        0 -> 0       44.72 -> 44.72    +0.0%   48.2 -> 48.2   +0.0pt  0/0   FAIL  [crossings did not drop]
+hk_park       scoring     6     4 -> 4       4->4        0 -> 0      110.89 -> 110.89   +0.0%   76.6 -> 76.6   +0.0pt  0/0   FAIL  [crossings did not drop]
+
+hk_elevator   shipped     6     1 -> 1       1->1        0 -> 0       33.41 -> 33.41    +0.0%   74.7 -> 74.7   +0.0pt  0/0   FAIL  [crossings did not drop]
+hk_elevator   scoring     6     0 -> 0       0->0        0 -> 0       81.50 -> 81.50    +0.0%   98.1 -> 98.1   +0.0pt  0/0   NO EVENTS
+
+hk_entrance   shipped     6     0 -> 0       0->0        0 -> 0       71.22 -> 71.22    +0.0%   69.8 -> 69.8   +0.0pt  0/0   NO EVENTS
+hk_entrance   scoring     6     0 -> 0       1->1        0 -> 0      136.58 -> 136.58   +0.0%   90.6 -> 90.6   +0.0pt  0/0   NO EVENTS
+
+hk_allaround  shipped     6     0 -> 0       0->0        0 -> 0       77.44 -> 75.58    -2.4%   39.1 -> 39.1   +0.0pt  2/2   NO EVENTS
+
+
+==============================================================================
+G4: COMPOSITE beats stock+M4.3 alone on at least half the discriminating
+    maps without extra path beyond the budget.
+==============================================================================
+  hk_office     shipped: M 2 -> CMP 2 crossings, path +0.0 % = no  scoring: M 1 -> CMP 1 crossings, path +0.0 % = no   -> no
+  hk_park       shipped: M 3 -> CMP 3 crossings, path +0.0 % = no  scoring: M 4 -> CMP 4 crossings, path +0.0 % = no   -> no
+  hk_elevator   shipped: M 1 -> CMP 1 crossings, path +0.0 % = no  scoring: M 0 -> CMP 0 crossings, path +0.0 % = NO EVENTS   -> no
+  hk_entrance   shipped: M 0 -> CMP 0 crossings, path +0.0 % = NO EVENTS  scoring: M 0 -> CMP 0 crossings, path +0.0 % = NO EVENTS   -> NO EVENTS
+
+  0 of 4 discriminating maps. Declared bar: at least 2 of 4.
+  G4: FAILS
+
+==============================================================================
+REFERENCE: stock+M4.3 against stock (cand2's best single candidate, re-judged in Go2 conditions)
+==============================================================================
+map           config      n    crossings       raw  round trips       median path m        median cov %   cap  verdict
+----------------------------------------------------------------------------------------------------------------------
+hk_office     shipped     6     0 -> 2       0->2        0 -> 0       34.70 -> 32.11    -7.5%   39.0 -> 48.0   +9.0pt  0/0   NO EVENTS
+hk_office     scoring     6     0 -> 1       0->1        0 -> 0      102.89 -> 120.77  +17.4%   88.0 -> 88.5   +0.5pt  0/0   NO EVENTS
+
+hk_park       shipped     6     1 -> 3       1->3        0 -> 0       44.34 -> 44.72    +0.9%   48.9 -> 48.2   -0.7pt  0/0   FAIL  [crossings did not drop]
+hk_park       scoring     6     4 -> 4       4->4        0 -> 0      190.44 -> 110.89  -41.8%   76.7 -> 76.6   -0.2pt  0/0   FAIL  [crossings did not drop]
+
+hk_elevator   shipped     6     4 -> 1       4->1        0 -> 0       58.42 -> 33.41   -42.8%   89.0 -> 74.7  -14.4pt  0/0   FAIL  [coverage -14.4 pt]
+hk_elevator   scoring     6     5 -> 0       5->0        1 -> 0       88.87 -> 81.50    -8.3%   97.6 -> 98.1   +0.5pt  0/0   PASS
+
+hk_entrance   shipped     6     3 -> 0       3->0        1 -> 0       52.99 -> 71.22   +34.4%   53.3 -> 69.8  +16.6pt  0/0   FAIL  [path +34.4 %]
+hk_entrance   scoring     6     3 -> 0       3->1        0 -> 0      161.46 -> 136.58  -15.4%   91.1 -> 90.6   -0.5pt  0/0   PASS
+
+hk_allaround  shipped     6     1 -> 0       1->0        0 -> 0       70.20 -> 77.44   +10.3%   30.7 -> 39.1   +8.4pt  2/2   FAIL  [path +10.3 %]
+
+
+==============================================================================
+EVERY ARM, PER MAP AND CONFIG (raw material, no verdict)
+==============================================================================
+map           config    arm            n  cross   raw  rt  goals   path m   cov %    p80 m   dec ms  cap
+--------------------------------------------------------------------------------------------------------
+hk_office     shipped   pr2830         6      2     2   0    9.5    33.53    50.5      nan  15494.8    0
+hk_office     shipped   pr2830+CMP     6      1     1   0    9.5    32.03    46.1      nan  16016.7    0
+hk_office     shipped   stock          6      0     0   0    9.5    34.70    39.0      nan  15469.1    0
+hk_office     shipped   stock+CMP      6      2     2   0    9.5    32.11    48.0      nan  15987.4    0
+hk_office     shipped   stock+M4.3     6      2     2   0    9.5    32.11    48.0      nan  15615.8    0
+
+hk_office     scoring   pr2830         6      1     1   0    7.5   116.19    88.7   124.66  14792.2    0
+hk_office     scoring   pr2830+CMP     6      1     1   0    7.5   116.19    88.7   145.91  15333.7    0
+hk_office     scoring   stock          6      0     0   0    6.0   102.89    88.0    93.73  15404.7    0
+hk_office     scoring   stock+CMP      6      1     1   0   10.0   120.77    88.5    92.30  14386.7    0
+hk_office     scoring   stock+M4.3     6      1     1   0   10.0   120.77    88.5    92.30  14173.6    0
+
+hk_park       shipped   pr2830         6      2     2   0   11.0    42.83    49.2      nan  11639.6    0
+hk_park       shipped   pr2830+CMP     6      2     2   0   11.0    42.83    49.2      nan  11968.6    0
+hk_park       shipped   stock          6      1     1   0   12.5    44.34    48.9      nan  11191.9    0
+hk_park       shipped   stock+CMP      6      3     3   0   11.0    44.72    48.2      nan  11714.9    0
+hk_park       shipped   stock+M4.3     6      3     3   0   11.0    44.72    48.2      nan  11424.7    0
+
+hk_park       scoring   pr2830         6      4     4   0   16.0   108.88    76.6      nan  11417.6    0
+hk_park       scoring   pr2830+CMP     6      4     4   0   16.0   108.88    76.4      nan  11576.7    0
+hk_park       scoring   stock          6      4     4   0   12.5   190.44    76.7      nan  10161.9    0
+hk_park       scoring   stock+CMP      6      4     4   0   15.5   110.89    76.6      nan  10883.2    0
+hk_park       scoring   stock+M4.3     6      4     4   0   15.5   110.89    76.6      nan  10763.1    0
+
+hk_elevator   shipped   pr2830         6      3     3   0    8.5    38.89    73.2    46.81  17320.0    0
+hk_elevator   shipped   pr2830+CMP     6      2     2   0    8.0    35.11    71.9    46.81  17887.3    0
+hk_elevator   shipped   stock          6      4     4   0   13.5    58.42    89.0    43.53  16754.5    0
+hk_elevator   shipped   stock+CMP      6      1     1   0    8.5    33.41    74.7    40.47  17576.0    0
+hk_elevator   shipped   stock+M4.3     6      1     1   0    8.5    33.41    74.7    40.47  17350.0    0
+
+hk_elevator   scoring   pr2830         6      7     7   1   11.5    97.65    98.3    54.29  16845.6    0
+hk_elevator   scoring   pr2830+CMP     6      4     4   1   11.0    86.67    97.8    47.93  17265.0    0
+hk_elevator   scoring   stock          6      5     5   1   11.5    88.87    97.6    45.63  16623.5    0
+hk_elevator   scoring   stock+CMP      6      0     0   0   13.0    81.50    98.1    53.34  17256.9    0
+hk_elevator   scoring   stock+M4.3     6      0     0   0   13.0    81.50    98.1    53.34  16727.7    0
+
+hk_entrance   shipped   pr2830         6      2     2   0   13.5    51.43    58.7    78.18  12618.4    0
+hk_entrance   shipped   pr2830+CMP     6      0     0   0   14.5    54.43    61.2    77.34  13157.5    0
+hk_entrance   shipped   stock          6      3     3   1   14.0    52.99    53.3    93.23  12359.4    0
+hk_entrance   shipped   stock+CMP      6      0     0   0   18.5    71.22    69.8    73.86  12615.7    0
+hk_entrance   shipped   stock+M4.3     6      0     0   0   18.5    71.22    69.8    73.86  12229.5    0
+
+hk_entrance   scoring   pr2830         6      2     2   0   19.0   157.46    90.9   100.56  12632.0    0
+hk_entrance   scoring   pr2830+CMP     6      0     1   0   12.0   188.62    90.5   107.42  13190.2    0
+hk_entrance   scoring   stock          6      3     3   0   17.5   161.46    91.1   122.49  11749.9    0
+hk_entrance   scoring   stock+CMP      6      0     1   0   15.0   136.58    90.6   102.88  12040.9    0
+hk_entrance   scoring   stock+M4.3     6      0     1   0   15.0   136.58    90.6   102.88  11774.7    0
+
+hk_allaround  shipped   pr2830         6      0     0   0   21.5    81.76    41.5      nan  34194.7    3
+hk_allaround  shipped   pr2830+CMP     6      0     0   0   21.0    79.23    41.4      nan  35370.4    3
+hk_allaround  shipped   stock          6      1     1   0   18.0    70.20    30.7      nan  34568.5    2
+hk_allaround  shipped   stock+CMP      6      0     0   0   20.5    75.58    39.1      nan  35570.6    2
+hk_allaround  shipped   stock+M4.3     6      0     0   0   20.5    77.44    39.1      nan  35001.6    2
+
+
+
+==============================================================================
+HOW RUNS ENDED (a capped or frozen run is data, not a gap)
+==============================================================================
+hk_office     shipped    30 runs  explorer stopped itself=23  harness=7
+hk_office     scoring    30 runs  harness=30
+hk_park       shipped    30 runs  explorer stopped itself=23  harness=7
+hk_park       scoring    30 runs  harness=30
+hk_elevator   shipped    30 runs  explorer stopped itself=28  harness=2
+hk_elevator   scoring    30 runs  harness=30
+hk_entrance   shipped    30 runs  explorer stopped itself=25  harness=5
+hk_entrance   scoring    30 runs  harness=30
+hk_allaround  shipped    30 runs  explorer stopped itself=16  wall_cap=12  harness=2
+hk_allaround  scoring   NOT RUN / NO RESULTS
+
+==============================================================================
+WHAT THE COMPOSITE COUNTED ABOUT ITSELF
+==============================================================================
+arm          map            decisions  w/ a drop    cands  dropped  drop %  top gone  valve  no hook  head chg
+--------------------------------------------------------------------------------------------------------------
+pr2830+CMP   hk_allaround         106          0      550        0    0.0%         0      0        0         2
+pr2830+CMP   hk_elevator          126          0      594        0    0.0%         0      0        0         7
+pr2830+CMP   hk_entrance          155          0     1825        0    0.0%         0      0        0        13
+pr2830+CMP   hk_office             96          0      727        0    0.0%         0      0        0         6
+pr2830+CMP   hk_park              122          0      944        0    0.0%         0      0        0         3
+stock+CMP    hk_allaround         115          2      681        2    0.3%         1      0        0        41
+stock+CMP    hk_elevator          134          0      782        0    0.0%         0      0        0        51
+stock+CMP    hk_entrance          179          3     2008        3    0.1%         1      0        0        70
+stock+CMP    hk_office            110          0      820        0    0.0%         0      0        0        30
+stock+CMP    hk_park              145          5     1013        5    0.5%         3      0        0        58
+
+'no hook' MUST be zero: it counts decisions where the policy was not bound to a navigation view and the filter therefore did nothing.
+
+==============================================================================
+SUMMARY
+==============================================================================
+  G1: HOLDS
+  G2: FAILS
+  G3: FAILS
+  G4: FAILS

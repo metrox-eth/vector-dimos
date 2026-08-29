@@ -1,0 +1,55 @@
+Worthiness gate at 4.0 m lidar, the SAME two rules, two bodies.
+
+Rover: body 0.46 m wide, lethal clearance 0.30 m (every earlier bench here).
+Go2:   body 0.31 m wide, lethal clearance 0.225 m (the maintainer's robot).
+
+map            profile  floor m2        bbox m  swing m  width m           ways out  junc  br 3/5/8/12 class          beyond 1 rng  deg  gate
+---------------------------------------------------------------------------------------------------------------------------------------------
+hk_office      rover        69.4  10.5x27.7      14.81     0.86 [0, 3, 3, 3, 2, 2]     3      1/1/3/2 multi-branch          75.6%    0  PASS
+hk_office      go2          96.6  13.0x28.0      15.45     0.76 [1, 3, 2, 4, 2, 3]     3      1/2/3/3 multi-branch          78.5%    0  PASS
+
+hk_park        rover       156.7  16.0x40.0      21.53     1.25 [1, 5, 3, 2, 3, 2]     3      2/2/2/3 multi-branch          72.3%    0  PASS
+hk_park        go2         218.0  17.1x40.2      21.82     1.04 [1, 4, 4, 6, 4, 4]     5      1/2/3/4 multi-branch          79.4%    0  PASS
+
+hk_elevator    rover       140.0  28.1x10.6      15.03     1.50 [2, 3, 2, 3, 3, 2]     3      2/2/2/2 room+corridor         59.3%    0  PASS
+hk_elevator    go2         155.6  28.3x10.8      15.14     1.36 [2, 3, 3, 2, 3, 3]     4      1/2/2/2 room+corridor         58.1%    0  PASS
+
+hk_entrance    rover       229.2  34.3x23.2      20.70     1.32 [1, 3, 4, 2, 3, 5]     4      1/2/2/2 room+corridor         80.8%    0  PASS
+hk_entrance    go2         279.9  34.6x25.2      21.44     1.10 [1, 4, 3, 5, 2, 2]     3      2/1/2/2 room+corridor         79.1%    0  PASS
+
+hk_allaround   rover       544.0  53.6x45.5      35.13     1.48 [0, 3, 4, 3, 5, 2]     4      2/2/2/2 room+corridor         92.3%    0  PASS
+hk_allaround   go2         619.6  53.8x45.8      35.33     1.30 [0, 3, 6, 2, 4, 2]     3      2/2/2/2 room+corridor         92.4%    0  PASS
+
+go2_short      rover        34.1   8.8x13.0       7.84     0.85 [1, 3, 2, 2, 4, 2]     2      1/1/1/0 room+corridor         58.3%    0  PASS
+go2_short      go2          67.8  11.1x19.0      10.98     0.73 [3, 2, 4, 3, 3, 3]     5      1/1/2/0 room+corridor         73.2%    0  PASS
+
+bigoffice      rover        48.0  11.6x20.6      11.80     1.10 [2, 3, 3, 2, 2, 2]     2      2/2/2/0 room+corridor         47.1%    0  PASS
+bigoffice      go2          60.4  15.2x20.7      12.84     0.92 [2, 2, 4, 3, 2, 2]     2      2/2/2/1 room+corridor         53.0%    0  PASS
+
+bigoffice_hc   rover        48.1  11.6x20.7      11.83     1.08 [2, 4, 3, 2, 2, 3]     3      2/2/3/0 multi-branch          42.1%    0  PASS
+bigoffice_hc   go2          60.4  16.2x20.8      13.18     0.90 [2, 2, 2, 2, 2, 4]     1      2/2/2/1 room+corridor         50.4%    0  PASS
+
+china_office   rover         9.6   4.8x6.2        3.91     0.91 [2, 3, 2, 2, 4, 2]     2      0/0/0/0 room+corridor          1.6%    0  REJECT (worthiness)
+china_office   go2          26.3   8.9x11.5       7.27     0.71 [1, 3, 4, 3, 2, 2]     3      2/0/0/0 room+corridor         26.5%    0  PASS
+
+apartment      rover         9.3   5.2x7.4        4.54     0.78 [1, 3, 2, 3, 2, 2]     2      0/0/0/0 room+corridor          5.8%    0  REJECT (worthiness)
+apartment      go2          13.6   5.6x9.5        5.53     0.63 [3, 6, 2, 2, 3, 3]     4      0/0/0/0 room+corridor         12.0%    0  REJECT (worthiness)
+
+markers_go2    rover        14.3   5.4x6.4        4.18     1.14 [3, 3, 2, 3, 2, 2]     3      0/0/0/0 room+corridor          0.8%    6  REJECT (all starts degenerate)
+markers_go2    go2          17.4   6.2x6.6        4.53     0.95 [3, 4, 3, 3, 3, 2]     5      0/0/0/0 room+corridor          2.3%    4  REJECT (worthiness)
+
+
+WHAT THE BODY CHANGED, per map:
+
+map            floor rover  floor go2   growth gate rover             gate go2               change
+hk_office             69.4       96.6   +39.2% PASS                   PASS                   -
+hk_park              156.7      218.0   +39.1% PASS                   PASS                   -
+hk_elevator          140.0      155.6   +11.1% PASS                   PASS                   -
+hk_entrance          229.2      279.9   +22.1% PASS                   PASS                   -
+hk_allaround         544.0      619.6   +13.9% PASS                   PASS                   -
+go2_short             34.1       67.8   +98.8% PASS                   PASS                   -
+bigoffice             48.0       60.4   +25.8% PASS                   PASS                   -
+bigoffice_hc          48.1       60.4   +25.6% PASS                   PASS                   -
+china_office           9.6       26.3  +174.0% REJECT (worthiness)    PASS                   REJECT -> PASS
+apartment              9.3       13.6   +46.2% REJECT (worthiness)    REJECT (worthiness)    -
+markers_go2           14.3       17.4   +21.7% REJECT (all starts degenerate) REJECT (worthiness)    REJECT -> REJECT
