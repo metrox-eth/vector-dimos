@@ -18,7 +18,7 @@ We have an offline harness for comparing exploration strategies on recorded maps
 
 ![goal sequences, go2_bigoffice, stock left / #2830 right](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/goal_sequences_bigoffice.png)
 
-**Travel at given coverage: reproduces on the large map only.** Big office: path to 80 % of visible ceiling 24.8 → 20.9 m (−15.6 %), total path −7.6 %, better on 10 of 12 paired starts. One caveat against our own favorable number: the 45 s goal timeout in the shipped config mostly truncates stock's long goals; in the config without it, the advantage shrinks. Our own flat could not test this leg at all: a geodesic check shows only 0–2.4 % of its visible area lies beyond one lidar range of walking (13.8 % on bigoffice). Nothing to save there.
+**Travel at given coverage: reproduces on the large map only.** Big office: path to 80 % of visible ceiling 24.8 → 20.9 m (−15.6 %), total path −7.6 %, better on 10 of 12 paired starts. One caveat against our own favorable number: the 45 s goal timeout our deployment configures (upstream default is 15 s) mostly truncates stock's long goals; in the config without it, the advantage shrinks. Our own flat could not test this leg at all: a geodesic check shows only 0–2.4 % of its visible area lies beyond one lidar range of walking (13.8 % on bigoffice). Nothing to save there.
 
 ![coverage vs path, big office](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/coverage_vs_path_bigoffice.png)
 ![goal sequences, our flat](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/goal_sequences_flat.png)
