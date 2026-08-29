@@ -1,0 +1,153 @@
+runs 96   maps bigoffice, bigoffice_hc
+arms stock, stock+B9, pr2830, pr2830+B9
+wall-capped runs: 0
+
+############ per map, per arm ############
+
+--- bigoffice, config shipped ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        3    3/6        0       4       0    262.7    223.6     37.53    88.0%       0
+stock+B9          6        3    3/6        0       3       0    260.3    222.3     37.97    87.8%       0
+pr2830            6        4    4/6        0       6       1    300.1    242.5     41.08    89.5%       0
+pr2830+B9         6        3    3/6        0       3       0    243.6    237.3     38.61    89.4%       0
+
+--- bigoffice_hc, config shipped ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        4    4/6        0       7       2    276.2    220.6     36.29    83.2%       0
+stock+B9          6        0    0/6        0       1       0    195.5    213.7     36.32    83.2%       0
+pr2830            6        4    2/6        1       5       2    258.5    216.8     36.44    87.6%       0
+pr2830+B9         6        0    0/6        0       2       0    192.7    220.2     38.66    88.6%       0
+
+--- bigoffice, config scoring ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        7    3/6        4       7       4    258.9    380.7     59.97    90.6%       0
+stock+B9          6        3    3/6        0       3       0    228.2    376.7     57.75    90.9%       0
+pr2830            6        5    5/6        0       5       0    263.6    314.2     49.67    90.1%       0
+pr2830+B9         6        5    5/6        0       5       0    265.3    314.2     49.67    90.1%       0
+
+--- bigoffice_hc, config scoring ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        8    4/6        4      15       9    439.7    366.6     60.03    90.1%       0
+stock+B9          6       10    5/6        3      14       6    414.1    350.7     56.72    91.2%       0
+pr2830            6        9    3/6        3      15       7    444.4    446.9     64.89    90.2%       0
+pr2830+B9         6        3    2/6        1       9       3    301.2    299.8     51.34    90.2%       0
+
+
+############ stock+B9 against stock ############
+
+--- bigoffice: stock+B9 against stock, both configs pooled, 12 paired starts ---
+  REAL crossings    10 ->   6   PASS (must drop)
+  REAL round trips   4 ->   0   PASS (must drop)
+  raw swings        11 ->   6   (reported, not tested)
+  median path       44.05 ->  42.94 m  -2.5 %   PASS (max +5 %)
+  median coverage   90.53 ->  90.62 %  +0.1 %   PASS (max -5 %)
+  VERDICT: PASS
+
+--- bigoffice_hc: stock+B9 against stock, both configs pooled, 12 paired starts ---
+  REAL crossings    12 ->  10   PASS (must drop)
+  REAL round trips   4 ->   3   PASS (must drop)
+  raw swings        22 ->  15   (reported, not tested)
+  median path       44.29 ->  40.91 m  -7.6 %   PASS (max +5 %)
+  median coverage   88.92 ->  88.73 %  -0.2 %   PASS (max -5 %)
+  VERDICT: PASS
+
+--- ALL MAPS POOLED: stock+B9 against stock, both configs pooled, 24 paired starts ---
+  REAL crossings    22 ->  16   PASS (must drop)
+  REAL round trips   8 ->   3   PASS (must drop)
+  raw swings        33 ->  21   (reported, not tested)
+  median path       44.25 ->  42.83 m  -3.2 %   PASS (max +5 %)
+  median coverage   90.01 ->  90.30 %  +0.3 %   PASS (max -5 %)
+  VERDICT: PASS
+
+=== config shipped, stock  ->  stock+B9   (12 paired starts) ===
+metric                                        stock       stock+B9    change   better on
+REAL crossings                                 1.00           0.00   -100.0 %   5/12   [totals 7 -> 3]
+REAL round trips                               0.00           0.00     +nan %   0/12   [totals 0 -> 0]
+raw goal-sequence swings                       1.00           0.00   -100.0 %   6/12   [totals 11 -> 4]
+raw round trips                                0.00           0.00     +nan %   1/12   [totals 2 -> 0]
+goal-to-goal total per run (m)                41.87          35.48    -15.2 %   7/12   [totals 539 -> 456]
+total path (m)                                36.79          36.39     -1.1 %   5/12
+final coverage (%)                            85.48          85.48     +0.0 %   1/12
+path to 80 % of the ceiling (m)               27.94          27.34     -2.1 %   4/9
+median robot to goal (m)                       3.97           3.96     -0.4 %   5/12
+goals issued                                   9.00           9.00     +0.0 %   2/12
+decision time (ms)                         11225.63       14649.77    +30.5 %   0/12
+
+=== config scoring, stock  ->  stock+B9   (12 paired starts) ===
+metric                                        stock       stock+B9    change   better on
+REAL crossings                                 1.00           1.00     +0.0 %   3/12   [totals 15 -> 13]
+REAL round trips                               0.00           0.00     +nan %   4/12   [totals 8 -> 3]
+raw goal-sequence swings                       1.50           1.00    -33.3 %   4/12   [totals 22 -> 17]
+raw round trips                                0.50           0.00   -100.0 %   5/12   [totals 13 -> 6]
+goal-to-goal total per run (m)                62.72          46.87    -25.3 %   5/12   [totals 699 -> 642]
+total path (m)                                60.03          56.72     -5.5 %   4/12
+final coverage (%)                            90.43          91.02     +0.7 %   6/12
+path to 80 % of the ceiling (m)               29.36          27.30     -7.0 %   2/12
+median robot to goal (m)                       3.99           3.97     -0.4 %   7/12
+goals issued                                   9.50           9.00     -5.3 %   4/12
+decision time (ms)                         12386.31       14749.32    +19.1 %   3/12
+
+
+############ pr2830+B9 against pr2830 ############
+
+--- bigoffice: pr2830+B9 against pr2830, both configs pooled, 12 paired starts ---
+  REAL crossings     9 ->   8   PASS (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings        11 ->   8   (reported, not tested)
+  median path       44.28 ->  43.51 m  -1.7 %   PASS (max +5 %)
+  median coverage   90.12 ->  90.09 %  -0.0 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- bigoffice_hc: pr2830+B9 against pr2830, both configs pooled, 12 paired starts ---
+  REAL crossings    13 ->   3   PASS (must drop)
+  REAL round trips   4 ->   1   PASS (must drop)
+  raw swings        20 ->  11   (reported, not tested)
+  median path       42.30 ->  43.72 m  +3.4 %   PASS (max +5 %)
+  median coverage   89.10 ->  89.94 %  +0.9 %   PASS (max -5 %)
+  VERDICT: PASS
+
+--- ALL MAPS POOLED: pr2830+B9 against pr2830, both configs pooled, 24 paired starts ---
+  REAL crossings    22 ->  11   PASS (must drop)
+  REAL round trips   4 ->   1   PASS (must drop)
+  raw swings        31 ->  19   (reported, not tested)
+  median path       44.28 ->  43.72 m  -1.3 %   PASS (max +5 %)
+  median coverage   89.73 ->  89.94 %  +0.2 %   PASS (max -5 %)
+  VERDICT: PASS
+
+=== config shipped, pr2830  ->  pr2830+B9   (12 paired starts) ===
+metric                                       pr2830      pr2830+B9    change   better on
+REAL crossings                                 0.50           0.00   -100.0 %   3/12   [totals 8 -> 3]
+REAL round trips                               0.00           0.00     +nan %   1/12   [totals 1 -> 0]
+raw goal-sequence swings                       1.00           0.00   -100.0 %   5/12   [totals 11 -> 5]
+raw round trips                                0.00           0.00     +nan %   2/12   [totals 3 -> 0]
+goal-to-goal total per run (m)                39.58          36.05     -8.9 %   6/12   [totals 559 -> 436]
+total path (m)                                38.09          38.61     +1.4 %   4/12
+final coverage (%)                            88.13          89.21     +1.2 %   5/12
+path to 80 % of the ceiling (m)               29.61          31.11     +5.1 %   1/10
+median robot to goal (m)                       3.91           3.67     -6.2 %   6/12
+goals issued                                  10.00          10.50     +5.0 %   2/12
+decision time (ms)                         11472.32       15353.51    +33.8 %   2/12
+
+=== config scoring, pr2830  ->  pr2830+B9   (12 paired starts) ===
+metric                                       pr2830      pr2830+B9    change   better on
+REAL crossings                                 1.00           1.00     +0.0 %   3/12   [totals 14 -> 8]
+REAL round trips                               0.00           0.00     +nan %   2/12   [totals 3 -> 1]
+raw goal-sequence swings                       1.00           1.00     +0.0 %   3/12   [totals 20 -> 14]
+raw round trips                                0.00           0.00     +nan %   2/12   [totals 7 -> 3]
+goal-to-goal total per run (m)                47.03          46.63     -0.9 %   4/12   [totals 708 -> 567]
+total path (m)                                55.05          50.36     -8.5 %   5/12
+final coverage (%)                            90.16          90.17     +0.0 %   3/12
+path to 80 % of the ceiling (m)               31.92          30.06     -5.8 %   3/12
+median robot to goal (m)                       3.94           3.86     -2.1 %   4/12
+goals issued                                   9.50           9.50     +0.0 %   2/12
+decision time (ms)                         11366.71       15875.39    +39.7 %   2/12
+
+
+######## verdict summary ########
+map              comparison                    real sw    real rt     path     cov  verdict
+bigoffice        stock+B9 vs stock           10->6       4->0      -2.5%   +0.1%  PASS
+bigoffice_hc     stock+B9 vs stock           12->10      4->3      -7.6%   -0.2%  PASS
+ALL              stock+B9 vs stock           22->16      8->3      -3.2%   +0.3%  PASS
+bigoffice        pr2830+B9 vs pr2830          9->8       0->0      -1.7%   -0.0%  FAIL [PASS under 'round trips must not rise']  (round trips)
+bigoffice_hc     pr2830+B9 vs pr2830         13->3       4->1      +3.4%   +0.9%  PASS
+ALL              pr2830+B9 vs pr2830         22->11      4->1      -1.3%   +0.2%  PASS

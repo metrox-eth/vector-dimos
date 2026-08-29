@@ -1,0 +1,54 @@
+H4: candidate T's own precedent claim, on TOTAL PATH.
+LARGE = body-passable floor >= 100 m2, declared before the run.
+stock+T30 against stock, per map, paired starts.
+
+map            floor m2 size   starts  med path base  med path T    change  H4
+------------------------------------------------------------------------------
+hk_allaround        544 LARGE       6          22.64       25.96    +14.7 %  FAIL
+hk_entrance         229 LARGE       6          12.51       19.51    +55.9 %  FAIL
+hk_park             157 LARGE      12          68.06       62.17     -8.7 %  PASS
+hk_elevator         140 LARGE      12          58.22       39.26    -32.6 %  PASS
+  pooled LARGE                     36          27.56       26.70     -3.1 %  PASS
+hk_office            69 small      12          15.55       16.81     +8.1 %  (n/a)
+bigoffice            48 small      12          29.40       35.49    +20.7 %  (n/a)
+bigoffice_hc         48 small      12          30.60       33.83    +10.6 %  (n/a)
+go2_short            34 small      12          13.84       13.05     -5.7 %  (n/a)
+  pooled small                     48          16.14       20.30    +25.8 %  (n/a)
+
+H4 verdict: PASS on 2 of 4 large maps; pooled over the large maps PASS.
+
+
+--- policy counters, summed over the runs of each arm on each map ---
+
+pr2830+M4.3   (84 runs)
+   bigoffice      n_decisions=111  n_with_heading=98  n_head_changed=10  n_arm_top_backwards=32
+   bigoffice_hc   n_decisions=135  n_with_heading=123  n_head_changed=10  n_arm_top_backwards=36
+   go2_short      n_decisions=124  n_with_heading=110  n_head_changed=24  n_arm_top_backwards=60
+   hk_allaround   n_decisions=75  n_with_heading=64  n_head_changed=5  n_arm_top_backwards=4
+   hk_elevator    n_decisions=132  n_with_heading=120  n_head_changed=16  n_arm_top_backwards=45
+   hk_entrance    n_decisions=92  n_with_heading=84  n_head_changed=11  n_arm_top_backwards=22
+   hk_office      n_decisions=181  n_with_heading=169  n_head_changed=21  n_arm_top_backwards=70
+   hk_park        n_decisions=177  n_with_heading=164  n_head_changed=11  n_arm_top_backwards=51
+   ALL            n_decisions=1027  n_with_heading=932  n_head_changed=108  n_arm_top_backwards=320
+
+stock+M4.3   (84 runs)
+   bigoffice      n_decisions=99  n_with_heading=86  n_head_changed=32  n_arm_top_backwards=49
+   bigoffice_hc   n_decisions=143  n_with_heading=131  n_head_changed=52  n_arm_top_backwards=45
+   go2_short      n_decisions=115  n_with_heading=101  n_head_changed=50  n_arm_top_backwards=66
+   hk_allaround   n_decisions=75  n_with_heading=64  n_head_changed=45  n_arm_top_backwards=44
+   hk_elevator    n_decisions=134  n_with_heading=122  n_head_changed=55  n_arm_top_backwards=68
+   hk_entrance    n_decisions=102  n_with_heading=94  n_head_changed=46  n_arm_top_backwards=46
+   hk_office      n_decisions=182  n_with_heading=170  n_head_changed=64  n_arm_top_backwards=85
+   hk_park        n_decisions=185  n_with_heading=173  n_head_changed=104  n_arm_top_backwards=123
+   ALL            n_decisions=1035  n_with_heading=941  n_head_changed=448  n_arm_top_backwards=526
+
+stock+T30   (84 runs)
+   bigoffice      n_decisions=123  n_replans=105  n_replan_gone=28  n_replan_churn=64  n_replan_stuck=1  n_replan_empty=12  n_advanced=91  n_committed=118  n_head_changed=81
+   bigoffice_hc   n_decisions=152  n_replans=106  n_replan_gone=21  n_replan_churn=61  n_replan_stuck=12  n_replan_empty=12  n_advanced=83  n_committed=146  n_head_changed=117
+   go2_short      n_decisions=106  n_replans=69  n_replan_gone=15  n_replan_churn=21  n_replan_stuck=21  n_replan_empty=12  n_advanced=26  n_committed=104  n_head_changed=99
+   hk_allaround   n_decisions=81  n_replans=68  n_replan_gone=21  n_replan_churn=39  n_replan_stuck=2  n_replan_empty=6  n_advanced=55  n_committed=81  n_head_changed=65
+   hk_elevator    n_decisions=175  n_replans=117  n_replan_gone=55  n_replan_churn=48  n_replan_stuck=2  n_replan_empty=12  n_advanced=111  n_committed=147  n_head_changed=102
+   hk_entrance    n_decisions=90  n_replans=64  n_replan_gone=27  n_replan_churn=29  n_replan_stuck=2  n_replan_empty=6  n_advanced=56  n_committed=90  n_head_changed=71
+   hk_office      n_decisions=157  n_replans=109  n_replan_gone=36  n_replan_churn=38  n_replan_stuck=23  n_replan_empty=12  n_advanced=72  n_committed=157  n_head_changed=125
+   hk_park        n_decisions=173  n_replans=145  n_replan_gone=57  n_replan_churn=67  n_replan_stuck=9  n_replan_empty=12  n_advanced=121  n_committed=173  n_head_changed=136
+   ALL            n_decisions=1057  n_replans=783  n_replan_gone=260  n_replan_churn=367  n_replan_stuck=72  n_replan_empty=84  n_advanced=615  n_committed=1016  n_head_changed=796

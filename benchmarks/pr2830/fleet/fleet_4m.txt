@@ -1,0 +1,311 @@
+runs 360   maps go2_short, hk_allaround, hk_elevator, hk_entrance, hk_office, hk_park
+arms stock, stock+B9, pr2830, pr2830+B9, stock+B6, stock+B12
+wall-capped runs: 24
+    hk_allaround/mid1/shipped/stock  14 goals, 55.0 m, 27.8 % coverage
+    hk_allaround/mid1/shipped/stock+B9  14 goals, 49.1 m, 24.3 % coverage
+    hk_allaround/mid1/shipped/pr2830  14 goals, 57.6 m, 29.2 % coverage
+    hk_allaround/mid1/shipped/pr2830+B9  14 goals, 57.6 m, 29.2 % coverage
+    hk_allaround/mid1/shipped/stock+B6  14 goals, 54.7 m, 28.3 % coverage
+    hk_allaround/mid1/shipped/stock+B12  14 goals, 55.0 m, 27.8 % coverage
+    hk_allaround/mid2/shipped/stock  14 goals, 56.0 m, 29.9 % coverage
+    hk_allaround/mid2/shipped/stock+B9  14 goals, 56.0 m, 29.9 % coverage
+    hk_allaround/mid2/shipped/pr2830  14 goals, 55.8 m, 30.9 % coverage
+    hk_allaround/mid2/shipped/pr2830+B9  14 goals, 55.8 m, 30.9 % coverage
+    hk_allaround/mid2/shipped/stock+B6  14 goals, 55.5 m, 33.2 % coverage
+    hk_allaround/mid2/shipped/stock+B12  14 goals, 56.0 m, 29.9 % coverage
+    hk_allaround/mid3/shipped/pr2830+B9  14 goals, 59.2 m, 33.0 % coverage
+    hk_allaround/mid4/shipped/stock+B9  14 goals, 56.2 m, 36.8 % coverage
+    hk_allaround/mid4/shipped/pr2830  14 goals, 56.2 m, 36.8 % coverage
+    hk_allaround/mid4/shipped/pr2830+B9  14 goals, 56.2 m, 36.8 % coverage
+    hk_allaround/mid4/shipped/stock+B6  14 goals, 56.2 m, 36.8 % coverage
+    hk_allaround/mid4/shipped/stock+B12  14 goals, 56.2 m, 36.8 % coverage
+    hk_allaround/mid5/shipped/stock  14 goals, 59.1 m, 27.3 % coverage
+    hk_allaround/mid5/shipped/stock+B9  14 goals, 59.1 m, 27.3 % coverage
+    hk_allaround/mid5/shipped/pr2830  14 goals, 55.6 m, 29.9 % coverage
+    hk_allaround/mid5/shipped/pr2830+B9  14 goals, 55.6 m, 29.9 % coverage
+    hk_allaround/mid5/shipped/stock+B6  14 goals, 54.0 m, 30.9 % coverage
+    hk_allaround/mid5/shipped/stock+B12  14 goals, 59.1 m, 27.3 % coverage
+
+############ per map, per arm ############
+
+--- go2_short, config shipped ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        2    2/6        0       4       1    156.8    104.0     16.60    46.6%       0
+stock+B9          6        0    0/6        0       3       0    134.4     99.4     16.63    46.9%       0
+pr2830            6        3    3/6        0       5       1    190.7    115.0     19.07    46.7%       0
+pr2830+B9         6        1    1/6        0       3       0    155.0    114.7     18.94    46.3%       0
+stock+B6          6        0    0/6        0       3       0    139.2    100.4     17.31    46.6%       0
+stock+B12         6        2    2/6        0       5       1    158.7    104.0     16.60    46.6%       0
+
+--- hk_allaround, config shipped ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        0    0/6        0       0       0    283.4    253.2     52.71    27.5%       3
+stock+B9          6        0    0/6        0       0       0    255.8    257.4     52.55    25.8%       4
+pr2830            6        0    0/6        0       0       0    268.2    281.4     55.98    29.5%       4
+pr2830+B9         6        0    0/6        0       0       0    247.9    284.4     56.02    30.4%       5
+stock+B6          6        1    1/6        0       1       0    295.9    259.5     54.35    29.6%       4
+stock+B12         6        0    0/6        0       0       0    246.6    264.3     55.51    27.6%       4
+
+--- hk_elevator, config shipped ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        2    2/6        0       2       0    261.8    253.2     37.93    63.4%       0
+stock+B9          6        2    2/6        0       2       0    273.0    282.1     45.88    80.1%       0
+pr2830            6        2    2/6        0       2       0    219.8    234.6     37.50    63.8%       0
+pr2830+B9         6        1    1/6        0       1       0    197.0    233.3     36.90    64.4%       0
+stock+B6          6        2    2/6        0       3       1    250.7    245.1     36.86    63.1%       0
+stock+B12         6        1    1/6        0       1       0    247.0    254.2     37.02    63.4%       0
+
+--- hk_entrance, config shipped ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        2    2/6        0       2       0    301.5    277.9     45.42    44.4%       0
+stock+B9          6        2    2/6        0       2       0    304.9    293.1     48.69    53.2%       0
+pr2830            6        1    1/6        0       1       0    385.4    309.7     44.89    49.7%       0
+pr2830+B9         6        1    1/6        0       1       0    331.6    299.6     50.83    54.5%       0
+stock+B6          6        3    3/6        0       4       0    439.0    350.1     61.56    54.8%       0
+stock+B12         6        2    2/6        0       2       0    305.1    305.8     48.78    51.8%       0
+
+--- hk_office, config shipped ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        3    3/6        0       3       0    256.0    197.1     32.17    40.6%       0
+stock+B9          6        1    1/6        0       1       0    232.4    198.9     35.12    55.8%       0
+pr2830            6        0    0/6        0       0       0    269.0    214.4     31.87    47.6%       0
+pr2830+B9         6        0    0/6        0       0       0    257.6    212.1     31.87    47.6%       0
+stock+B6          6        4    3/6        1       4       1    287.2    186.7     28.14    39.0%       0
+stock+B12         6        0    0/6        0       0       0    243.2    207.8     33.65    55.8%       0
+
+--- hk_park, config shipped ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        2    2/6        0       2       0    375.5    254.6     43.02    52.2%       0
+stock+B9          6        2    2/6        0       2       0    259.6    208.4     36.28    52.2%       0
+pr2830            6        2    2/6        0       2       0    293.1    205.5     34.17    53.8%       0
+pr2830+B9         6        2    2/6        0       2       0    292.0    231.0     37.78    56.1%       0
+stock+B6          6        2    2/6        0       2       0    289.7    239.5     36.18    56.1%       0
+stock+B12         6        2    2/6        0       2       0    298.8    218.9     41.51    52.7%       0
+
+--- go2_short, config scoring ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        9    6/6        0      12       3    266.5    103.8     15.90    47.3%       0
+stock+B9          6        5    4/6        0      11       5    257.9     94.0     15.90    46.3%       0
+pr2830            6        5    5/6        0       9       4    251.2    122.3     18.52    46.3%       0
+pr2830+B9         6        5    5/6        0      10       5    249.5    122.3     18.52    46.3%       0
+stock+B6          6        4    3/6        0       7       2    266.3     95.2     15.92    45.8%       0
+stock+B12         6        9    5/6        1      12       4    253.6    103.8     15.89    47.3%       0
+
+--- hk_elevator, config scoring ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        4    4/6        0       5       0    400.5    567.3     91.78    97.9%       0
+stock+B9          6        2    2/6        0       3       0    351.5    516.2     86.20    97.8%       0
+pr2830            6        3    3/6        0       3       0    348.6    498.4     83.03    97.4%       0
+pr2830+B9         6        3    3/6        0       3       0    330.6    486.5     78.67    97.7%       0
+stock+B6          6        1    1/6        0       3       0    380.0    525.5     85.73    97.7%       0
+stock+B12         6        3    3/6        0       4       0    380.1    546.3     87.78    97.9%       0
+
+--- hk_office, config scoring ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6        3    3/6        0       9       1    542.1    470.7    100.93    82.5%       0
+stock+B9          6        5    4/6        0       8       0    605.0    425.7     84.06    82.4%       0
+pr2830            6        6    4/6        1       8       2    560.2    414.0     77.03    82.5%       0
+pr2830+B9         6        6    3/6        1       6       1    516.6    393.4     76.12    82.5%       0
+stock+B6          6        7    4/6        1       8       2    627.2    375.8     78.12    81.8%       0
+stock+B12         6        3    3/6        0       6       0    555.8    435.2     82.30    81.9%       0
+
+--- hk_park, config scoring ---
+arm            runs  real sw    >=1  real rt  raw sw  raw rt    g2g m   path m  med path  med cov  capped
+stock             6       13    5/6        4      15       6   1073.0   1048.0    184.64    96.4%       0
+stock+B9          6        5    4/6        0       6       1    503.9   1153.2    170.00    97.8%       0
+pr2830            6        4    3/6        0       6       1    517.7    742.4    123.59    96.8%       0
+pr2830+B9         6        6    5/6        0       7       1    584.0    634.8    110.55    96.6%       0
+stock+B6          6        4    4/6        0       5       0    471.2    722.7    131.73    97.7%       0
+stock+B12         6        5    4/6        0       6       1    548.1   1123.0    180.05    97.6%       0
+
+
+############ stock+B9 against stock ############
+
+--- go2_short: stock+B9 against stock, both configs pooled, 12 paired starts ---
+  REAL crossings    11 ->   5   PASS (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings        16 ->  14   (reported, not tested)
+  median path       16.28 ->  16.31 m  +0.2 %   PASS (max +5 %)
+  median coverage   46.87 ->  46.27 %  -1.3 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_allaround: stock+B9 against stock, both configs pooled, 6 paired starts ---
+  REAL crossings     0 ->   0   FAIL (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings         0 ->   0   (reported, not tested)
+  median path       52.71 ->  52.55 m  -0.3 %   PASS (max +5 %)
+  median coverage   27.52 ->  25.84 %  -6.1 %   FAIL (max -5 %)
+  VERDICT: FAIL
+
+--- hk_elevator: stock+B9 against stock, both configs pooled, 12 paired starts ---
+  REAL crossings     6 ->   4   PASS (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings         7 ->   5   (reported, not tested)
+  median path       71.11 ->  72.63 m  +2.1 %   PASS (max +5 %)
+  median coverage   95.92 ->  96.25 %  +0.3 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_entrance: stock+B9 against stock, both configs pooled, 6 paired starts ---
+  REAL crossings     2 ->   2   FAIL (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings         2 ->   2   (reported, not tested)
+  median path       45.42 ->  48.69 m  +7.2 %   FAIL (max +5 %)
+  median coverage   44.43 ->  53.17 %  +19.7 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_office: stock+B9 against stock, both configs pooled, 12 paired starts ---
+  REAL crossings     6 ->   6   FAIL (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings        12 ->   9   (reported, not tested)
+  median path       36.22 ->  40.72 m  +12.4 %   FAIL (max +5 %)
+  median coverage   51.71 ->  64.32 %  +24.4 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_park: stock+B9 against stock, both configs pooled, 12 paired starts ---
+  REAL crossings    15 ->   7   PASS (must drop)
+  REAL round trips   4 ->   0   PASS (must drop)
+  raw swings        17 ->   8   (reported, not tested)
+  median path       91.55 ->  87.62 m  -4.3 %   PASS (max +5 %)
+  median coverage   82.91 ->  86.90 %  +4.8 %   PASS (max -5 %)
+  VERDICT: PASS
+
+--- ALL MAPS POOLED: stock+B9 against stock, both configs pooled, 60 paired starts ---
+  REAL crossings    40 ->  24   PASS (must drop)
+  REAL round trips   4 ->   0   PASS (must drop)
+  raw swings        54 ->  38   (reported, not tested)
+  median path       42.23 ->  44.36 m  +5.0 %   FAIL (max +5 %)
+  median coverage   55.40 ->  56.80 %  +2.5 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+=== config shipped, stock  ->  stock+B9   (36 paired starts) ===
+metric                                        stock       stock+B9    change   better on
+REAL crossings                                 0.00           0.00     +nan %   5/36   [totals 11 -> 7]
+REAL round trips                               0.00           0.00     +nan %   0/36   [totals 0 -> 0]
+raw goal-sequence swings                       0.00           0.00     +nan %   5/36   [totals 13 -> 10]
+raw round trips                                0.00           0.00     +nan %   1/36   [totals 1 -> 0]
+goal-to-goal total per run (m)                42.90          36.95    -13.9 %   20/36   [totals 1635 -> 1460]
+total path (m)                                36.56          37.33     +2.1 %   15/36
+final coverage (%)                            44.71          50.42    +12.8 %   18/36
+path to 80 % of the ceiling (m)               40.88          40.88     +0.0 %   0/2
+median robot to goal (m)                       3.89           3.87     -0.6 %   16/36
+goals issued                                   8.00           9.50    +18.8 %   3/36
+decision time (ms)                         15386.40       15259.28     -0.8 %   9/36
+
+=== config scoring, stock  ->  stock+B9   (24 paired starts) ===
+metric                                        stock       stock+B9    change   better on
+REAL crossings                                 1.00           1.00     +0.0 %   8/24   [totals 29 -> 17]
+REAL round trips                               0.00           0.00     +nan %   3/24   [totals 4 -> 0]
+raw goal-sequence swings                       2.00           1.00    -50.0 %   7/24   [totals 41 -> 28]
+raw round trips                                0.00           0.00     +nan %   4/24   [totals 10 -> 6]
+goal-to-goal total per run (m)                75.56          58.96    -22.0 %   12/24   [totals 2282 -> 1718]
+total path (m)                                94.20          85.09     -9.7 %   8/24
+final coverage (%)                            85.02          90.09     +6.0 %   9/24
+path to 80 % of the ceiling (m)               87.13          79.97     -8.2 %   5/16
+median robot to goal (m)                       4.02           3.92     -2.6 %   12/24
+goals issued                                  11.50          11.50     +0.0 %   8/24
+decision time (ms)                         12704.62       13129.84     +3.3 %   4/24
+
+
+############ pr2830+B9 against pr2830 ############
+
+--- go2_short: pr2830+B9 against pr2830, both configs pooled, 12 paired starts ---
+  REAL crossings     8 ->   6   PASS (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings        14 ->  13   (reported, not tested)
+  median path       18.92 ->  18.92 m  +0.0 %   PASS (max +5 %)
+  median coverage   46.27 ->  46.27 %  +0.0 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_allaround: pr2830+B9 against pr2830, both configs pooled, 6 paired starts ---
+  REAL crossings     0 ->   0   FAIL (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings         0 ->   0   (reported, not tested)
+  median path       55.98 ->  56.02 m  +0.1 %   PASS (max +5 %)
+  median coverage   29.54 ->  30.38 %  +2.9 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_elevator: pr2830+B9 against pr2830, both configs pooled, 12 paired starts ---
+  REAL crossings     5 ->   4   PASS (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings         5 ->   4   (reported, not tested)
+  median path       60.55 ->  60.55 m  +0.0 %   PASS (max +5 %)
+  median coverage   96.60 ->  96.60 %  +0.0 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_entrance: pr2830+B9 against pr2830, both configs pooled, 6 paired starts ---
+  REAL crossings     1 ->   1   FAIL (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings         1 ->   1   (reported, not tested)
+  median path       44.89 ->  50.83 m  +13.2 %   FAIL (max +5 %)
+  median coverage   49.71 ->  54.50 %  +9.6 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_office: pr2830+B9 against pr2830, both configs pooled, 12 paired starts ---
+  REAL crossings     6 ->   6   FAIL (must drop)
+  REAL round trips   1 ->   1   FAIL (must drop)   [would PASS under the fix bench's weaker 'must not rise']
+  raw swings         8 ->   6   (reported, not tested)
+  median path       44.18 ->  44.18 m  +0.0 %   PASS (max +5 %)
+  median coverage   69.14 ->  69.14 %  +0.0 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- hk_park: pr2830+B9 against pr2830, both configs pooled, 12 paired starts ---
+  REAL crossings     6 ->   8   FAIL (must drop)
+  REAL round trips   0 ->   0   FAIL (must drop)   [both zero: nothing to remove, the literal 'fewer' cannot hold]
+  raw swings         8 ->   9   (reported, not tested)
+  median path       41.98 ->  45.97 m  +9.5 %   FAIL (max +5 %)
+  median coverage   56.41 ->  68.89 %  +22.1 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+--- ALL MAPS POOLED: pr2830+B9 against pr2830, both configs pooled, 60 paired starts ---
+  REAL crossings    26 ->  25   PASS (must drop)
+  REAL round trips   1 ->   1   FAIL (must drop)   [would PASS under the fix bench's weaker 'must not rise']
+  raw swings        36 ->  33   (reported, not tested)
+  median path       39.94 ->  39.96 m  +0.1 %   PASS (max +5 %)
+  median coverage   55.74 ->  56.15 %  +0.7 %   PASS (max -5 %)
+  VERDICT: FAIL
+
+=== config shipped, pr2830  ->  pr2830+B9   (36 paired starts) ===
+metric                                       pr2830      pr2830+B9    change   better on
+REAL crossings                                 0.00           0.00     +nan %   5/36   [totals 8 -> 5]
+REAL round trips                               0.00           0.00     +nan %   0/36   [totals 0 -> 0]
+raw goal-sequence swings                       0.00           0.00     +nan %   4/36   [totals 10 -> 7]
+raw round trips                                0.00           0.00     +nan %   1/36   [totals 1 -> 0]
+goal-to-goal total per run (m)                42.42          41.37     -2.5 %   14/36   [totals 1626 -> 1481]
+total path (m)                                35.96          37.78     +5.1 %   9/36
+final coverage (%)                            49.14          51.30     +4.4 %   7/36
+path to 80 % of the ceiling (m)               38.62          38.62     +0.0 %   0/3
+median robot to goal (m)                       3.83           3.81     -0.5 %   9/36
+goals issued                                   9.00           9.00     +0.0 %   2/36
+decision time (ms)                         15915.86       15917.56     +0.0 %   6/36
+
+=== config scoring, pr2830  ->  pr2830+B9   (24 paired starts) ===
+metric                                       pr2830      pr2830+B9    change   better on
+REAL crossings                                 1.00           1.00     +0.0 %   1/24   [totals 18 -> 20]
+REAL round trips                               0.00           0.00     +nan %   0/24   [totals 1 -> 1]
+raw goal-sequence swings                       1.00           1.00     +0.0 %   2/24   [totals 26 -> 26]
+raw round trips                                0.00           0.00     +nan %   1/24   [totals 7 -> 7]
+goal-to-goal total per run (m)                56.11          53.22     -5.1 %   8/24   [totals 1678 -> 1681]
+total path (m)                                77.14          70.56     -8.5 %   7/24
+final coverage (%)                            82.78          82.92     +0.2 %   6/24
+path to 80 % of the ceiling (m)               65.98          65.98     +0.0 %   4/15
+median robot to goal (m)                       3.88           3.89     +0.1 %   7/24
+goals issued                                  11.00          11.00     +0.0 %   1/24
+decision time (ms)                         13944.30       13962.58     +0.1 %   5/24
+
+
+######## verdict summary ########
+map              comparison                    real sw    real rt     path     cov  verdict
+go2_short        stock+B9 vs stock           11->5       0->0      +0.2%   -1.3%  FAIL [PASS under 'round trips must not rise']  (round trips)
+hk_allaround     stock+B9 vs stock            0->0       0->0      -0.3%   -6.1%  FAIL  (crossings, round trips, coverage)
+hk_elevator      stock+B9 vs stock            6->4       0->0      +2.1%   +0.3%  FAIL [PASS under 'round trips must not rise']  (round trips)
+hk_entrance      stock+B9 vs stock            2->2       0->0      +7.2%  +19.7%  FAIL  (crossings, round trips, path)
+hk_office        stock+B9 vs stock            6->6       0->0     +12.4%  +24.4%  FAIL  (crossings, round trips, path)
+hk_park          stock+B9 vs stock           15->7       4->0      -4.3%   +4.8%  PASS
+ALL              stock+B9 vs stock           40->24      4->0      +5.0%   +2.5%  FAIL  (path)
+go2_short        pr2830+B9 vs pr2830          8->6       0->0      +0.0%   +0.0%  FAIL [PASS under 'round trips must not rise']  (round trips)
+hk_allaround     pr2830+B9 vs pr2830          0->0       0->0      +0.1%   +2.9%  FAIL  (crossings, round trips)
+hk_elevator      pr2830+B9 vs pr2830          5->4       0->0      +0.0%   +0.0%  FAIL [PASS under 'round trips must not rise']  (round trips)
+hk_entrance      pr2830+B9 vs pr2830          1->1       0->0     +13.2%   +9.6%  FAIL  (crossings, round trips, path)
+hk_office        pr2830+B9 vs pr2830          6->6       1->1      +0.0%   +0.0%  FAIL  (crossings, round trips)
+hk_park          pr2830+B9 vs pr2830          6->8       0->0      +9.5%  +22.1%  FAIL  (crossings, round trips, path)
+ALL              pr2830+B9 vs pr2830         26->25      1->1      +0.1%   +0.7%  FAIL [PASS under 'round trips must not rise']  (round trips)

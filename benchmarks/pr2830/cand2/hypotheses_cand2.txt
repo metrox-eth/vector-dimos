@@ -1,0 +1,259 @@
+PRE-DECLARED GRID AND HYPOTHESES - candidates M (signed direction) and T (lazy tour)
+====================================================================================
+Written 2026-08-29 in /tmp/claude-1000/-home-openclaw-lerobot/
+c23c4729-e991-4dc8-b2d5-9c140c6a8780/scratchpad/sim_2830_cand2/, BEFORE any
+comparative run was launched. Nothing below is widened, narrowed or tuned
+afterwards. Everything that runs and is not in this file is named as such in the
+report.
+
+NOTHING RAN BEFORE THIS FILE except mechanical smoke checks of the two new
+wrappers (import, spec parsing, one or two single-arm runs to prove the code
+executes). Those contain no comparison between arms and can neither confirm nor
+deny anything here.
+
+--------------------------------------------------------------------------------
+0. WHERE THE TWO CANDIDATES COME FROM, AND WHAT IS ALREADY SETTLED
+--------------------------------------------------------------------------------
+The design of this job is driven by ../sim_2830_fleet/confrontation_externe.md
+(the confrontation memo). Four facts from it are treated as settled and are NOT
+re-tested here:
+
+ S1. PR #2830 ALREADY DELETES explored_goals_score. Verified in the memo,
+     section (i), "COLLISION FRONTALE": the diff removes both the
+     explored_goals_distance / explored_goals_score lines and the
+     + 0.3 * explored_goals_score term. So "delete the repeller" is not a
+     candidate of ours; it is somebody else's open PR.
+ S2. DELETING IT DOES NOT KILL THE SHORT-RANGE SWINGS. Memo header point 5 and
+     section (v).4, on our own mid-start aggregates at 4 m: cross-map swings go
+     11 -> 11 in config `shipped` and 22 -> 20 in config `scoring`. Necessary,
+     not sufficient.
+ S3. THE BEST-EVIDENCED MISSING PIECE IS THE DIRECTION TERM. Memo header point 3
+     and section (v).4: dimOS has momentum_score = max(0.0, dot_product) at 5 %
+     weight, truncated at zero, so a U-turn costs exactly what a sideways move
+     costs, which is nothing. Every stack that tunes this term tunes it heavy and
+     signed; GBPlanner weights direction 0.3 against 0.07 for distance, a factor
+     of 4.3.  -> CANDIDATE M.
+ S4. THE MONEY IS IN A GLOBAL ORDER, NOT IN ROOM SEGMENTATION. Memo header point
+     4 and section (iii): P2 Explore, Table II, single robot, metric in metres:
+     a global TSP ordering of frontiers buys about 31 % of travel on large
+     scenes, and adding room-awareness on top buys only about 4.9 % more.
+     -> CANDIDATE T.
+
+And one correction that changes every baseline in this bench:
+
+ S5. THE 15 s GOAL TIMEOUT. Memo section (v).6, first bullet: the "45 s goal
+     timeout" our earlier benches ran config `shipped` with comes from OUR
+     blueprint, not from upstream. The upstream default is
+     WavefrontConfig.goal_timeout = 15.0, line 93 of
+     dimos/navigation/frontier_exploration/wavefront_frontier_goal_selector.py
+     in the installed package (md5 e77c328643c959a49077115e8a341f2c, the same
+     file as pr2830/selector_base.py), and the go2 blueprint instantiates
+     WavefrontFrontierExplorer.blueprint() with no override.
+     THIS BENCH RUNS CONFIG `shipped` AT 15.0 s. Every baseline is RE-RUN at
+     15 s. No number in this job is ever compared against a 45 s number as if
+     they were the same condition.
+
+--------------------------------------------------------------------------------
+1. THE TWO CANDIDATES, EXACTLY AS THEY WILL RUN
+--------------------------------------------------------------------------------
+Both are HARNESS-SIDE wrappers in the style of fix_hysteresis.py, installed on
+one selector INSTANCE by fix_hysteresis.install(). The two vendored upstream
+files stay byte-identical: pr2830/selector_base.py md5
+e77c328643c959a49077115e8a341f2c and pr2830/selector_head.py md5
+1ccc0c69fe88a72e402565feca988d26, re-checked and stated at the end of the
+report. Neither wrapper invents a candidate; both only re-order the list the
+selector's own detect_frontiers / _rank_frontiers produced.
+
+CANDIDATE M, signed direction penalty. fix_momentum.py.
+  Precedent: GBPlanner, via the memo (sections (iii) and (v).4), which reads it
+  out of gbplanner/src/rrg.cpp:657-676 and config/smb/gbplanner_config.yaml:
+  gain * exp(-0.07 * path_length) * exp(-0.3 * direction_deviation).
+  Form, applied to the arm's own score:
+
+      adjusted = base_score * exp(-0.07 * route_m) * exp(-ratio * 0.07 * dev)
+
+      dev   = (1 - cos(theta)) / 2, in [0, 1]: 0 straight on, 0.5 across,
+              1.0 a full U-turn. Strictly decreasing in the dot product over the
+              whole range, which is the SIGNED reading; dimOS's max(0, dot) is
+              flat over the whole backwards half.
+      theta = angle between the robot's current direction of travel and the
+              straight-line bearing to the candidate.
+      heading = exponential moving average of the REAL DISPLACEMENT between
+              decision poses, alpha = 0.3, refreshed only once the robot is more
+              than 0.75 m from the pose of the last refresh (GBPlanner's recipe,
+              position direction and not body heading). Before the first refresh
+              there is no heading and the direction factor is 1.0.
+      route_m = route length robot -> candidate under the PLANNER's own cost
+              rule, one Dijkstra wave per decision, the same
+              fix_hysteresis.geodesic_field the earlier candidate used.
+      ratio = the direction-to-distance weight ratio, SWEPT in {1, 2, 4.3}.
+              4.3 is GBPlanner's own 0.3 / 0.07.
+  Candidates whose score is not finite and positive, or whose route is infinite,
+  keep their original relative order at the END of the list.
+  NAMED CONTROL, spec M0: ratio = 0, the distance penalty alone. It is NOT a
+  candidate and cannot win the sweep. It exists so the report can say whether
+  anything M does is attributable to the direction term at all, because the
+  GBPlanner form necessarily carries a distance term too.
+
+CANDIDATE T, lazy TSP ordering. fix_tsp.py. Spec T30.
+  Precedent: P2 Explore for the claim, FUEL and TARE for the mechanism, all via
+  the memo, section (iii) form C.
+  1. one Dijkstra wave from the robot per REPLAN gives the route length to every
+     current frontier cluster centroid;
+  2. a tour is built over those centroids: nearest-neighbour from the robot, then
+     2-opt to convergence, capped at 20 sweeps;
+  3. the policy COMMITS: at every decision the next un-consumed tour stop is
+     moved to the head of the selector's own list. No per-decision
+     re-optimisation;
+  4. the tour is re-planned ONLY on one of these, all declared here:
+       (a) the next tour stop is no longer among the current candidates, matched
+           within 1.0 m - it vanished without being visited;
+       (b) the frontier set has churned by more than the DECLARED FRACTION
+           0.30, churn being the symmetric difference over the union of the
+           centroid set at the last replan and the current one, same 1.0 m
+           matching;
+       (c) SAFETY VALVE, not part of the precedent and counted separately: the
+           same stop has been put at the head twice in a row, so a stop the drive
+           planner cannot reach cannot lock the tour forever;
+       (d) the tour is exhausted.
+     A stop that was ISSUED and has since stopped being a frontier is ADVANCED
+     PAST, not re-planned: that is the tour being worked through, and it is the
+     whole point of the candidate.
+  DECLARED APPROXIMATION: with one wave per replan only the robot-to-centroid
+  edges are geodesic; the centroid-to-centroid edges are straight line. FUEL pays
+  for the full pairwise A* matrix and calls LKH. Ours is a cheap tour and the
+  report will not call it a TSP solver.
+
+--------------------------------------------------------------------------------
+2. THE GRID
+--------------------------------------------------------------------------------
+MAPS      the 6 maps that passed the fleet gate - hk_office, hk_park,
+          hk_entrance, hk_allaround, hk_elevator, go2_short - plus bigoffice and
+          bigoffice_hc. Eight maps. The .npz are already on the box at /root/.
+LIDAR     4 m everywhere.
+STARTS    6 per map by the midstarts.py rule: centre + mid1..mid5.
+CONFIGS   `shipped` (upstream loop, goal timeout 15.0 s, the UPSTREAM default)
+          and `scoring` (their ranking, no self-stop, no goal timeout, plus the
+          house failed-goal filter), EXCEPT:
+          KNOWN TRAP, declared in advance: config `scoring` is unobtainable on
+          hk_allaround and hk_entrance. It freezes deterministically at the same
+          task index in independent attempts, documented in
+          ../sim_2830_fleet/rapport_fleet.md section 5. Those two maps run
+          SHIPPED ONLY FROM THE START. They therefore contribute 6 paired starts
+          each instead of 12, and every table says so.
+ARMS      stock
+          stock+M<best>     best ratio from the bigoffice-only sweep below
+          stock+T30
+          pr2830
+          pr2830+M<best>
+          Five arms. 6 maps x 6 starts x 2 configs x 5 arms
+          + 2 maps x 6 starts x 1 config x 5 arms = 420 runs.
+BUDGET    per-map chunking, one invocation and one result file per map, so a
+          pathological map can only lose itself; --jobs <= 190 on the 192-core
+          box; a 600 s per-run wall cap (--run-cap-s 600, the fleet's value) and
+          a 1800 s timeout per invocation. Logs to /root/logs/cand_<map>.log.
+          Total compute under 2 h. The box stays alive afterwards.
+
+THE M RATIO SWEEP, run FIRST and separately:
+  bigoffice only, 4 m, the 6 middle starts, both configs, the stock arm only.
+  Arms: stock, stock+M1, stock+M2, stock+M4.3, and the control stock+M0.
+  12 runs per arm, 60 runs. WINNER RULE: the largest drop in REAL crossings
+  against the same 12 stock baseline runs; ties broken by fewer real round trips,
+  then by lower median total path. M0 is reported and cannot win. No value
+  outside {1, 2, 4.3} is tried, whatever the sweep shows.
+
+--------------------------------------------------------------------------------
+3. METRICS
+--------------------------------------------------------------------------------
+Every headline count is RE-DERIVED FROM THE RAW GOAL COORDINATES of each run,
+with that map's own swing threshold, independently of the summarise() fields the
+bench wrote, and the number of disagreements is stated (the zero-disagreement
+check). analyse_cand2.py, unchanged from the fleet's analyse_fleet.py except for
+the per-config budget check declared below.
+
+  swing threshold, per map   half the bounding-box diagonal of that map's
+                             body-passable floor, as the fleet bench defined it.
+  raw swings                 consecutive issued goals further apart than the
+                             threshold.
+  REAL crossings  (PRIMARY)  raw minus class N, where class N is a swing whose
+                             newly chosen goal was within 6 m of the ROBOT at the
+                             moment it was issued: the goal sequence jumped and
+                             the robot did not. Straight-line here.
+  round trips                a swing followed within 3 further jumps by one whose
+                             direction opposes it. Counted on both swing sets;
+                             REAL round trips are primary.
+  total path, coverage, path to 80 % of the ceiling, goal-to-goal total,
+  median robot-to-goal, goals issued, decision time, wall-capped runs: reported.
+
+--------------------------------------------------------------------------------
+4. THE HYPOTHESES
+--------------------------------------------------------------------------------
+Per map, and pooled. A failure on a map is reported as a failure ON THAT MAP and
+is never averaged away. A map on which the arm being compared against produces
+ZERO real crossings is reported as NO EVENTS TO REMOVE and set aside for H1, H2
+and H3 rather than counted as a pass or a fail: the metric cannot discriminate
+there. (On the fleet this was hk_allaround, whose threshold is 35.13 m.)
+
+H1  stock+M<best> against stock, on the maps where crossings exist:
+      (1) total REAL crossings must drop;
+      (2) total REAL round trips must drop. When both arms have none the literal
+          clause cannot hold; the weaker reading "must not rise" is printed
+          alongside and the difference is flagged, never silently substituted;
+      (3) median total path must be within +5 % IN EACH CONFIGURATION TAKEN
+          ALONE, not only pooled;
+      (4) median final coverage must be within -5 % IN EACH CONFIGURATION TAKEN
+          ALONE.
+    All four must hold for a PASS on that map.
+
+H2  the same four clauses for stock+T30 against stock.
+
+H3  the same four clauses for pr2830+M<best> against pr2830.
+
+H4  candidate T's own precedent claim, on TOTAL PATH rather than on crossings.
+    P2 Explore reports about 31 % of travel saved by a global TSP order on LARGE
+    scenes. LARGE IS DECLARED HERE, BEFORE THE RUN, by body-passable floor area
+    from the fleet gate table: >= 100 m2. That is hk_allaround (544 m2),
+    hk_entrance (229 m2), hk_park (157 m2) and hk_elevator (140 m2). The other
+    four - hk_office 69 m2, bigoffice 48 m2, bigoffice_hc 48 m2, go2_short
+    34 m2 - are the small maps and H4 does not apply to them.
+    H4 holds on a large map when the median total path of stock+T30 is LOWER
+    than the median total path of stock on that map. Reported per map and
+    pooled over the four. No percentage target is claimed: 31 % is P2 Explore's
+    number on P2 Explore's scenes, not a prediction for ours.
+
+OPTIONAL COMBINED ARM. Only if BOTH M and T pass H1/H2 on at least half of the
+maps where the metric can discriminate. If that gate fires, one further arm
+stock+M<best>+T30 is run, the two wrappers chained left to right so that T has
+the last word, on the same grid; if it does not fire, the combined arm is NOT run
+and the report says the gate did not fire.
+
+--------------------------------------------------------------------------------
+5. THE 15 s CORRECTION, MEASURED RATHER THAN ASSERTED
+--------------------------------------------------------------------------------
+The report carries an explicit section comparing this bench against the 45 s
+history. It is a DESCRIPTIVE comparison of the same arms on the same maps and
+the same starts at two different goal timeouts, in config `shipped` only, using
+runs that already exist:
+    45 s:  ../sim_2830_fleet/fleet_4m_*.json (stock, pr2830, 6 gated maps) and
+           ../sim_2830_fix/results_trace_4m.json (stock, pr2830, the anchors)
+    15 s:  this bench's stock and pr2830 arms
+No hypothesis is attached to it and no verdict is drawn from it. It exists to say
+what changed because of the correction, so that nobody reads a number from the
+old reports next to a number from this one.
+
+--------------------------------------------------------------------------------
+6. WHAT WOULD MAKE THIS JOB WRONG, WRITTEN DOWN NOW
+--------------------------------------------------------------------------------
+ - One recording per floor, no repetition, no variance estimate. Every number is
+   a count or a median over 12 paired starts (6 on the two shipped-only maps).
+   Nothing here is a statistical claim.
+ - Both candidates cost more per decision than stock. On hk_allaround, whose runs
+   are wall-capped, a more expensive policy explores less inside the same 600 s
+   of real time. That is a confound on that map and only on that map.
+ - Candidate M carries a distance term as well as a direction term, because the
+   GBPlanner form does. The control arm M0 is the only thing separating them and
+   it runs on bigoffice only.
+ - The simulated pose is perfect and unknown is a wall by construction. A
+   reversal in simulation is a decision, never noise.
+ - The rover is 46 cm and the Go2 that recorded these floors is about 31 cm, so
+   the bench explores a skeleton of each floor. Unchanged from the fleet bench.

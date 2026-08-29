@@ -1,0 +1,50 @@
+H3, the radius question. Totals over the 12 paired starts of each map (6 middle starts x 2 configurations), 4 m lidar.
+A cell that is short of 12 runs is marked; the arm did not produce a paired run there.
+
+map            arm           runs  real sw  real rt  raw sw  med path  med cov  capped
+--------------------------------------------------------------------------------------
+go2_short      stock           12       11        0      16     16.28    46.9%       0
+go2_short      stock+B6        12        4        0      10     16.11    45.8%       0
+go2_short      stock+B9        12        5        0      14     16.31    46.3%       0
+go2_short      stock+B12       12       11        1      17     16.27    46.9%       0
+               best R here: stock+B6 with 4 real crossings; R = 9 has 5, gap 1   PASS (tolerance 2)
+
+hk_allaround   stock            6        0        0       0     52.71    27.5%       3   INCOMPLETE
+hk_allaround   stock+B6         6        1        0       1     54.35    29.6%       4   INCOMPLETE
+hk_allaround   stock+B9         6        0        0       0     52.55    25.8%       4   INCOMPLETE
+hk_allaround   stock+B12        6        0        0       0     55.51    27.6%       4   INCOMPLETE
+               best R here: stock+B9 with 0 real crossings; R = 9 has 0, gap 0   PASS (tolerance 2)
+
+hk_elevator    stock           12        6        0       7     71.11    95.9%       0
+hk_elevator    stock+B6        12        3        0       6     71.17    95.7%       0
+hk_elevator    stock+B9        12        4        0       5     72.63    96.2%       0
+hk_elevator    stock+B12       12        4        0       5     71.11    95.9%       0
+               best R here: stock+B6 with 3 real crossings; R = 9 has 4, gap 1   PASS (tolerance 2)
+
+hk_entrance    stock            6        2        0       2     45.42    44.4%       0   INCOMPLETE
+hk_entrance    stock+B6         6        3        0       4     61.56    54.8%       0   INCOMPLETE
+hk_entrance    stock+B9         6        2        0       2     48.69    53.2%       0   INCOMPLETE
+hk_entrance    stock+B12        6        2        0       2     48.78    51.8%       0   INCOMPLETE
+               best R here: stock+B9 with 2 real crossings; R = 9 has 2, gap 0   PASS (tolerance 2)
+
+hk_office      stock           12        6        0      12     36.22    51.7%       0
+hk_office      stock+B6        12       11        2      12     39.91    58.5%       0
+hk_office      stock+B9        12        6        0       9     40.72    64.3%       0
+hk_office      stock+B12       12        3        0       6     40.86    64.2%       0
+               best R here: stock+B12 with 3 real crossings; R = 9 has 6, gap 3   FAIL (tolerance 2)
+
+hk_park        stock           12       15        4      17     91.55    82.9%       0
+hk_park        stock+B6        12        6        0       7     56.85    75.8%       0
+hk_park        stock+B9        12        7        0       8     87.62    86.9%       0
+hk_park        stock+B12       12        7        0       8     87.62    86.9%       0
+               best R here: stock+B6 with 6 real crossings; R = 9 has 7, gap 1   PASS (tolerance 2)
+
+
+H3 verdict per map (R = 9 within 2 real crossings of the best R):
+  go2_short      best stock+B6       4 vs R=9   5, gap   1  PASS
+  hk_allaround   best stock+B9       0 vs R=9   0, gap   0  PASS
+  hk_elevator    best stock+B6       3 vs R=9   4, gap   1  PASS
+  hk_entrance    best stock+B9       2 vs R=9   2, gap   0  PASS
+  hk_office      best stock+B12      3 vs R=9   6, gap   3  FAIL
+  hk_park        best stock+B6       6 vs R=9   7, gap   1  PASS
+  OVERALL: FAIL (5/6 maps)

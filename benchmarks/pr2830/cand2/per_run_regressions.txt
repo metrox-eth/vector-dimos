@@ -1,0 +1,30 @@
+re-derivation from raw goal coordinates: 420 runs checked, 0 disagreements with the stored cross_map_swings field
+
+PER-RUN COVERAGE REGRESSIONS, which the medians hide.
+A paired start where the fix arm finished with at least 10 POINTS less
+coverage than the arm it is compared against. 84 paired starts
+(48 `shipped` + 36 `scoring`).
+
+stock+M4.3 against stock:  5 regressions of >=10 points, 13 gains of >=10 points, out of 84 paired starts
+    hk_park        mid3    scoring  coverage  90.6 ->  21.1 %   path  145.6 ->   15.7 m
+    bigoffice_hc   mid3    shipped  coverage  70.7 ->  27.9 %   path   19.7 ->   12.9 m
+    bigoffice      mid3    shipped  coverage  72.7 ->  29.9 %   path   21.5 ->   10.7 m
+    hk_park        mid3    shipped  coverage  48.2 ->  20.6 %   path   27.7 ->   10.7 m
+    hk_entrance    mid1    shipped  coverage  41.9 ->  25.9 %   path   32.3 ->   16.2 m
+
+stock+T30 against stock:  12 regressions of >=10 points, 11 gains of >=10 points, out of 84 paired starts
+    bigoffice_hc   mid3    shipped  coverage  70.7 ->  27.7 %   path   19.7 ->   10.7 m
+    bigoffice      mid3    shipped  coverage  72.7 ->  30.1 %   path   21.5 ->    9.5 m
+    hk_elevator    centre  scoring  coverage  98.7 ->  58.5 %   path   84.7 ->   56.7 m
+    hk_elevator    mid1    shipped  coverage  54.3 ->  25.0 %   path   19.8 ->   11.5 m
+    hk_elevator    mid5    shipped  coverage  70.4 ->  42.0 %   path   31.8 ->   17.3 m
+    bigoffice_hc   centre  shipped  coverage  63.2 ->  38.5 %   path   16.2 ->   13.1 m
+    hk_park        mid2    shipped  coverage  43.3 ->  19.2 %   path   23.4 ->   12.1 m
+    hk_entrance    mid1    shipped  coverage  41.9 ->  25.8 %   path   32.3 ->   18.5 m
+
+pr2830+M4.3 against pr2830:  4 regressions of >=10 points, 7 gains of >=10 points, out of 84 paired starts
+    hk_office      mid4    shipped  coverage  63.4 ->  29.2 %   path   37.1 ->   12.8 m
+    hk_office      mid3    shipped  coverage  49.0 ->  35.8 %   path   25.1 ->   17.0 m
+    hk_elevator    mid4    shipped  coverage  64.3 ->  51.2 %   path   24.0 ->   19.1 m
+    bigoffice      mid2    shipped  coverage  88.3 ->  77.6 %   path   27.4 ->   25.9 m
+

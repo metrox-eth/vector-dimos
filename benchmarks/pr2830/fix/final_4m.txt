@@ -1,0 +1,88 @@
+arms: pr2830, pr2830+B9, stock, stock+B9
+maps: bigoffice, bigoffice_hc
+
+=== config shipped, stock  ->  stock+B9   (12 paired starts) ===
+metric                                          stock       stock+B9    change   better on
+cross-map swings                                 1.00           0.00   -100.0 %   6/12   [totals 11 -> 4]
+round trips                                      0.00           0.00     +nan %   1/12   [totals 2 -> 0]
+goal-to-goal total per run (m)                  41.87          35.48    -15.2 %   7/12   [totals 539 -> 456]
+total path (m)                                  36.79          36.39     -1.1 %   5/12
+final coverage (%)                              85.48          85.48     +0.0 %   1/12
+path to 50 % of the ceiling (m)                  9.26           9.26     +0.0 %   0/12
+path to 80 % of the ceiling (m)                 27.94          27.34     -2.1 %   4/9
+median robot to goal (m)                         3.97           3.96     -0.4 %   5/12
+goals issued                                     9.00           9.00     +0.0 %   2/12
+goals reached                                    4.00           4.00     +0.0 %   3/12
+goals after the last one reached                 3.00           2.00    -33.3 %   3/12
+decision time (ms)                           11225.63       14649.77    +30.5 %   0/12
+  cross_map_swings: total 11 -> 4, runs with at least one 7/12 -> 4/12
+  round_trips: total 2 -> 0, runs with at least one 1/12 -> 0/12
+
+=== config scoring, stock  ->  stock+B9   (12 paired starts) ===
+metric                                          stock       stock+B9    change   better on
+cross-map swings                                 1.50           1.00    -33.3 %   4/12   [totals 22 -> 17]
+round trips                                      0.50           0.00   -100.0 %   5/12   [totals 13 -> 6]
+goal-to-goal total per run (m)                  62.72          46.87    -25.3 %   5/12   [totals 699 -> 642]
+total path (m)                                  60.03          56.72     -5.5 %   4/12
+final coverage (%)                              90.43          91.02     +0.7 %   6/12
+path to 50 % of the ceiling (m)                  9.32           9.32     +0.0 %   0/12
+path to 80 % of the ceiling (m)                 29.36          27.30     -7.0 %   2/12
+median robot to goal (m)                         3.99           3.97     -0.4 %   7/12
+goals issued                                     9.50           9.00     -5.3 %   4/12
+goals reached                                    6.00           6.50     +8.3 %   4/12
+goals after the last one reached                 2.00           1.50    -25.0 %   4/12
+decision time (ms)                           12386.31       14749.32    +19.1 %   3/12
+  cross_map_swings: total 22 -> 17, runs with at least one 9/12 -> 9/12
+  round_trips: total 13 -> 6, runs with at least one 6/12 -> 4/12
+
+--- pre-declared test: stock+B9 against stock (both configs pooled) ---
+  swings       33 ->  21   PASS (must drop)
+  round trips  15 ->   6   PASS (must not rise)
+  total path   44.25 ->  42.83 m  -3.2 %   PASS (max +5 %)
+  coverage     90.01 ->  90.30 %  +0.3 %   PASS (max -5 %)
+  VERDICT: PASS
+
+=== config shipped, pr2830  ->  pr2830+B9   (12 paired starts) ===
+metric                                         pr2830      pr2830+B9    change   better on
+cross-map swings                                 1.00           0.00   -100.0 %   5/12   [totals 11 -> 5]
+round trips                                      0.00           0.00     +nan %   2/12   [totals 3 -> 0]
+goal-to-goal total per run (m)                  39.58          36.05     -8.9 %   6/12   [totals 559 -> 436]
+total path (m)                                  38.09          38.61     +1.4 %   4/12
+final coverage (%)                              88.13          89.21     +1.2 %   5/12
+path to 50 % of the ceiling (m)                  7.23           7.23     +0.0 %   0/11
+path to 80 % of the ceiling (m)                 29.61          31.11     +5.1 %   1/10
+median robot to goal (m)                         3.91           3.67     -6.2 %   6/12
+goals issued                                    10.00          10.50     +5.0 %   2/12
+goals reached                                    5.00           5.00     +0.0 %   3/12
+goals after the last one reached                 2.00           2.00     +0.0 %   2/12
+decision time (ms)                           11472.32       15353.51    +33.8 %   2/12
+  cross_map_swings: total 11 -> 5, runs with at least one 7/12 -> 4/12
+  round_trips: total 3 -> 0, runs with at least one 2/12 -> 0/12
+
+=== config scoring, pr2830  ->  pr2830+B9   (12 paired starts) ===
+metric                                         pr2830      pr2830+B9    change   better on
+cross-map swings                                 1.00           1.00     +0.0 %   3/12   [totals 20 -> 14]
+round trips                                      0.00           0.00     +nan %   2/12   [totals 7 -> 3]
+goal-to-goal total per run (m)                  47.03          46.63     -0.9 %   4/12   [totals 708 -> 567]
+total path (m)                                  55.05          50.36     -8.5 %   5/12
+final coverage (%)                              90.16          90.17     +0.0 %   3/12
+path to 50 % of the ceiling (m)                  7.33           7.33     +0.0 %   0/12
+path to 80 % of the ceiling (m)                 31.92          30.06     -5.8 %   3/12
+median robot to goal (m)                         3.94           3.86     -2.1 %   4/12
+goals issued                                     9.50           9.50     +0.0 %   2/12
+goals reached                                    6.00           6.00     +0.0 %   2/12
+goals after the last one reached                 2.50           2.50     +0.0 %   3/12
+decision time (ms)                           11366.71       15875.39    +39.7 %   2/12
+  cross_map_swings: total 20 -> 14, runs with at least one 11/12 -> 11/12
+  round_trips: total 7 -> 3, runs with at least one 3/12 -> 2/12
+
+--- pre-declared test: pr2830+B9 against pr2830 (both configs pooled) ---
+  swings       31 ->  19   PASS (must drop)
+  round trips  10 ->   3   PASS (must not rise)
+  total path   44.28 ->  43.72 m  -1.3 %   PASS (max +5 %)
+  coverage     89.73 ->  89.94 %  +0.2 %   PASS (max -5 %)
+  VERDICT: PASS
+
+======== summary ========
+  stock+B9           vs stock    swings  33-> 21  round trips  15->  6  path   -3.2 %  cov  +0.3 %  PASS
+  pr2830+B9          vs pr2830   swings  31-> 19  round trips  10->  3  path   -1.3 %  cov  +0.2 %  PASS
