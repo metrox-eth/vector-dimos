@@ -1,3 +1,25 @@
+# PR #2830 field notes, and the exploration ping-pong dossier
+
+Offline benchmarks of dimOS frontier exploration on recorded maps. All runs use the
+real upstream selector files, unmodified; every volume pre-declares its hypotheses
+before running and re-derives its headline counts from raw goal coordinates.
+
+| volume | question | answer |
+|---|---|---|
+| this file, below | does PR #2830's scoring reproduce its claims? | dispersion yes, travel on large maps only |
+| [midstart/](midstart/) | middle-of-space starts, low lidar range (maintainer's setup) | swings appear under stock; #2830 does not reduce them |
+| [fix/](fix/) | why does each swing happen, and does a finish-your-branch policy help? | diagnosis A/B/C; fixed radius helps one floor |
+| [fleet/](fleet/) | does that policy generalize? 6 new floors from public dimOS datasets | no; the radius was a one-floor artefact |
+| [cand2/](cand2/) | signed direction term and lazy TSP tour; upstream 15 s timeout | direction term strong where measurable; timeout dominates |
+| [go2/](go2/) | everything re-judged with the Go2's own body and measured speed | the swing is real in Go2 conditions; remedy passes on 2 maps |
+| [resid/](resid/) | are the remaining crossings fixable or legitimate? | fixable class goes to zero under the remedy; residual is legitimate walking |
+
+Verdict of the dossier: about half of stock's cross-map crossings in Go2 conditions
+are fixable errors, one signed-direction change removes all of them, and the rest is
+a robot that finished a region and has to walk. Full numbers in each volume.
+
+## The original comment posted on PR #2830
+
 # Offline field test of dimensionalOS/dimos#2830 on recorded maps
 
 The harness and results behind our comment on

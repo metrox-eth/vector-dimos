@@ -1,0 +1,166 @@
+==============================================================================
+THE GO2 PROFILE, DERIVED FROM dimOS' OWN RECORDINGS
+derive_speed.py, 2026-08-29. Nothing here is assumed; every number is measured
+on the SAME SQLite stores the maps of this bench were extracted from.
+==============================================================================
+
+SOURCE. The `odom` stream of each recording. Where the store's pose_x/pose_y
+INDEX columns carry a real trace it is read straight out of SQL; where they
+are zeroed or null (5 of 9 recordings) the PoseStamped payload is decoded by
+dimOS' own SqliteStore reader, and the frame_id is checked to be `world` -
+the extraction REFUSES a store whose odom is not in the world frame rather
+than inventing pose maths. Which path each recording took is in the `source`
+column below. On go2_bigoffice, where both paths exist, they are the same
+trace: the SQL columns ARE the decoded pose.
+
+METHOD, declared before any result was looked at:
+  1. poses sorted by ts, duplicate timestamps dropped;
+  2. the trace is cut into SEGMENTS wherever two samples are more than 1.0 s
+     apart - a recording pause is not a standstill and must not be averaged;
+  3. speed is measured over a sliding 0.5 s window of wall time inside a
+     segment: straight-line displacement over elapsed time. 0.5 s is long
+     enough that odom jitter at ~19 Hz does not dominate and short enough
+     that a turn in place is not smeared into a walk;
+  4. a window is MOVING at 0.05 m/s or more (0.03 and 0.10 printed beside it);
+  5. median and p90 over the moving windows only.
+Straight-line displacement UNDER-states speed on a curve, so every speed here
+is a lower bound on path speed.
+
+------------------------------------------------------------------------------
+1. WALKING SPEED  (headline threshold 0.05 m/s)
+------------------------------------------------------------------------------
+map           src    poses   rec s   path m  mov%  median     p90     p99     max
+bigoffice      sql     5465   292.5   162.04  94.3   0.542   0.924   1.073   1.212
+hk_office    * sql    10437   554.7   190.51  83.7   0.428   0.597   0.648   1.636
+hk_allaround * blob    4352   233.8   194.29  94.0   0.945   1.080   1.958   3.428
+hk_elevator  * blob    1986   105.7    78.06  89.3   0.884   1.052   1.169   1.282
+hk_entrance  * blob    2331   124.7   108.25  95.8   0.944   1.064   1.143   1.466
+hk_park      * blob    2121   113.2    97.19  93.2   0.941   1.121   2.461   3.586
+go2_short      sql     1122    59.9    37.53  93.0   0.626   0.957   1.062   1.135
+china_office   blob    2602   138.8    37.27  71.6   0.376   0.567   0.629   0.777
+markers_go2    blob    1936   103.5    13.68  38.5   0.234   0.584   0.895   0.965
+  (* = one of the five HK floors this bench's grid runs on)
+
+POOLED, the five HK recordings : n = 18733 moving windows
+    MEDIAN  0.6029 m/s      <-- THE SIM SPEED
+    p90     1.0387 m/s
+    p99     1.3141 m/s
+    mean    0.6573 m/s
+POOLED, all nine recordings    : n = 27508  median 0.5692  p90 1.0151
+
+THE CHOICE, AND ITS SENSITIVITY. Two poolings were available and they differ:
+  window-weighted pooled median over the five HK recordings : 0.6029 m/s
+  median of the five per-map medians                        : 0.9408 m/s
+  per-map medians                                           : hk_office=0.428, hk_park=0.941, hk_elevator=0.884, hk_entrance=0.944, hk_allaround=0.945
+The window-weighted pooled median is used. It is the smaller of the two, so
+it is the choice LEAST favourable to the premise that the shipped 15 s
+configuration becomes a usable instrument at Go2 speed, and it treats each
+recorded second of walking equally rather than each floor equally. The spread
+is real and is a caveat, not a rounding: hk_office, a narrow desk-aisle
+office, was walked at 0.43 m/s while hk_allaround was walked at 0.94 m/s.
+One speed is used for the whole grid so that the goal-timeout truncation
+distance is the same on every map and per-map results stay comparable.
+
+WHAT IT BUYS AT THE UPSTREAM TIMEOUT: 15.0 s x 0.60 m/s = 9.00 m of walk
+before the loop pulls the robot off a goal, against 15.0 x 0.15 = 2.25 m for
+our rover. That is the whole reason this bench exists.
+
+------------------------------------------------------------------------------
+2. TURN-IN-PLACE RATE  (explore_sim.TURN_RATE)
+------------------------------------------------------------------------------
+A window where the body is turning (yaw rate >= 0.10 rad/s) while NOT
+translating (window speed < 0.05 m/s) is a turn IN PLACE, which is what
+TURN_RATE models. The yaw rate of a walking curve is a different quantity and
+is printed beside it so the difference is visible. Yaw comes from the odom
+quaternion, unwrapped, over the same 0.5 s windows.
+
+map            pivot n  median     p90     p99     max |  yaw while walking, median
+bigoffice           179   1.835   2.133   2.176   2.216 |                      0.433
+hk_office    *     1334   0.634   1.274   1.459   1.620 |                      0.398
+hk_allaround *       94   0.459   0.823   2.058   2.179 |                      0.350
+hk_elevator  *       12   0.507   1.596   1.627   1.630 |                      0.394
+hk_entrance  *       22   1.854   1.905   2.057   2.094 |                      0.455
+hk_park      *       30   1.423   3.010   3.478   3.548 |                      0.440
+go2_short             5   0.144   0.308   0.341   0.344 |                      0.334
+china_office        360   0.707   1.283   1.497   1.670 |                      0.401
+markers_go2         447   0.424   1.172   1.898   2.156 |                      0.499
+
+POOLED, the five HK recordings : n = 1492 pivot windows
+    MEDIAN  0.6287 rad/s     <-- THE SIM TURN RATE
+    p90     1.2968 rad/s
+    max     3.5484 rad/s
+    (yaw while turning at any speed, for contrast: n=14648, median 0.398, p90 0.986)
+
+The rover profile turns at 0.5 rad/s. The Go2 pivots about 26 % faster. This
+is not cosmetic: turning spends goal-timeout budget, and a 180 deg turn costs
+5.0 s at 0.63 rad/s against 6.3 s at 0.5, i.e. 1.3 s more walking inside a
+15 s timeout. The pivot sample is small on three of the five floors (12 to 30
+windows) because a walking survey rarely stops to rotate; hk_office carries
+1 334 of the 1 492 and the pooled median is effectively its median. That is a
+caveat, and the direction of the correction is not in doubt.
+
+------------------------------------------------------------------------------
+3. LIDAR SPACING  (explore_sim.SCAN_EVERY_M) - measured, and DELIBERATELY
+   NOT CHANGED. This is the check that the speed change is not a free lunch.
+------------------------------------------------------------------------------
+explore_sim couples two constants: SPEED_MPS, which fixes how far a goal
+timeout truncates a walk, and SCAN_EVERY_M = 0.25 m, one simulated lidar
+revolution per 0.25 m of travel - a value calibrated for a 0.15 m/s rover,
+about 0.6 revolutions per second. Raising the speed and leaving a per-DISTANCE
+scan rate alone would be an optimistic discovery bias IF the real robot could
+not deliver a revolution inside every 0.25 m of walk. So it was measured.
+
+METHOD: the `lidar` table's own frame timestamps; the odom trace interpolated
+at each of them inside one continuous segment; the distance between two
+consecutive frame positions; a pair counts when its implied speed is at least
+0.05 m/s, the same standstill threshold as above.
+
+map           stream Hz  frames mov pairs m/scan med     p90  0.25 m holds N scans
+bigoffice           7.67    2251      2124     0.0705  0.1236                   3.5
+hk_office    *      7.69    4235      3588     0.0551  0.0814                   4.5
+hk_allaround *      7.67    1799      1688     0.1180  0.1579                   2.1
+hk_elevator  *      7.67     817       729     0.1081  0.1501                   2.3
+hk_entrance  *      7.66     958       915     0.1241  0.1545                   2.0
+hk_park      *      7.74     884       819     0.1207  0.1632                   2.1
+go2_short           7.65     461       423     0.0800  0.1370                   3.1
+china_office        7.75     982       728     0.0488  0.0812                   5.1
+markers_go2         7.67     795       342     0.0285  0.0760                   8.8
+
+POOLED, the five HK recordings : n = 7739 moving scan pairs
+    MEDIAN  0.0789 m between revolutions
+    p90     0.1457 m
+    -> 0.25 m of walk contains 3.2 real revolutions at the
+       recorded pace, and 1.7 even at the p90 spacing.
+
+VERDICT: SCAN_EVERY_M STAYS 0.25 m, for both profiles, and the measurement is
+what licenses it. The real Go2 lidar streams at 7.7 Hz; at 0.60 m/s that is
+about 3.2 revolutions inside every 0.25 m slice, and about
+13 at 0.15 m/s. The simulated one-per-0.25 m is the COARSER of
+the two at both speeds, so information per metre is limited by geometry, not
+by the sensor, at either speed, and keeping the step in distance isolates the
+robot profile from the sensor model. The honest way to state the residual: the
+sim under-samples the real Go2 lidar by roughly 3x per metre, which makes it
+CONSERVATIVE about discovery under the Go2 profile, not optimistic.
+
+==============================================================================
+THE PROFILE THIS PRODUCES (go2_profile.py, 'go2')
+==============================================================================
+  SPEED_MPS          0.15 -> 0.60     derived, section 1
+  TURN_RATE          0.50 -> 0.63     derived, section 2
+  SCAN_EVERY_M       0.25 -> 0.25     measured and deliberately kept, section 3
+  ROBOT_WIDTH_M      0.50 -> 0.35     0.31 m body + the same 4 cm planner margin
+  BODY_HALF_WIDTH_M  0.23 -> 0.155    body / 2
+  CONTROL_MARGIN_M   0.05 -> 0.05     unchanged, a controller margin
+  LETHAL_CLEARANCE_M 0.30 -> 0.225    the same formula: width/2 + margin
+  PIVOT_CLEARANCE_M  0.39 -> 0.383    the same rule: half the body diagonal
+
+Body source: Unitree Go2 published standing size 700 x 310 x 400 mm, identical
+across Air / Pro / Edu (docs.quadruped.de 'Model Variants | Unitree GO2';
+shop.unitree.com/products/unitree-go2). Weight 15 kg. Nominal top speeds are
+2.5 to 3.7 m/s depending on variant - four to six times what the surveys were
+actually walked at, which is why the recordings and not the datasheet fix the
+simulated speed.
+
+NOT TOUCHED by the profile: every dimOS constant. The loop's 0.25 m costmap
+inflation, the 15 s goal timeout, the info-gain self-stop and the failed-goal
+radius are theirs and stay as shipped.
