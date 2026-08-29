@@ -556,10 +556,20 @@ def _explore_blueprint():
         # lidar+IMU recipe; the 12:05 rainbow smear was the 17-bump storm, not
         # this axis (hypothesis killed by the bench, as benches are for).
         LidarOdometry.blueprint(),
-        # carve_columns=False: this voxel map is the Rerun visual only (navigation runs on costmap2d). True ('latest
-        # observation wins') erased the camera's table tops on every lidar hit in the same column and the map lost its detail
-        # Cost of False: a passer-by leaves a ghost trail, until a health-based mapper replaces this one.
-        VoxelGridMapper.blueprint(voxel_size=0.08, device="CUDA:0", frame_id="world", emit_every=10, carve_columns=False),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
+        # carve_columns, the FULL story (claude-mem, three flips on 23/08 alone):
+        #   16:52  False - True was carving camera floor points, algo 'simple'
+        #          could not mark floor FREE (obs 29473; 'simple' era only)
+        #   21:14  True (metrox) - False left ghost trails of every passer-by;
+        #          nav had moved to costmap2d, this map became visual-only
+        #   22:30  False - True carves camera table tops in the visual (29658)
+        # The CLIP (545fd68, 15:53) flew BEFORE all three: factory True.
+        # Under STOCK_NAV=1 this voxel map IS the navigation map again
+        # (module docstring: global_map -> CostMapper), and False turned every
+        # living being into a permanent wall - 28/08 21:55 the cat got
+        # engraved, flight aborted. So: stock flies the clip's True (the map
+        # heals itself); our own arm - where nav runs on costmap2d and this
+        # really is the Rerun visual only - keeps the detail trade of 22:30.
+        VoxelGridMapper.blueprint(voxel_size=0.08, device="CUDA:0", frame_id="world", emit_every=10, carve_columns=stock_nav_enabled()),   # ~1 Hz: the Rerun bridge re-sends the whole map each time (load 25, viewer 2.5 GB at 3 Hz)
         # dimOS's height-cost defaults are for a quadruped (can_climb 0.15 m, pass
         # under 0.6 m): VECTOR climbs nothing (3 cm) and its camera top is ~0.85 m.
         (CostMapper.blueprint() if stock_nav_enabled() else
