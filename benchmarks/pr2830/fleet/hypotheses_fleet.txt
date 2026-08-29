@@ -1,0 +1,135 @@
+PRE-DECLARED GRID AND HYPOTHESES - multi-map validation of the B9 exploration fix
+================================================================================
+Written 2026-08-29 before any arm comparison was launched. Nothing below is
+widened or tuned afterwards.
+
+ONE THING RAN BEFORE THIS FILE AND IS NAMED HERE SO IT IS NOT HIDDEN: a timing
+pilot, stock arm only, config `shipped` only, 4 m lidar, 6 starts on each of the
+four new maps, with a 420 s wall cap. It measures how expensive a run is on each
+new floor so the grid below can be sized inside the compute budget. It contains
+no comparison between arms and no B9 arm, so it can neither confirm nor deny
+anything in this file.
+
+--------------------------------------------------------------------------------
+0. THE QUESTION
+--------------------------------------------------------------------------------
+The B9 fix (finish-the-branch, geodesic radius R = 9 m, harness-side wrapper in
+fix_hysteresis.py) beat stock and PR #2830 on the bigoffice pair at 4 m and did
+not hurt at 12 m. Caveat 5 of rapport_fix.md: R = 9 m was one of two declared
+values, won by 2 swings on a 12-run sweep, and there is no evidence it
+generalises. Caveat 3: bigoffice is one room plus one corridor, not the
+multi-hallway floor the dimOS maintainer described. This fleet answers both on
+other floors, or says plainly that it cannot.
+
+--------------------------------------------------------------------------------
+1. WORTHINESS GATE (per map, before any bench)
+--------------------------------------------------------------------------------
+gate_fleet.py, at 4 m, on the body-passable floor of the 0.46 m body:
+
+  a. DEGENERATE, the rule of gate_midstart.py, unchanged: a start whose first
+     lidar revolution already reveals >= 50 % of everything that start can ever
+     see is dropped. A map whose every start is degenerate is rejected.
+  b. WORTHINESS: the median over the 6 starts of the share of the ceiling that
+     appears only after a walk longer than one lidar revolution must be
+     >= 20 %. The number is reported for every map, passed or not. 20 % is set
+     against the two references already in this workspace: the shipped 12 m
+     bench scored 13.8 % on bigoffice and called it thin, and scored 0.0 to
+     2.4 % on the four flat maps it then refused to draw conclusions from.
+  c. A map with no body-passable floor at all is rejected.
+
+Rejects are listed with their numbers, not silently dropped.
+
+--------------------------------------------------------------------------------
+2. STRUCTURE MEASURE AND CLASS (reported for every map, pass or reject)
+--------------------------------------------------------------------------------
+  - ways out of each of the 6 chosen starts: midstarts.open_runs, 32 rays, a
+    direction open when the 0.46 m body can drive 1.5 m along it, contiguous
+    angular runs counted. Dead end 1, corridor 2, T 3, crossing 4. A start with
+    >= 3 is a junction start. NOTE, because it changes how the number reads: a
+    cell in fully open space, every ray open, also returns 1.
+  - branches: connected pieces of the body-passable floor left once a geodesic
+    ball of radius R around the graph centre is cut out, keeping a piece only if
+    it is >= 2 m2 and reaches >= 3 m further out. Swept over R in {3, 5, 8, 12}
+    m and reported in full; the class rule uses the maximum over the sweep. The
+    sweep is used rather than one radius because the fleet's floors run from 8 m
+    to 70 m across and one ball cannot be "the middle" of both.
+  - floor width: 2 x the clearance of each passable cell, median, p90, and the
+    share above 3 m.
+
+CLASS:
+    multi-branch    >= 3 junction starts AND max branches over the sweep >= 3
+    single-room     max branches over the sweep <= 1 AND <= 1 junction start
+    room+corridor   otherwise
+
+At least one multi-branch map is the prize. If none of the accessible datasets
+yields one, the report says so plainly; that limitation matters more than any
+count in the tables.
+
+--------------------------------------------------------------------------------
+3. THE GRID
+--------------------------------------------------------------------------------
+MAPS      every map that passed the gate, PLUS bigoffice and bigoffice_hc as
+          anchors. The anchors' 4 m four-arm numbers are re-used from
+          ../sim_2830_fix/ (results_trace_4m.json and results_fix_4m.json); the
+          box was certified bit-identical to the local rig on 48 bigoffice runs
+          before this job, and re-running them would buy nothing.
+STARTS    6 per map by the midstarts.py rule: centre + mid1..mid5.
+ARMS      stock, stock+B9, pr2830, pr2830+B9.
+          ON THE NEW MAPS ONLY, the radius question: stock+B6 and stock+B12,
+          giving R in {6, 9, 12}.
+LIDAR     4 m everywhere. Plus 12 m on the new maps for the regression check,
+          arms stock and stock+B9, and pr2830 / pr2830+B9 if the budget allows.
+METRICS   everything the fix bench reports, with each map's own swing threshold
+          = half the bounding-box diagonal of its body-passable floor.
+          BOTH swing counts are reported:
+            raw          consecutive issued goals further apart than the
+                         threshold, the number the mid-start report quoted;
+            real         the same, minus class-N events: the swings where the
+                         goal sequence jumped and the ROBOT did not, because the
+                         previous goal timed out or was refused and the robot
+                         was never on it. The filter is diagnose_swings.py's
+                         rule: a swing is class N when the newly chosen goal
+                         lies within R_NEAR_M = 6.0 m of the robot at the moment
+                         it was issued. diagnose_swings.py measures that 6 m as
+                         a geodesic route length, which needs the per-decision
+                         trace; the fleet runs without the trace and measures it
+                         straight-line, from the robot pose the bench already
+                         records with every goal (`from_x`, `from_y`). The two
+                         are compared on the 48 traced bigoffice runs, where
+                         both exist, and the disagreement is reported before any
+                         fleet number is quoted.
+          PRIMARY metric = real crossings and real round trips. The raw count is
+          reported alongside for continuity with the mid-start report.
+          A round trip = a swing followed within the next three jumps by another
+          swing whose direction opposes it, counted on the same series as the
+          swing count it belongs to.
+EXECUTION --jobs <= 190, --maps always explicit, a wall cap on every bench
+          invocation and a per-run cap inside the harness. A capped run is
+          reported with end_reason wall_cap and counted, never dropped.
+
+--------------------------------------------------------------------------------
+4. HYPOTHESES, verbatim
+--------------------------------------------------------------------------------
+H1: on every gated map at 4 m, stock+B9 has fewer real crossings and fewer real
+round trips than stock, with median total path not worse than +5 % relative and
+median final coverage not worse than -5 % relative.
+
+H2: same statement for pr2830+B9 vs pr2830.
+
+H3 (radius): R = 9 is within 2 real crossings of the best R on every new map
+(i.e. no map demands a very different radius).
+
+H4 (regression): at 12 m on the new maps, stock+B9 is not worse than stock
+beyond the same budgets.
+
+Each hypothesis is judged per map and overall; a failure on any map is reported
+as a failure on that map, not averaged away.
+
+--------------------------------------------------------------------------------
+5. WHAT IS NOT ALLOWED
+--------------------------------------------------------------------------------
+- No radius outside {6, 9, 12}. No margin k sweep. Candidate P stays unrun.
+- No map added to the grid after its numbers are seen.
+- No threshold in section 1, 2 or 4 changed after the fact.
+- Headline counts re-derived from the raw goal coordinates, independently of the
+  summarise() fields that wrote them, and the disagreement stated.

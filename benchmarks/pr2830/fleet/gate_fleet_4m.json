@@ -1,0 +1,5033 @@
+{
+ "lidar_range_m": 4.0,
+ "maps": {
+  "hk_office": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 1,
+     "5": 1,
+     "8": 3,
+     "12": 2
+    },
+    "max_branches_over_sweep": 3,
+    "ways_out_of_starts": [
+     0,
+     3,
+     3,
+     3,
+     2,
+     2
+    ],
+    "n_junction_starts": 3,
+    "graph_centre_xy": [
+     0.55,
+     12.4
+    ],
+    "graph_centre_cell": [
+     405,
+     260
+    ],
+    "ways_out_of_centre": 2,
+    "core_radius_m": 5.0,
+    "n_branches": 1,
+    "n_pieces_before_filter": 2,
+    "branches": [
+     {
+      "label": 1,
+      "area_m2": 51.5,
+      "reach_m": 12.1,
+      "far_xy": [
+       -4.9,
+       -1.95
+      ]
+     }
+    ],
+    "passable_m2": 69.4,
+    "passable_bbox_m": [
+     10.5,
+     27.7
+    ],
+    "bbox_diagonal_m": 29.62,
+    "floor_width_median_m": 0.86,
+    "floor_width_p90_m": 1.49,
+    "share_wider_than_3m_pct": 0.0,
+    "ecc_min_m": 16.6,
+    "ecc_max_m": 33.7,
+    "class": "multi-branch"
+   },
+   "selection": {
+    "ecc_min_m": 16.603910524340105,
+    "ecc_max_m": 33.74568901432429,
+    "ecc_cut_m": 27.010155108391526,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 11876,
+    "n_lattice": 121,
+    "n_survivors": 101,
+    "n_survivors_with_3_ways_out": 31,
+    "min_pairwise_separation_m": 4.632763753959401,
+    "body_bbox_diagonal_m": 29.623301639081355,
+    "starts": {
+     "centre": {
+      "cell": [
+       403,
+       196
+      ],
+      "xy": [
+       -2.6500003814697255,
+       12.3
+      ],
+      "clearance_m": 0.25,
+      "open_directions": 0,
+      "eccentricity_m": 19.63736290225573
+     },
+     "mid1": {
+      "cell": [
+       570,
+       270
+      ],
+      "xy": [
+       1.0499996185302738,
+       20.650000000000002
+      ],
+      "clearance_m": 0.3640054944640259,
+      "open_directions": 3,
+      "eccentricity_m": 25.182337649086325
+     },
+     "mid2": {
+      "cell": [
+       240,
+       190
+      ],
+      "xy": [
+       -2.950000381469726,
+       4.15
+      ],
+      "clearance_m": 0.5024937810560445,
+      "open_directions": 3,
+      "eccentricity_m": 26.755129855222112
+     },
+     "mid3": {
+      "cell": [
+       350,
+       290
+      ],
+      "xy": [
+       2.049999618530274,
+       9.650000000000002
+      ],
+      "clearance_m": 0.7433034373659253,
+      "open_directions": 3,
+      "eccentricity_m": 19.975230867899768
+     },
+     "mid4": {
+      "cell": [
+       470,
+       260
+      ],
+      "xy": [
+       0.5499996185302738,
+       15.650000000000002
+      ],
+      "clearance_m": 0.608276253029822,
+      "open_directions": 2,
+      "eccentricity_m": 19.97523086789977
+     },
+     "mid5": {
+      "cell": [
+       490,
+       150
+      ],
+      "xy": [
+       -4.950000381469726,
+       16.650000000000002
+      ],
+      "clearance_m": 0.55,
+      "open_directions": 2,
+      "eccentricity_m": 20.65096679918784
+     }
+    }
+   },
+   "bbox_diagonal_m": 29.623301639081355,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      -2.6500003814697255,
+      12.3
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 150.9225,
+     "one_revolution_m2": 4.357500000000001,
+     "one_revolution_pct_of_ceiling": 2.8872434527654924,
+     "geodesic_max_m": 20.12513999999996,
+     "beyond_one_range_m2": 126.26500000000001,
+     "beyond_one_range_pct": 83.6621444781262,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 24.657500000000002,
+       "cum_m2": 24.657500000000002
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 22.51,
+       "cum_m2": 47.167500000000004
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 51.08,
+       "cum_m2": 98.2475
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 43.5025,
+       "cum_m2": 141.75
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 9.172500000000014,
+       "cum_m2": 150.9225
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 150.9225
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 150.9225
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 150.9225
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.25,
+     "open_directions": 0,
+     "eccentricity_m": 19.63736290225573
+    },
+    "mid1": {
+     "start_xy": [
+      1.0499996185302738,
+      20.650000000000002
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 150.92000000000002,
+     "one_revolution_m2": 10.4075,
+     "one_revolution_pct_of_ceiling": 6.896037635833554,
+     "geodesic_max_m": 25.723069999999968,
+     "beyond_one_range_m2": 114.59,
+     "beyond_one_range_pct": 75.92764378478664,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 36.330000000000005,
+       "cum_m2": 36.330000000000005
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 28.550000000000004,
+       "cum_m2": 64.88000000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 27.345,
+       "cum_m2": 92.22500000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 20.617499999999993,
+       "cum_m2": 112.8425
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 19.152500000000003,
+       "cum_m2": 131.995
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 17.522500000000008,
+       "cum_m2": 149.5175
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 1.4025000000000034,
+       "cum_m2": 150.92000000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 150.92000000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.3640054944640259,
+     "open_directions": 3,
+     "eccentricity_m": 25.182337649086325
+    },
+    "mid2": {
+     "start_xy": [
+      -2.950000381469726,
+      4.15
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 150.9125,
+     "one_revolution_m2": 11.852500000000001,
+     "one_revolution_pct_of_ceiling": 7.853888842872526,
+     "geodesic_max_m": 27.242889999999957,
+     "beyond_one_range_m2": 98.91749999999999,
+     "beyond_one_range_pct": 65.54626025014494,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 51.995000000000005,
+       "cum_m2": 51.995000000000005
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 31.504999999999995,
+       "cum_m2": 83.5
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 25.230000000000004,
+       "cum_m2": 108.73
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 14.53500000000001,
+       "cum_m2": 123.26500000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 8.884999999999991,
+       "cum_m2": 132.15
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 16.82250000000002,
+       "cum_m2": 148.97250000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 1.9399999999999693,
+       "cum_m2": 150.9125
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 150.9125
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5024937810560445,
+     "open_directions": 3,
+     "eccentricity_m": 26.755129855222112
+    },
+    "mid3": {
+     "start_xy": [
+      2.049999618530274,
+      9.650000000000002
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 150.91500000000002,
+     "one_revolution_m2": 15.275,
+     "one_revolution_pct_of_ceiling": 10.121591624424344,
+     "geodesic_max_m": 20.46300999999997,
+     "beyond_one_range_m2": 109.30000000000001,
+     "beyond_one_range_pct": 72.42487492959613,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 41.61500000000001,
+       "cum_m2": 41.61500000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 29.527500000000003,
+       "cum_m2": 71.14250000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 45.187499999999986,
+       "cum_m2": 116.33
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 28.34750000000001,
+       "cum_m2": 144.6775
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 6.122500000000002,
+       "cum_m2": 150.8
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.1150000000000091,
+       "cum_m2": 150.91500000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 150.91500000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 150.91500000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.7433034373659253,
+     "open_directions": 3,
+     "eccentricity_m": 19.975230867899768
+    },
+    "mid4": {
+     "start_xy": [
+      0.5499996185302738,
+      15.650000000000002
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 150.91500000000002,
+     "one_revolution_m2": 13.3125,
+     "one_revolution_pct_of_ceiling": 8.821190736507305,
+     "geodesic_max_m": 20.515969999999967,
+     "beyond_one_range_m2": 113.44750000000002,
+     "beyond_one_range_pct": 75.17311069144883,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 37.4675,
+       "cum_m2": 37.4675
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 41.14250000000001,
+       "cum_m2": 78.61000000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 34.41499999999999,
+       "cum_m2": 113.025
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 27.105000000000018,
+       "cum_m2": 140.13000000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 10.685000000000002,
+       "cum_m2": 150.81500000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.09999999999999432,
+       "cum_m2": 150.91500000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 150.91500000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 150.91500000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.608276253029822,
+     "open_directions": 2,
+     "eccentricity_m": 19.97523086789977
+    },
+    "mid5": {
+     "start_xy": [
+      -4.950000381469726,
+      16.650000000000002
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 150.82500000000002,
+     "one_revolution_m2": 9.0775,
+     "one_revolution_pct_of_ceiling": 6.018564561577987,
+     "geodesic_max_m": 21.191709999999972,
+     "beyond_one_range_m2": 124.51750000000001,
+     "beyond_one_range_pct": 82.557599867396,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 26.3075,
+       "cum_m2": 26.3075
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 28.352500000000003,
+       "cum_m2": 54.660000000000004
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 43.52,
+       "cum_m2": 98.18
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 35.7175,
+       "cum_m2": 133.8975
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 16.275000000000006,
+       "cum_m2": 150.1725
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.6525000000000034,
+       "cum_m2": 150.82500000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 150.82500000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 150.82500000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.55,
+     "open_directions": 2,
+     "eccentricity_m": 20.65096679918784
+    }
+   },
+   "grid_shape": [
+    728,
+    655
+   ]
+  },
+  "hk_allaround": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 2,
+     "5": 2,
+     "8": 2,
+     "12": 2
+    },
+    "max_branches_over_sweep": 2,
+    "ways_out_of_starts": [
+     0,
+     3,
+     4,
+     3,
+     5,
+     2
+    ],
+    "n_junction_starts": 4,
+    "graph_centre_xy": [
+     23.85,
+     16.1
+    ],
+    "graph_centre_cell": [
+     662,
+     1093
+    ],
+    "ways_out_of_centre": 1,
+    "core_radius_m": 5.0,
+    "n_branches": 2,
+    "n_pieces_before_filter": 5,
+    "branches": [
+     {
+      "label": 2,
+      "area_m2": 290.0,
+      "reach_m": 68.7,
+      "far_xy": [
+       -26.0,
+       3.2
+      ]
+     },
+     {
+      "label": 1,
+      "area_m2": 229.2,
+      "reach_m": 68.3,
+      "far_xy": [
+       -21.15,
+       -7.6
+      ]
+     }
+    ],
+    "passable_m2": 544.0,
+    "passable_bbox_m": [
+     53.6,
+     45.5
+    ],
+    "bbox_diagonal_m": 70.27,
+    "floor_width_median_m": 1.48,
+    "floor_width_p90_m": 3.2,
+    "share_wider_than_3m_pct": 12.6,
+    "ecc_min_m": 72.8,
+    "ecc_max_m": 146.5,
+    "class": "room+corridor"
+   },
+   "selection": {
+    "ecc_min_m": 72.79716087690042,
+    "ecc_max_m": 146.47579720574979,
+    "ecc_cut_m": 112.98184484059048,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 115018,
+    "n_lattice": 1146,
+    "n_survivors": 464,
+    "n_survivors_with_3_ways_out": 157,
+    "min_pairwise_separation_m": 13.656500283747667,
+    "body_bbox_diagonal_m": 70.26985484544564,
+    "starts": {
+     "centre": {
+      "cell": [
+       623,
+       701
+      ],
+      "xy": [
+       4.24999923706055,
+       14.150000381469727
+      ],
+      "clearance_m": 0.25,
+      "open_directions": 0,
+      "eccentricity_m": 108.7248304065641
+     },
+     "mid1": {
+      "cell": [
+       180,
+       1100
+      ],
+      "xy": [
+       24.199999237060553,
+       -7.999999618530273
+      ],
+      "clearance_m": 1.5008331019803636,
+      "open_directions": 3,
+      "eccentricity_m": 96.8750829382584
+     },
+     "mid2": {
+      "cell": [
+       760,
+       1080
+      ],
+      "xy": [
+       23.199999237060553,
+       21.000000381469725
+      ],
+      "clearance_m": 1.2349089035228469,
+      "open_directions": 4,
+      "eccentricity_m": 78.38061325481605
+     },
+     "mid3": {
+      "cell": [
+       890,
+       440
+      ],
+      "xy": [
+       -8.800000762939451,
+       27.500000381469732
+      ],
+      "clearance_m": 1.6,
+      "open_directions": 3,
+      "eccentricity_m": 112.52569260369897
+     },
+     "mid4": {
+      "cell": [
+       870,
+       830
+      ],
+      "xy": [
+       10.699999237060553,
+       26.500000381469732
+      ],
+      "clearance_m": 0.912414379544733,
+      "open_directions": 5,
+      "eccentricity_m": 92.97213921310612
+     },
+     "mid5": {
+      "cell": [
+       460,
+       1100
+      ],
+      "xy": [
+       24.199999237060553,
+       6.000000381469729
+      ],
+      "clearance_m": 1.6552945357246849,
+      "open_directions": 2,
+      "eccentricity_m": 82.8750829382584
+     }
+    }
+   },
+   "bbox_diagonal_m": 70.26985484544564,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      4.24999923706055,
+      14.150000381469727
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 859.8375000000001,
+     "one_revolution_m2": 15.315000000000001,
+     "one_revolution_pct_of_ceiling": 1.7811505080901915,
+     "geodesic_max_m": 109.24021000000016,
+     "beyond_one_range_m2": 803.0425000000001,
+     "beyond_one_range_pct": 93.39468213470569,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 56.79500000000001,
+       "cum_m2": 56.79500000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 50.82750000000001,
+       "cum_m2": 107.62250000000002
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 64.90750000000001,
+       "cum_m2": 172.53000000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 43.44499999999999,
+       "cum_m2": 215.97500000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 36.55500000000001,
+       "cum_m2": 252.53000000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 51.56,
+       "cum_m2": 304.09000000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 47.547500000000014,
+       "cum_m2": 351.63750000000005
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 508.20000000000005,
+       "cum_m2": 859.8375000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.25,
+     "open_directions": 0,
+     "eccentricity_m": 108.7248304065641
+    },
+    "mid1": {
+     "start_xy": [
+      24.199999237060553,
+      -7.999999618530273
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 859.8375000000001,
+     "one_revolution_m2": 27.302500000000006,
+     "one_revolution_pct_of_ceiling": 3.175309288092227,
+     "geodesic_max_m": 97.75766999999975,
+     "beyond_one_range_m2": 794.1275,
+     "beyond_one_range_pct": 92.35785831625161,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 65.71000000000001,
+       "cum_m2": 65.71000000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 36.89750000000001,
+       "cum_m2": 102.60750000000002
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 39.875,
+       "cum_m2": 142.48250000000002
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 41.702500000000015,
+       "cum_m2": 184.18500000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 38.31,
+       "cum_m2": 222.49500000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 40.819999999999965,
+       "cum_m2": 263.315
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 32.82249999999999,
+       "cum_m2": 296.1375
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 563.7,
+       "cum_m2": 859.8375000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.5008331019803636,
+     "open_directions": 3,
+     "eccentricity_m": 96.8750829382584
+    },
+    "mid2": {
+     "start_xy": [
+      23.199999237060553,
+      21.000000381469725
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 859.815,
+     "one_revolution_m2": 26.805000000000003,
+     "one_revolution_pct_of_ceiling": 3.1175310968057084,
+     "geodesic_max_m": 78.89613999999983,
+     "beyond_one_range_m2": 793.9525000000001,
+     "beyond_one_range_pct": 92.33992195995651,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 65.8625,
+       "cum_m2": 65.8625
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 32.390000000000015,
+       "cum_m2": 98.25250000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 29.522499999999994,
+       "cum_m2": 127.775
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 38.66750000000002,
+       "cum_m2": 166.44250000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 43.27999999999997,
+       "cum_m2": 209.7225
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 73.60000000000005,
+       "cum_m2": 283.32250000000005
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 91.17749999999995,
+       "cum_m2": 374.5
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 485.31500000000005,
+       "cum_m2": 859.815
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.2349089035228469,
+     "open_directions": 4,
+     "eccentricity_m": 78.38061325481605
+    },
+    "mid3": {
+     "start_xy": [
+      -8.800000762939451,
+      27.500000381469732
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 859.8375000000001,
+     "one_revolution_m2": 31.792500000000004,
+     "one_revolution_pct_of_ceiling": 3.6975009812900694,
+     "geodesic_max_m": 113.0411000000006,
+     "beyond_one_range_m2": 769.9750000000001,
+     "beyond_one_range_pct": 89.54889732071467,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 89.86250000000001,
+       "cum_m2": 89.86250000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 63.99250000000001,
+       "cum_m2": 153.85500000000002
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 67.92999999999998,
+       "cum_m2": 221.785
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 79.55250000000004,
+       "cum_m2": 301.33750000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 63.652499999999975,
+       "cum_m2": 364.99
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 37.637500000000045,
+       "cum_m2": 402.62750000000005
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 41.34749999999997,
+       "cum_m2": 443.975
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 415.86250000000007,
+       "cum_m2": 859.8375000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.6,
+     "open_directions": 3,
+     "eccentricity_m": 112.52569260369897
+    },
+    "mid4": {
+     "start_xy": [
+      10.699999237060553,
+      26.500000381469732
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 859.8325000000001,
+     "one_revolution_m2": 19.260000000000005,
+     "one_revolution_pct_of_ceiling": 2.2399711571730543,
+     "geodesic_max_m": 93.48754999999974,
+     "beyond_one_range_m2": 798.6300000000001,
+     "beyond_one_range_pct": 92.88204388645464,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 61.2025,
+       "cum_m2": 61.2025
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 62.45500000000001,
+       "cum_m2": 123.65750000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 88.49500000000002,
+       "cum_m2": 212.15250000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 73.80000000000001,
+       "cum_m2": 285.95250000000004
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 36.49000000000001,
+       "cum_m2": 322.44250000000005
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 47.8775,
+       "cum_m2": 370.32000000000005
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 46.704999999999984,
+       "cum_m2": 417.02500000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 442.80750000000006,
+       "cum_m2": 859.8325000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.912414379544733,
+     "open_directions": 5,
+     "eccentricity_m": 92.97213921310612
+    },
+    "mid5": {
+     "start_xy": [
+      24.199999237060553,
+      6.000000381469729
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 859.8375000000001,
+     "one_revolution_m2": 31.090000000000003,
+     "one_revolution_pct_of_ceiling": 3.615799496997979,
+     "geodesic_max_m": 83.75766999999948,
+     "beyond_one_range_m2": 793.3600000000001,
+     "beyond_one_range_pct": 92.26859726401791,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 66.4775,
+       "cum_m2": 66.4775
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 32.6575,
+       "cum_m2": 99.135
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 33.65000000000002,
+       "cum_m2": 132.78500000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 37.47999999999999,
+       "cum_m2": 170.26500000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 42.06999999999999,
+       "cum_m2": 212.335
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 32.515000000000015,
+       "cum_m2": 244.85000000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 40.0,
+       "cum_m2": 284.85
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 574.9875000000001,
+       "cum_m2": 859.8375000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.6552945357246849,
+     "open_directions": 2,
+     "eccentricity_m": 82.8750829382584
+    }
+   },
+   "grid_shape": [
+    960,
+    1172
+   ]
+  },
+  "hk_elevator": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 2,
+     "5": 2,
+     "8": 2,
+     "12": 2
+    },
+    "max_branches_over_sweep": 2,
+    "ways_out_of_starts": [
+     2,
+     3,
+     2,
+     3,
+     3,
+     2
+    ],
+    "n_junction_starts": 3,
+    "graph_centre_xy": [
+     -1.55,
+     22.35
+    ],
+    "graph_centre_cell": [
+     537,
+     285
+    ],
+    "ways_out_of_centre": 1,
+    "core_radius_m": 5.0,
+    "n_branches": 2,
+    "n_pieces_before_filter": 3,
+    "branches": [
+     {
+      "label": 1,
+      "area_m2": 58.9,
+      "reach_m": 12.0,
+      "far_xy": [
+       12.4,
+       17.4
+      ]
+     },
+     {
+      "label": 3,
+      "area_m2": 41.1,
+      "reach_m": 12.0,
+      "far_xy": [
+       -14.45,
+       17.7
+      ]
+     }
+    ],
+    "passable_m2": 140.0,
+    "passable_bbox_m": [
+     28.1,
+     10.6
+    ],
+    "bbox_diagonal_m": 30.05,
+    "floor_width_median_m": 1.5,
+    "floor_width_p90_m": 3.1,
+    "share_wider_than_3m_pct": 11.4,
+    "ecc_min_m": 15.9,
+    "ecc_max_m": 33.0,
+    "class": "room+corridor"
+   },
+   "selection": {
+    "ecc_min_m": 15.931727983645315,
+    "ecc_max_m": 32.95929291125639,
+    "ecc_cut_m": 25.398683245815395,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 29699,
+    "n_lattice": 293,
+    "n_survivors": 115,
+    "n_survivors_with_3_ways_out": 41,
+    "min_pairwise_separation_m": 4.193149174546499,
+    "body_bbox_diagonal_m": 30.05049916390741,
+    "starts": {
+     "centre": {
+      "cell": [
+       503,
+       298
+      ],
+      "xy": [
+       -0.899999809265136,
+       20.64999990463257
+      ],
+      "clearance_m": 0.5099019513592785,
+      "open_directions": 2,
+      "eccentricity_m": 17.285891039679594
+     },
+     "mid1": {
+      "cell": [
+       570,
+       110
+      ],
+      "xy": [
+       -10.299999809265136,
+       23.99999990463257
+      ],
+      "clearance_m": 1.35,
+      "open_directions": 3,
+      "eccentricity_m": 25.363961030678947
+     },
+     "mid2": {
+      "cell": [
+       450,
+       410
+      ],
+      "xy": [
+       4.700000190734865,
+       17.99999990463257
+      ],
+      "clearance_m": 1.4326548781894404,
+      "open_directions": 2,
+      "eccentricity_m": 23.983556979968327
+     },
+     "mid3": {
+      "cell": [
+       500,
+       200
+      ],
+      "xy": [
+       -5.799999809265136,
+       20.49999990463257
+      ],
+      "clearance_m": 1.4534441853748634,
+      "open_directions": 3,
+      "eccentricity_m": 19.455634918610404
+     },
+     "mid4": {
+      "cell": [
+       420,
+       310
+      ],
+      "xy": [
+       -0.29999980926513636,
+       16.49999990463257
+      ],
+      "clearance_m": 0.5099019513592785,
+      "open_directions": 3,
+      "eccentricity_m": 21.608683245815392
+     },
+     "mid5": {
+      "cell": [
+       580,
+       230
+      ],
+      "xy": [
+       -4.299999809265136,
+       24.49999990463257
+      ],
+      "clearance_m": 0.47434164902525694,
+      "open_directions": 2,
+      "eccentricity_m": 19.600357133746844
+     }
+    }
+   },
+   "bbox_diagonal_m": 30.05049916390741,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      -0.899999809265136,
+      20.64999990463257
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 207.29500000000004,
+     "one_revolution_m2": 31.320000000000007,
+     "one_revolution_pct_of_ceiling": 15.108902771412723,
+     "geodesic_max_m": 18.31359999999995,
+     "beyond_one_range_m2": 103.71500000000005,
+     "beyond_one_range_pct": 50.032562290455644,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 103.58,
+       "cum_m2": 103.58
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 45.92250000000003,
+       "cum_m2": 149.50250000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 45.20750000000001,
+       "cum_m2": 194.71000000000004
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 12.534999999999997,
+       "cum_m2": 207.24500000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.05000000000001137,
+       "cum_m2": 207.29500000000004
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 207.29500000000004
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 207.29500000000004
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 207.29500000000004
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5099019513592785,
+     "open_directions": 2,
+     "eccentricity_m": 17.285891039679594
+    },
+    "mid1": {
+     "start_xy": [
+      -10.299999809265136,
+      23.99999990463257
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 207.28000000000003,
+     "one_revolution_m2": 28.3125,
+     "one_revolution_pct_of_ceiling": 13.659060208413738,
+     "geodesic_max_m": 26.46093999999998,
+     "beyond_one_range_m2": 127.26500000000001,
+     "beyond_one_range_pct": 61.397626399073715,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 80.01500000000001,
+       "cum_m2": 80.01500000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 33.00750000000001,
+       "cum_m2": 113.02250000000002
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 26.437499999999986,
+       "cum_m2": 139.46
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 30.345000000000027,
+       "cum_m2": 169.80500000000004
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 26.35499999999999,
+       "cum_m2": 196.16000000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 10.277499999999975,
+       "cum_m2": 206.4375
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.8425000000000296,
+       "cum_m2": 207.28000000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 207.28000000000003
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.35,
+     "open_directions": 3,
+     "eccentricity_m": 25.363961030678947
+    },
+    "mid2": {
+     "start_xy": [
+      4.700000190734865,
+      17.99999990463257
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 207.29250000000002,
+     "one_revolution_m2": 32.815000000000005,
+     "one_revolution_pct_of_ceiling": 15.830288119444747,
+     "geodesic_max_m": 25.01122999999994,
+     "beyond_one_range_m2": 116.46750000000002,
+     "beyond_one_range_pct": 56.18510076341402,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 90.825,
+       "cum_m2": 90.825
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 39.53750000000001,
+       "cum_m2": 130.3625
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 27.944999999999993,
+       "cum_m2": 158.3075
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 19.25,
+       "cum_m2": 177.5575
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 25.917500000000018,
+       "cum_m2": 203.47500000000002
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 3.8125,
+       "cum_m2": 207.28750000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0049999999999954525,
+       "cum_m2": 207.29250000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 207.29250000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.4326548781894404,
+     "open_directions": 2,
+     "eccentricity_m": 23.983556979968327
+    },
+    "mid3": {
+     "start_xy": [
+      -5.799999809265136,
+      20.49999990463257
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 207.29250000000002,
+     "one_revolution_m2": 29.552500000000006,
+     "one_revolution_pct_of_ceiling": 14.256425099798594,
+     "geodesic_max_m": 20.55265999999999,
+     "beyond_one_range_m2": 122.0275,
+     "beyond_one_range_pct": 58.86730103597573,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 85.26500000000001,
+       "cum_m2": 85.26500000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 55.545000000000016,
+       "cum_m2": 140.81000000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 40.55499999999998,
+       "cum_m2": 181.365
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 22.372500000000002,
+       "cum_m2": 203.7375
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 3.432500000000033,
+       "cum_m2": 207.17000000000004
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.12249999999997385,
+       "cum_m2": 207.29250000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 207.29250000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 207.29250000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.4534441853748634,
+     "open_directions": 3,
+     "eccentricity_m": 19.455634918610404
+    },
+    "mid4": {
+     "start_xy": [
+      -0.29999980926513636,
+      16.49999990463257
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 207.29250000000002,
+     "one_revolution_m2": 20.03,
+     "one_revolution_pct_of_ceiling": 9.662674722915686,
+     "geodesic_max_m": 22.636379999999946,
+     "beyond_one_range_m2": 136.945,
+     "beyond_one_range_pct": 66.06365401546124,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 70.34750000000001,
+       "cum_m2": 70.34750000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 60.165000000000006,
+       "cum_m2": 130.51250000000002
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 34.29499999999999,
+       "cum_m2": 164.8075
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 29.392500000000013,
+       "cum_m2": 194.20000000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 13.0,
+       "cum_m2": 207.20000000000002
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.09250000000000114,
+       "cum_m2": 207.29250000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 207.29250000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 207.29250000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5099019513592785,
+     "open_directions": 3,
+     "eccentricity_m": 21.608683245815392
+    },
+    "mid5": {
+     "start_xy": [
+      -4.299999809265136,
+      24.49999990463257
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 207.29500000000004,
+     "one_revolution_m2": 26.205000000000002,
+     "one_revolution_pct_of_ceiling": 12.641404761330469,
+     "geodesic_max_m": 20.697329999999972,
+     "beyond_one_range_m2": 124.02500000000003,
+     "beyond_one_range_pct": 59.83019368532768,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 83.27000000000001,
+       "cum_m2": 83.27000000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 60.910000000000025,
+       "cum_m2": 144.18000000000004
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 38.08499999999998,
+       "cum_m2": 182.26500000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 21.835000000000008,
+       "cum_m2": 204.10000000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 3.0,
+       "cum_m2": 207.10000000000002
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.1950000000000216,
+       "cum_m2": 207.29500000000004
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 207.29500000000004
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 207.29500000000004
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.47434164902525694,
+     "open_directions": 2,
+     "eccentricity_m": 19.600357133746844
+    }
+   },
+   "grid_shape": [
+    646,
+    815
+   ]
+  },
+  "china_office": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 0,
+     "5": 0,
+     "8": 0,
+     "12": 0
+    },
+    "max_branches_over_sweep": 0,
+    "ways_out_of_starts": [
+     2,
+     3,
+     2,
+     2,
+     4,
+     2
+    ],
+    "n_junction_starts": 2,
+    "graph_centre_xy": [
+     4.4,
+     5.0
+    ],
+    "graph_centre_cell": [
+     201,
+     154
+    ],
+    "ways_out_of_centre": 2,
+    "core_radius_m": 5.0,
+    "n_branches": 0,
+    "n_pieces_before_filter": 0,
+    "branches": [],
+    "passable_m2": 9.6,
+    "passable_bbox_m": [
+     4.8,
+     6.2
+    ],
+    "bbox_diagonal_m": 7.81,
+    "floor_width_median_m": 0.91,
+    "floor_width_p90_m": 1.5,
+    "share_wider_than_3m_pct": 0.0,
+    "ecc_min_m": 3.1,
+    "ecc_max_m": 6.8,
+    "class": "room+corridor"
+   },
+   "selection": {
+    "ecc_min_m": 3.09350288425444,
+    "ecc_max_m": 6.842031021678295,
+    "ecc_cut_m": 5.1813708498984745,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 1919,
+    "n_lattice": 20,
+    "n_survivors": 19,
+    "n_survivors_with_3_ways_out": 7,
+    "min_pairwise_separation_m": 1.1180339887498945,
+    "body_bbox_diagonal_m": 7.8104097203667875,
+    "starts": {
+     "centre": {
+      "cell": [
+       202,
+       154
+      ],
+      "xy": [
+       4.399999952316285,
+       5.050000190734863
+      ],
+      "clearance_m": 0.2692582403567252,
+      "open_directions": 2,
+      "eccentricity_m": 3.14350288425444
+     },
+     "mid1": {
+      "cell": [
+       240,
+       150
+      ],
+      "xy": [
+       4.1999999523162845,
+       6.950000190734864
+      ],
+      "clearance_m": 0.5,
+      "open_directions": 3,
+      "eccentricity_m": 5.0435028842544405
+     },
+     "mid2": {
+      "cell": [
+       170,
+       130
+      ],
+      "xy": [
+       3.1999999523162845,
+       3.4500001907348636
+      ],
+      "clearance_m": 0.5408326913195984,
+      "open_directions": 2,
+      "eccentricity_m": 5.121320343559638
+     },
+     "mid3": {
+      "cell": [
+       230,
+       180
+      ],
+      "xy": [
+       5.6999999523162845,
+       6.450000190734864
+      ],
+      "clearance_m": 0.38078865529319544,
+      "open_directions": 2,
+      "eccentricity_m": 5.169848480983497
+     },
+     "mid4": {
+      "cell": [
+       180,
+       150
+      ],
+      "xy": [
+       4.1999999523162845,
+       3.9500001907348636
+      ],
+      "clearance_m": 0.3640054944640259,
+      "open_directions": 4,
+      "eccentricity_m": 4.207106781186546
+     },
+     "mid5": {
+      "cell": [
+       220,
+       140
+      ],
+      "xy": [
+       3.6999999523162845,
+       5.950000190734864
+      ],
+      "clearance_m": 0.40311288741492746,
+      "open_directions": 2,
+      "eccentricity_m": 4.250609665440986
+     }
+    }
+   },
+   "bbox_diagonal_m": 7.8104097203667875,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      4.399999952316285,
+      5.050000190734863
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 32.5275,
+     "one_revolution_m2": 14.2225,
+     "one_revolution_pct_of_ceiling": 43.72454077319191,
+     "geodesic_max_m": 3.817749999999999,
+     "beyond_one_range_m2": 0.0,
+     "beyond_one_range_pct": 0.0,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 32.5275,
+       "cum_m2": 32.5275
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5275
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5275
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5275
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5275
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5275
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5275
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 32.5275
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.2692582403567252,
+     "open_directions": 2,
+     "eccentricity_m": 3.14350288425444
+    },
+    "mid1": {
+     "start_xy": [
+      4.1999999523162845,
+      6.950000190734864
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 32.48500000000001,
+     "one_revolution_m2": 13.0875,
+     "one_revolution_pct_of_ceiling": 40.28782515006925,
+     "geodesic_max_m": 5.717749999999993,
+     "beyond_one_range_m2": 2.565000000000005,
+     "beyond_one_range_pct": 7.895951977835937,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 29.92,
+       "cum_m2": 29.92
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 2.565000000000005,
+       "cum_m2": 32.48500000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.48500000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.48500000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.48500000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.48500000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.48500000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 32.48500000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5,
+     "open_directions": 3,
+     "eccentricity_m": 5.0435028842544405
+    },
+    "mid2": {
+     "start_xy": [
+      3.1999999523162845,
+      3.4500001907348636
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 32.477500000000006,
+     "one_revolution_m2": 13.525,
+     "one_revolution_pct_of_ceiling": 41.644215225925635,
+     "geodesic_max_m": 5.707689999999992,
+     "beyond_one_range_m2": 0.792500000000004,
+     "beyond_one_range_pct": 2.4401508736817914,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 31.685000000000002,
+       "cum_m2": 31.685000000000002
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.792500000000004,
+       "cum_m2": 32.477500000000006
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.477500000000006
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.477500000000006
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.477500000000006
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.477500000000006
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.477500000000006
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 32.477500000000006
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5408326913195984,
+     "open_directions": 2,
+     "eccentricity_m": 5.121320343559638
+    },
+    "mid3": {
+     "start_xy": [
+      5.6999999523162845,
+      6.450000190734864
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 32.51500000000001,
+     "one_revolution_m2": 10.695,
+     "one_revolution_pct_of_ceiling": 32.89251114870059,
+     "geodesic_max_m": 5.844079999999995,
+     "beyond_one_range_m2": 3.527500000000007,
+     "beyond_one_range_pct": 10.84883899738584,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 28.9875,
+       "cum_m2": 28.9875
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 3.527500000000007,
+       "cum_m2": 32.51500000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.51500000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.51500000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.51500000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.51500000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.51500000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 32.51500000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.38078865529319544,
+     "open_directions": 2,
+     "eccentricity_m": 5.169848480983497
+    },
+    "mid4": {
+     "start_xy": [
+      4.1999999523162845,
+      3.9500001907348636
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 32.5,
+     "one_revolution_m2": 13.185,
+     "one_revolution_pct_of_ceiling": 40.56923076923077,
+     "geodesic_max_m": 4.793489999999994,
+     "beyond_one_range_m2": 0.20249999999999346,
+     "beyond_one_range_pct": 0.623076923076903,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 32.29750000000001,
+       "cum_m2": 32.29750000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.20249999999999346,
+       "cum_m2": 32.5
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.5
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 32.5
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.3640054944640259,
+     "open_directions": 4,
+     "eccentricity_m": 4.207106781186546
+    },
+    "mid5": {
+     "start_xy": [
+      3.6999999523162845,
+      5.950000190734864
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 32.510000000000005,
+     "one_revolution_m2": 13.377500000000001,
+     "one_revolution_pct_of_ceiling": 41.14887726853276,
+     "geodesic_max_m": 4.924849999999996,
+     "beyond_one_range_m2": 0.22500000000000142,
+     "beyond_one_range_pct": 0.6920947400799796,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 32.285000000000004,
+       "cum_m2": 32.285000000000004
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.22500000000000142,
+       "cum_m2": 32.510000000000005
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.510000000000005
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.510000000000005
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.510000000000005
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.510000000000005
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 32.510000000000005
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 32.510000000000005
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.40311288741492746,
+     "open_directions": 2,
+     "eccentricity_m": 4.250609665440986
+    }
+   },
+   "grid_shape": [
+    310,
+    241
+   ]
+  },
+  "go2_short": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 1,
+     "5": 1,
+     "8": 1,
+     "12": 0
+    },
+    "max_branches_over_sweep": 1,
+    "ways_out_of_starts": [
+     1,
+     3,
+     2,
+     2,
+     4,
+     2
+    ],
+    "n_junction_starts": 2,
+    "graph_centre_xy": [
+     0.75,
+     15.15
+    ],
+    "graph_centre_cell": [
+     352,
+     148
+    ],
+    "ways_out_of_centre": 1,
+    "core_radius_m": 5.0,
+    "n_branches": 1,
+    "n_pieces_before_filter": 2,
+    "branches": [
+     {
+      "label": 1,
+      "area_m2": 22.1,
+      "reach_m": 8.2,
+      "far_xy": [
+       -0.95,
+       5.4
+      ]
+     }
+    ],
+    "passable_m2": 34.1,
+    "passable_bbox_m": [
+     8.8,
+     13.0
+    ],
+    "bbox_diagonal_m": 15.69,
+    "floor_width_median_m": 0.85,
+    "floor_width_p90_m": 1.4,
+    "share_wider_than_3m_pct": 0.0,
+    "ecc_min_m": 11.8,
+    "ecc_max_m": 16.3,
+    "class": "room+corridor"
+   },
+   "selection": {
+    "ecc_min_m": 11.786143571373735,
+    "ecc_max_m": 16.31396103067896,
+    "ecc_cut_m": 13.60685424949239,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 5940,
+    "n_lattice": 58,
+    "n_survivors": 51,
+    "n_survivors_with_3_ways_out": 11,
+    "min_pairwise_separation_m": 3.4677081768799405,
+    "body_bbox_diagonal_m": 15.685184092002237,
+    "starts": {
+     "centre": {
+      "cell": [
+       291,
+       163
+      ],
+      "xy": [
+       1.4999998092651374,
+       12.099999976158143
+      ],
+      "clearance_m": 0.2692582403567252,
+      "open_directions": 1,
+      "eccentricity_m": 13.234671708797604
+     },
+     "mid1": {
+      "cell": [
+       220,
+       90
+      ],
+      "xy": [
+       -2.150000190734863,
+       8.549999976158142
+      ],
+      "clearance_m": 0.608276253029822,
+      "open_directions": 3,
+      "eccentricity_m": 13.522539674441632
+     },
+     "mid2": {
+      "cell": [
+       370,
+       110
+      ],
+      "xy": [
+       -1.150000190734863,
+       16.049999976158144
+      ],
+      "clearance_m": 0.5024937810560445,
+      "open_directions": 2,
+      "eccentricity_m": 13.5982756057297
+     },
+     "mid3": {
+      "cell": [
+       370,
+       190
+      ],
+      "xy": [
+       2.849999809265137,
+       16.049999976158144
+      ],
+      "clearance_m": 0.651920240520265,
+      "open_directions": 2,
+      "eccentricity_m": 13.166904755831233
+     },
+     "mid4": {
+      "cell": [
+       240,
+       210
+      ],
+      "xy": [
+       3.849999809265137,
+       9.549999976158142
+      ],
+      "clearance_m": 0.5315072906367325,
+      "open_directions": 4,
+      "eccentricity_m": 13.513351365237956
+     },
+     "mid5": {
+      "cell": [
+       290,
+       90
+      ],
+      "xy": [
+       -2.150000190734863,
+       12.049999976158142
+      ],
+      "clearance_m": 0.7905694150420949,
+      "open_directions": 2,
+      "eccentricity_m": 12.254772721475254
+     }
+    }
+   },
+   "bbox_diagonal_m": 15.685184092002237,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      1.4999998092651374,
+      12.099999976158143
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 84.85750000000002,
+     "one_revolution_m2": 8.887500000000001,
+     "one_revolution_pct_of_ceiling": 10.473440768346935,
+     "geodesic_max_m": 13.823959999999984,
+     "beyond_one_range_m2": 52.86750000000001,
+     "beyond_one_range_pct": 62.301505465044336,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 31.990000000000006,
+       "cum_m2": 31.990000000000006
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 27.44,
+       "cum_m2": 59.43000000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 24.707499999999996,
+       "cum_m2": 84.1375
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.7200000000000131,
+       "cum_m2": 84.85750000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.85750000000002
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.85750000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.85750000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 84.85750000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.2692582403567252,
+     "open_directions": 1,
+     "eccentricity_m": 13.234671708797604
+    },
+    "mid1": {
+     "start_xy": [
+      -2.150000190734863,
+      8.549999976158142
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 84.83250000000001,
+     "one_revolution_m2": 12.347500000000002,
+     "one_revolution_pct_of_ceiling": 14.555152801108067,
+     "geodesic_max_m": 14.313899999999975,
+     "beyond_one_range_m2": 48.792500000000004,
+     "beyond_one_range_pct": 57.5162820852857,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 36.040000000000006,
+       "cum_m2": 36.040000000000006
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 31.67,
+       "cum_m2": 67.71000000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 15.852499999999992,
+       "cum_m2": 83.5625
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 1.2700000000000102,
+       "cum_m2": 84.83250000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.83250000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.83250000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.83250000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 84.83250000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.608276253029822,
+     "open_directions": 3,
+     "eccentricity_m": 13.522539674441632
+    },
+    "mid2": {
+     "start_xy": [
+      -1.150000190734863,
+      16.049999976158144
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 84.85250000000002,
+     "one_revolution_m2": 8.697500000000002,
+     "one_revolution_pct_of_ceiling": 10.250139948734567,
+     "geodesic_max_m": 14.12395999999998,
+     "beyond_one_range_m2": 50.87750000000002,
+     "beyond_one_range_pct": 59.95993046757609,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 33.975,
+       "cum_m2": 33.975
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 26.177500000000002,
+       "cum_m2": 60.1525
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 22.49000000000001,
+       "cum_m2": 82.64250000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 2.210000000000008,
+       "cum_m2": 84.85250000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.85250000000002
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.85250000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.85250000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 84.85250000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5024937810560445,
+     "open_directions": 2,
+     "eccentricity_m": 13.5982756057297
+    },
+    "mid3": {
+     "start_xy": [
+      2.849999809265137,
+      16.049999976158144
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 84.84500000000001,
+     "one_revolution_m2": 9.200000000000001,
+     "one_revolution_pct_of_ceiling": 10.843302492780953,
+     "geodesic_max_m": 14.548219999999981,
+     "beyond_one_range_m2": 49.20000000000001,
+     "beyond_one_range_pct": 57.98809593965466,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 35.645,
+       "cum_m2": 35.645
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 30.029999999999994,
+       "cum_m2": 65.675
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 15.83250000000001,
+       "cum_m2": 81.50750000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 3.3375000000000057,
+       "cum_m2": 84.84500000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.84500000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.84500000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.84500000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 84.84500000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.651920240520265,
+     "open_directions": 2,
+     "eccentricity_m": 13.166904755831233
+    },
+    "mid4": {
+     "start_xy": [
+      3.849999809265137,
+      9.549999976158142
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 84.82750000000001,
+     "one_revolution_m2": 14.885,
+     "one_revolution_pct_of_ceiling": 17.54737555627597,
+     "geodesic_max_m": 14.054729999999985,
+     "beyond_one_range_m2": 45.50750000000001,
+     "beyond_one_range_pct": 53.647107364946514,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 39.32000000000001,
+       "cum_m2": 39.32000000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 26.347499999999997,
+       "cum_m2": 65.6675
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 17.6575,
+       "cum_m2": 83.325
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 1.502500000000012,
+       "cum_m2": 84.82750000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.82750000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.82750000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.82750000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 84.82750000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5315072906367325,
+     "open_directions": 4,
+     "eccentricity_m": 13.513351365237956
+    },
+    "mid5": {
+     "start_xy": [
+      -2.150000190734863,
+      12.049999976158142
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 84.82000000000001,
+     "one_revolution_m2": 12.8125,
+     "one_revolution_pct_of_ceiling": 15.105517566611647,
+     "geodesic_max_m": 13.493189999999977,
+     "beyond_one_range_m2": 49.697500000000005,
+     "beyond_one_range_pct": 58.591723650082535,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 35.1225,
+       "cum_m2": 35.1225
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 24.447500000000005,
+       "cum_m2": 59.57000000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 24.89500000000001,
+       "cum_m2": 84.46500000000002
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.35499999999998977,
+       "cum_m2": 84.82000000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.82000000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.82000000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 84.82000000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 84.82000000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.7905694150420949,
+     "open_directions": 2,
+     "eccentricity_m": 12.254772721475254
+    }
+   },
+   "grid_shape": [
+    455,
+    280
+   ]
+  },
+  "apartment": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 0,
+     "5": 0,
+     "8": 0,
+     "12": 0
+    },
+    "max_branches_over_sweep": 0,
+    "ways_out_of_starts": [
+     1,
+     3,
+     2,
+     3,
+     2,
+     2
+    ],
+    "n_junction_starts": 2,
+    "graph_centre_xy": [
+     -0.65,
+     1.45
+    ],
+    "graph_centre_cell": [
+     116,
+     89
+    ],
+    "ways_out_of_centre": 2,
+    "core_radius_m": 5.0,
+    "n_branches": 0,
+    "n_pieces_before_filter": 1,
+    "branches": [],
+    "passable_m2": 9.3,
+    "passable_bbox_m": [
+     5.2,
+     7.4
+    ],
+    "bbox_diagonal_m": 9.07,
+    "floor_width_median_m": 0.78,
+    "floor_width_p90_m": 1.46,
+    "share_wider_than_3m_pct": 0.0,
+    "ecc_min_m": 4.2,
+    "ecc_max_m": 9.4,
+    "class": "room+corridor"
+   },
+   "selection": {
+    "ecc_min_m": 4.205634918610403,
+    "ecc_max_m": 9.397665940288713,
+    "ecc_cut_m": 7.13050865276332,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 1469,
+    "n_lattice": 13,
+    "n_survivors": 7,
+    "n_survivors_with_3_ways_out": 3,
+    "min_pairwise_separation_m": 0.460977222864644,
+    "body_bbox_diagonal_m": 9.0731747475732,
+    "starts": {
+     "centre": {
+      "cell": [
+       87,
+       84
+      ],
+      "xy": [
+       -0.8999999999999995,
+       0.0
+      ],
+      "clearance_m": 0.7071067811865476,
+      "open_directions": 1,
+      "eccentricity_m": 5.759188309203676
+     },
+     "mid1": {
+      "cell": [
+       100,
+       100
+      ],
+      "xy": [
+       -0.09999999999999964,
+       0.6500000000000004
+      ],
+      "clearance_m": 0.4,
+      "open_directions": 3,
+      "eccentricity_m": 5.333452377915603
+     },
+     "mid2": {
+      "cell": [
+       80,
+       100
+      ],
+      "xy": [
+       -0.09999999999999964,
+       -0.34999999999999964
+      ],
+      "clearance_m": 0.70178344238091,
+      "open_directions": 2,
+      "eccentricity_m": 6.274873734152912
+     },
+     "mid3": {
+      "cell": [
+       80,
+       90
+      ],
+      "xy": [
+       -0.5999999999999996,
+       -0.34999999999999964
+      ],
+      "clearance_m": 0.5385164807134504,
+      "open_directions": 3,
+      "eccentricity_m": 6.067766952966366
+     },
+     "mid4": {
+      "cell": [
+       90,
+       100
+      ],
+      "xy": [
+       -0.09999999999999964,
+       0.15000000000000036
+      ],
+      "clearance_m": 0.9,
+      "open_directions": 2,
+      "eccentricity_m": 5.774873734152912
+     },
+     "mid5": {
+      "cell": [
+       100,
+       90
+      ],
+      "xy": [
+       -0.5999999999999996,
+       0.6500000000000004
+      ],
+      "clearance_m": 0.5852349955359814,
+      "open_directions": 2,
+      "eccentricity_m": 5.067766952966366
+     }
+    }
+   },
+   "bbox_diagonal_m": 9.0731747475732,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      -0.8999999999999995,
+      0.0
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 25.465000000000003,
+     "one_revolution_m2": 10.4,
+     "one_revolution_pct_of_ceiling": 40.84036913410563,
+     "geodesic_max_m": 5.986979999999993,
+     "beyond_one_range_m2": 1.4650000000000034,
+     "beyond_one_range_pct": 5.752994305910085,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 24.0,
+       "cum_m2": 24.0
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 1.4650000000000034,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.7071067811865476,
+     "open_directions": 1,
+     "eccentricity_m": 5.759188309203676
+    },
+    "mid1": {
+     "start_xy": [
+      -0.09999999999999964,
+      0.6500000000000004
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 25.457500000000003,
+     "one_revolution_m2": 9.417500000000002,
+     "one_revolution_pct_of_ceiling": 36.9930275950113,
+     "geodesic_max_m": 5.561239999999994,
+     "beyond_one_range_m2": 0.6224999999999987,
+     "beyond_one_range_pct": 2.4452518904055727,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 24.835000000000004,
+       "cum_m2": 24.835000000000004
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.6224999999999987,
+       "cum_m2": 25.457500000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.457500000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.457500000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.457500000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.457500000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.457500000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 25.457500000000003
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.4,
+     "open_directions": 3,
+     "eccentricity_m": 5.333452377915603
+    },
+    "mid2": {
+     "start_xy": [
+      -0.09999999999999964,
+      -0.34999999999999964
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 25.465000000000003,
+     "one_revolution_m2": 11.22,
+     "one_revolution_pct_of_ceiling": 44.060475161987036,
+     "geodesic_max_m": 6.502659999999991,
+     "beyond_one_range_m2": 1.995000000000001,
+     "beyond_one_range_pct": 7.834282348321229,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 23.470000000000002,
+       "cum_m2": 23.470000000000002
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 1.995000000000001,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.70178344238091,
+     "open_directions": 2,
+     "eccentricity_m": 6.274873734152912
+    },
+    "mid3": {
+     "start_xy": [
+      -0.5999999999999996,
+      -0.34999999999999964
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 25.465000000000003,
+     "one_revolution_m2": 10.8275,
+     "one_revolution_pct_of_ceiling": 42.519143923031606,
+     "geodesic_max_m": 6.295559999999991,
+     "beyond_one_range_m2": 1.4650000000000034,
+     "beyond_one_range_pct": 5.752994305910085,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 24.0,
+       "cum_m2": 24.0
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 1.4650000000000034,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5385164807134504,
+     "open_directions": 3,
+     "eccentricity_m": 6.067766952966366
+    },
+    "mid4": {
+     "start_xy": [
+      -0.09999999999999964,
+      0.15000000000000036
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 25.465000000000003,
+     "one_revolution_m2": 10.575000000000001,
+     "one_revolution_pct_of_ceiling": 41.52758688395837,
+     "geodesic_max_m": 6.002659999999992,
+     "beyond_one_range_m2": 1.4650000000000034,
+     "beyond_one_range_pct": 5.752994305910085,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 24.0,
+       "cum_m2": 24.0
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 1.4650000000000034,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.9,
+     "open_directions": 2,
+     "eccentricity_m": 5.774873734152912
+    },
+    "mid5": {
+     "start_xy": [
+      -0.5999999999999996,
+      0.6500000000000004
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 25.465000000000003,
+     "one_revolution_m2": 10.0775,
+     "one_revolution_pct_of_ceiling": 39.573924995091296,
+     "geodesic_max_m": 5.295559999999995,
+     "beyond_one_range_m2": 0.6225000000000023,
+     "beyond_one_range_pct": 2.444531710190466,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 24.8425,
+       "cum_m2": 24.8425
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.6225000000000023,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 25.465000000000003
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.5852349955359814,
+     "open_directions": 2,
+     "eccentricity_m": 5.067766952966366
+    }
+   },
+   "grid_shape": [
+    237,
+    190
+   ]
+  },
+  "markers_go2": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 0,
+     "5": 0,
+     "8": 0,
+     "12": 0
+    },
+    "max_branches_over_sweep": 0,
+    "ways_out_of_starts": [
+     3,
+     3,
+     2,
+     3,
+     2,
+     2
+    ],
+    "n_junction_starts": 3,
+    "graph_centre_xy": [
+     0.4,
+     0.75
+    ],
+    "graph_centre_cell": [
+     98,
+     94
+    ],
+    "ways_out_of_centre": 3,
+    "core_radius_m": 5.0,
+    "n_branches": 0,
+    "n_pieces_before_filter": 0,
+    "branches": [],
+    "passable_m2": 14.3,
+    "passable_bbox_m": [
+     5.4,
+     6.4
+    ],
+    "bbox_diagonal_m": 8.37,
+    "floor_width_median_m": 1.14,
+    "floor_width_p90_m": 1.92,
+    "share_wider_than_3m_pct": 0.0,
+    "ecc_min_m": 3.2,
+    "ecc_max_m": 6.9,
+    "class": "room+corridor"
+   },
+   "selection": {
+    "ecc_min_m": 3.1899494936611648,
+    "ecc_max_m": 6.9497474683058265,
+    "ecc_cut_m": 5.154163056034257,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 3021,
+    "n_lattice": 32,
+    "n_survivors": 23,
+    "n_survivors_with_3_ways_out": 8,
+    "min_pairwise_separation_m": 0.9013878188659973,
+    "body_bbox_diagonal_m": 8.36809416773019,
+    "starts": {
+     "centre": {
+      "cell": [
+       100,
+       85
+      ],
+      "xy": [
+       -0.050000047683715465,
+       0.8500000476837162
+      ],
+      "clearance_m": 1.0920164833920778,
+      "open_directions": 3,
+      "eccentricity_m": 3.5784271247461867
+     },
+     "mid1": {
+      "cell": [
+       130,
+       110
+      ],
+      "xy": [
+       1.1999999523162845,
+       2.350000047683716
+      ],
+      "clearance_m": 1.004987562112089,
+      "open_directions": 3,
+      "eccentricity_m": 5.121320343559638
+     },
+     "mid2": {
+      "cell": [
+       60,
+       90
+      ],
+      "xy": [
+       0.19999995231628453,
+       -1.1499999523162838
+      ],
+      "clearance_m": 0.45276925690687087,
+      "open_directions": 2,
+      "eccentricity_m": 5.094112549695424
+     },
+     "mid3": {
+      "cell": [
+       100,
+       60
+      ],
+      "xy": [
+       -1.3000000476837155,
+       0.8500000476837162
+      ],
+      "clearance_m": 0.670820393249937,
+      "open_directions": 3,
+      "eccentricity_m": 4.8284271247461845
+     },
+     "mid4": {
+      "cell": [
+       80,
+       80
+      ],
+      "xy": [
+       -0.30000004768371547,
+       -0.14999995231628382
+      ],
+      "clearance_m": 0.8,
+      "open_directions": 2,
+      "eccentricity_m": 4.301219330881971
+     },
+     "mid5": {
+      "cell": [
+       110,
+       100
+      ],
+      "xy": [
+       0.6999999523162845,
+       1.3500000476837162
+      ],
+      "clearance_m": 1.0547511554864495,
+      "open_directions": 2,
+      "eccentricity_m": 3.9142135623730923
+     }
+    }
+   },
+   "bbox_diagonal_m": 8.36809416773019,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      -0.050000047683715465,
+      0.8500000476837162
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 29.647500000000004,
+     "one_revolution_m2": 20.620000000000005,
+     "one_revolution_pct_of_ceiling": 69.55055232313012,
+     "geodesic_max_m": 3.752069999999998,
+     "beyond_one_range_m2": 0.0,
+     "beyond_one_range_pct": 0.0,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 29.647500000000004,
+       "cum_m2": 29.647500000000004
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.647500000000004
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.647500000000004
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.647500000000004
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.647500000000004
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.647500000000004
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.647500000000004
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 29.647500000000004
+      }
+     ],
+     "degenerate": true,
+     "clearance_m": 1.0920164833920778,
+     "open_directions": 3,
+     "eccentricity_m": 3.5784271247461867
+    },
+    "mid1": {
+     "start_xy": [
+      1.1999999523162845,
+      2.350000047683716
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 29.637500000000003,
+     "one_revolution_m2": 15.975000000000001,
+     "one_revolution_pct_of_ceiling": 53.90130746520456,
+     "geodesic_max_m": 5.76981999999999,
+     "beyond_one_range_m2": 0.8050000000000033,
+     "beyond_one_range_pct": 2.7161535217208037,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 28.8325,
+       "cum_m2": 28.8325
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.8050000000000033,
+       "cum_m2": 29.637500000000003
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.637500000000003
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.637500000000003
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.637500000000003
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.637500000000003
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.637500000000003
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 29.637500000000003
+      }
+     ],
+     "degenerate": true,
+     "clearance_m": 1.004987562112089,
+     "open_directions": 3,
+     "eccentricity_m": 5.121320343559638
+    },
+    "mid2": {
+     "start_xy": [
+      0.19999995231628453,
+      -1.1499999523162838
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 29.635000000000005,
+     "one_revolution_m2": 15.387500000000001,
+     "one_revolution_pct_of_ceiling": 51.92340138349923,
+     "geodesic_max_m": 5.598519999999997,
+     "beyond_one_range_m2": 0.620000000000001,
+     "beyond_one_range_pct": 2.0921208031044403,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 29.015000000000004,
+       "cum_m2": 29.015000000000004
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.620000000000001,
+       "cum_m2": 29.635000000000005
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.635000000000005
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.635000000000005
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.635000000000005
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.635000000000005
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.635000000000005
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 29.635000000000005
+      }
+     ],
+     "degenerate": true,
+     "clearance_m": 0.45276925690687087,
+     "open_directions": 2,
+     "eccentricity_m": 5.094112549695424
+    },
+    "mid3": {
+     "start_xy": [
+      -1.3000000476837155,
+      0.8500000476837162
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 29.640000000000004,
+     "one_revolution_m2": 16.4125,
+     "one_revolution_pct_of_ceiling": 55.37280701754386,
+     "geodesic_max_m": 4.928399999999994,
+     "beyond_one_range_m2": 0.2275000000000027,
+     "beyond_one_range_pct": 0.7675438596491319,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 29.4125,
+       "cum_m2": 29.4125
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.2275000000000027,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      }
+     ],
+     "degenerate": true,
+     "clearance_m": 0.670820393249937,
+     "open_directions": 3,
+     "eccentricity_m": 4.8284271247461845
+    },
+    "mid4": {
+     "start_xy": [
+      -0.30000004768371547,
+      -0.14999995231628382
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 29.640000000000004,
+     "one_revolution_m2": 18.9525,
+     "one_revolution_pct_of_ceiling": 63.942307692307686,
+     "geodesic_max_m": 4.805619999999997,
+     "beyond_one_range_m2": 0.2275000000000027,
+     "beyond_one_range_pct": 0.7675438596491319,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 29.4125,
+       "cum_m2": 29.4125
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.2275000000000027,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 29.640000000000004
+      }
+     ],
+     "degenerate": true,
+     "clearance_m": 0.8,
+     "open_directions": 2,
+     "eccentricity_m": 4.301219330881971
+    },
+    "mid5": {
+     "start_xy": [
+      0.6999999523162845,
+      1.3500000476837162
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 29.645,
+     "one_revolution_m2": 19.2025,
+     "one_revolution_pct_of_ceiling": 64.77483555405634,
+     "geodesic_max_m": 4.562719999999994,
+     "beyond_one_range_m2": 0.1024999999999956,
+     "beyond_one_range_pct": 0.3457581379659153,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 29.542500000000004,
+       "cum_m2": 29.542500000000004
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 0.1024999999999956,
+       "cum_m2": 29.645
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.645
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.645
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.645
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.645
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 29.645
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 29.645
+      }
+     ],
+     "degenerate": true,
+     "clearance_m": 1.0547511554864495,
+     "open_directions": 2,
+     "eccentricity_m": 3.9142135623730923
+    }
+   },
+   "grid_shape": [
+    188,
+    186
+   ]
+  },
+  "bigoffice": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 2,
+     "5": 2,
+     "8": 2,
+     "12": 0
+    },
+    "max_branches_over_sweep": 2,
+    "ways_out_of_starts": [
+     2,
+     3,
+     3,
+     2,
+     2,
+     2
+    ],
+    "n_junction_starts": 2,
+    "graph_centre_xy": [
+     -12.75,
+     7.65
+    ],
+    "graph_centre_cell": [
+     467,
+     114
+    ],
+    "ways_out_of_centre": 2,
+    "core_radius_m": 5.0,
+    "n_branches": 2,
+    "n_pieces_before_filter": 2,
+    "branches": [
+     {
+      "label": 2,
+      "area_m2": 29.0,
+      "reach_m": 7.7,
+      "far_xy": [
+       -5.45,
+       10.3
+      ]
+     },
+     {
+      "label": 1,
+      "area_m2": 9.7,
+      "reach_m": 8.3,
+      "far_xy": [
+       -15.1,
+       -4.05
+      ]
+     }
+    ],
+    "passable_m2": 48.0,
+    "passable_bbox_m": [
+     11.6,
+     20.6
+    ],
+    "bbox_diagonal_m": 23.6,
+    "floor_width_median_m": 1.1,
+    "floor_width_p90_m": 2.25,
+    "share_wider_than_3m_pct": 0.1,
+    "ecc_min_m": 12.7,
+    "ecc_max_m": 26.1,
+    "class": "room+corridor"
+   },
+   "selection": {
+    "ecc_min_m": 12.716904755831235,
+    "ecc_max_m": 26.050966799187854,
+    "ecc_cut_m": 20.95035713374685,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 9544,
+    "n_lattice": 100,
+    "n_survivors": 74,
+    "n_survivors_with_3_ways_out": 19,
+    "min_pairwise_separation_m": 3.2015621187164243,
+    "body_bbox_diagonal_m": 23.597934231622904,
+    "starts": {
+     "centre": {
+      "cell": [
+       507,
+       131
+      ],
+      "xy": [
+       -11.900000381469727,
+       9.649999618530273
+      ],
+      "clearance_m": 0.25,
+      "open_directions": 2,
+      "eccentricity_m": 15.068986283848375
+     },
+     "mid1": {
+      "cell": [
+       330,
+       90
+      ],
+      "xy": [
+       -13.950000381469726,
+       0.7999996185302756
+      ],
+      "clearance_m": 0.8500000000000001,
+      "open_directions": 3,
+      "eccentricity_m": 20.883199846221473
+     },
+     "mid2": {
+      "cell": [
+       620,
+       130
+      ],
+      "xy": [
+       -11.950000381469726,
+       15.299999618530276
+      ],
+      "clearance_m": 0.4609772228646444,
+      "open_directions": 3,
+      "eccentricity_m": 20.822539674441654
+     },
+     "mid3": {
+      "cell": [
+       420,
+       90
+      ],
+      "xy": [
+       -13.950000381469726,
+       5.299999618530276
+      ],
+      "clearance_m": 0.65,
+      "open_directions": 2,
+      "eccentricity_m": 15.56187950266181
+     },
+     "mid4": {
+      "cell": [
+       560,
+       60
+      ],
+      "xy": [
+       -15.450000381469726,
+       12.299999618530276
+      ],
+      "clearance_m": 0.35000000000000003,
+      "open_directions": 2,
+      "eccentricity_m": 19.324621202458793
+     },
+     "mid5": {
+      "cell": [
+       570,
+       170
+      ],
+      "xy": [
+       -9.950000381469726,
+       12.799999618530276
+      ],
+      "clearance_m": 1.4221462653327892,
+      "open_directions": 2,
+      "eccentricity_m": 20.351828996322997
+     }
+    }
+   },
+   "bbox_diagonal_m": 23.597934231622904,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      -11.900000381469727,
+      9.649999618530273
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 86.70500000000001,
+     "one_revolution_m2": 11.270000000000001,
+     "one_revolution_pct_of_ceiling": 12.998096995559656,
+     "geodesic_max_m": 15.688159999999977,
+     "beyond_one_range_m2": 39.17750000000001,
+     "beyond_one_range_pct": 45.184822097918236,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 47.5275,
+       "cum_m2": 47.5275
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 21.700000000000003,
+       "cum_m2": 69.2275
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 16.3575,
+       "cum_m2": 85.58500000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 1.1200000000000045,
+       "cum_m2": 86.70500000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.70500000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.70500000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.70500000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 86.70500000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.25,
+     "open_directions": 2,
+     "eccentricity_m": 15.068986283848375
+    },
+    "mid1": {
+     "start_xy": [
+      -13.950000381469726,
+      0.7999996185302756
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 86.70250000000001,
+     "one_revolution_m2": 11.895000000000001,
+     "one_revolution_pct_of_ceiling": 13.719327585709754,
+     "geodesic_max_m": 20.883129999999976,
+     "beyond_one_range_m2": 62.12250000000002,
+     "beyond_one_range_pct": 71.65018309737322,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 24.580000000000002,
+       "cum_m2": 24.580000000000002
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 5.877499999999998,
+       "cum_m2": 30.4575
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 12.280000000000005,
+       "cum_m2": 42.737500000000004
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 33.57750000000001,
+       "cum_m2": 76.31500000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 8.087500000000006,
+       "cum_m2": 84.40250000000002
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 2.299999999999997,
+       "cum_m2": 86.70250000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.70250000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 86.70250000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.8500000000000001,
+     "open_directions": 3,
+     "eccentricity_m": 20.883199846221473
+    },
+    "mid2": {
+     "start_xy": [
+      -11.950000381469726,
+      15.299999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 86.70250000000001,
+     "one_revolution_m2": 20.572500000000005,
+     "one_revolution_pct_of_ceiling": 23.727689512989823,
+     "geodesic_max_m": 21.441709999999972,
+     "beyond_one_range_m2": 36.12750000000001,
+     "beyond_one_range_pct": 41.66834866353336,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 50.575,
+       "cum_m2": 50.575
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 13.357500000000002,
+       "cum_m2": 63.932500000000005
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 8.335000000000008,
+       "cum_m2": 72.26750000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 9.530000000000001,
+       "cum_m2": 81.79750000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 4.707499999999996,
+       "cum_m2": 86.50500000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.19750000000000512,
+       "cum_m2": 86.70250000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.70250000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 86.70250000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.4609772228646444,
+     "open_directions": 3,
+     "eccentricity_m": 20.822539674441654
+    },
+    "mid3": {
+     "start_xy": [
+      -13.950000381469726,
+      5.299999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 86.7,
+     "one_revolution_m2": 10.392500000000002,
+     "one_revolution_pct_of_ceiling": 11.986735870818919,
+     "geodesic_max_m": 15.561829999999981,
+     "beyond_one_range_m2": 61.81,
+     "beyond_one_range_pct": 71.29181084198385,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 24.89,
+       "cum_m2": 24.89
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 34.197500000000005,
+       "cum_m2": 59.087500000000006
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 22.45750000000001,
+       "cum_m2": 81.54500000000002
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 5.154999999999987,
+       "cum_m2": 86.7
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.7
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.7
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.7
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 86.7
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.65,
+     "open_directions": 2,
+     "eccentricity_m": 15.56187950266181
+    },
+    "mid4": {
+     "start_xy": [
+      -15.450000381469726,
+      12.299999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 86.66000000000001,
+     "one_revolution_m2": 8.465000000000002,
+     "one_revolution_pct_of_ceiling": 9.768059081467806,
+     "geodesic_max_m": 19.943779999999975,
+     "beyond_one_range_m2": 42.53500000000001,
+     "beyond_one_range_pct": 49.08262174013386,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 44.125,
+       "cum_m2": 44.125
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 19.557500000000005,
+       "cum_m2": 63.682500000000005
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 10.102500000000006,
+       "cum_m2": 73.78500000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 11.510000000000005,
+       "cum_m2": 85.29500000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 1.3649999999999949,
+       "cum_m2": 86.66000000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.66000000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.66000000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 86.66000000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.35000000000000003,
+     "open_directions": 2,
+     "eccentricity_m": 19.324621202458793
+    },
+    "mid5": {
+     "start_xy": [
+      -9.950000381469726,
+      12.799999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 86.70500000000001,
+     "one_revolution_m2": 23.815,
+     "one_revolution_pct_of_ceiling": 27.466697422293983,
+     "geodesic_max_m": 20.970999999999975,
+     "beyond_one_range_m2": 32.4125,
+     "beyond_one_range_pct": 37.38250389250908,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 54.29250000000001,
+       "cum_m2": 54.29250000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 12.592499999999994,
+       "cum_m2": 66.885
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 5.872500000000002,
+       "cum_m2": 72.75750000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 10.477500000000006,
+       "cum_m2": 83.23500000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 3.352499999999992,
+       "cum_m2": 86.5875
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.11750000000000682,
+       "cum_m2": 86.70500000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 86.70500000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 86.70500000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.4221462653327892,
+     "open_directions": 2,
+     "eccentricity_m": 20.351828996322997
+    }
+   },
+   "grid_shape": [
+    738,
+    521
+   ]
+  },
+  "bigoffice_hc": {
+   "structure": {
+    "branches_by_core_radius": {
+     "3": 2,
+     "5": 2,
+     "8": 3,
+     "12": 0
+    },
+    "max_branches_over_sweep": 3,
+    "ways_out_of_starts": [
+     2,
+     4,
+     3,
+     2,
+     2,
+     3
+    ],
+    "n_junction_starts": 3,
+    "graph_centre_xy": [
+     -13.2,
+     8.0
+    ],
+    "graph_centre_cell": [
+     474,
+     105
+    ],
+    "ways_out_of_centre": 2,
+    "core_radius_m": 5.0,
+    "n_branches": 2,
+    "n_pieces_before_filter": 2,
+    "branches": [
+     {
+      "label": 2,
+      "area_m2": 30.7,
+      "reach_m": 7.7,
+      "far_xy": [
+       -5.55,
+       10.25
+      ]
+     },
+     {
+      "label": 1,
+      "area_m2": 9.0,
+      "reach_m": 8.8,
+      "far_xy": [
+       -15.35,
+       -4.1
+      ]
+     }
+    ],
+    "passable_m2": 48.1,
+    "passable_bbox_m": [
+     11.6,
+     20.7
+    ],
+    "bbox_diagonal_m": 23.66,
+    "floor_width_median_m": 1.08,
+    "floor_width_p90_m": 2.28,
+    "share_wider_than_3m_pct": 0.4,
+    "ecc_min_m": 12.0,
+    "ecc_max_m": 25.8,
+    "class": "multi-branch"
+   },
+   "selection": {
+    "ecc_min_m": 11.963351365237951,
+    "ecc_max_m": 25.7831998462215,
+    "ecc_cut_m": 20.396803743153576,
+    "ecc_pct": 60.0,
+    "clear_min_m": 0.35,
+    "min_open_directions": 2,
+    "n_candidate_cells": 9553,
+    "n_lattice": 96,
+    "n_survivors": 61,
+    "n_survivors_with_3_ways_out": 18,
+    "min_pairwise_separation_m": 3.0761176830544046,
+    "body_bbox_diagonal_m": 23.6606212936178,
+    "starts": {
+     "centre": {
+      "cell": [
+       516,
+       133
+      ],
+      "xy": [
+       -11.800000381469726,
+       10.099999618530276
+      ],
+      "clearance_m": 0.32015621187164245,
+      "open_directions": 2,
+      "eccentricity_m": 14.6432503525603
+     },
+     "mid1": {
+      "cell": [
+       330,
+       90
+      ],
+      "xy": [
+       -13.950000381469726,
+       0.7999996185302756
+      ],
+      "clearance_m": 0.73824115301167,
+      "open_directions": 4,
+      "eccentricity_m": 20.215432893255116
+     },
+     "mid2": {
+      "cell": [
+       620,
+       120
+      ],
+      "xy": [
+       -12.450000381469726,
+       15.299999618530276
+      ],
+      "clearance_m": 0.9513148795220223,
+      "open_directions": 3,
+      "eccentricity_m": 19.863961030678954
+     },
+     "mid3": {
+      "cell": [
+       420,
+       90
+      ],
+      "xy": [
+       -13.950000381469726,
+       5.299999618530276
+      ],
+      "clearance_m": 0.6020797289396148,
+      "open_directions": 2,
+      "eccentricity_m": 14.969848480983524
+     },
+     "mid4": {
+      "cell": [
+       570,
+       170
+      ],
+      "xy": [
+       -9.950000381469726,
+       12.799999618530276
+      ],
+      "clearance_m": 1.40356688476182,
+      "open_directions": 2,
+      "eccentricity_m": 19.629646455628198
+     },
+     "mid5": {
+      "cell": [
+       560,
+       90
+      ],
+      "xy": [
+       -13.950000381469726,
+       12.299999618530276
+      ],
+      "clearance_m": 0.4242640687119285,
+      "open_directions": 3,
+      "eccentricity_m": 17.23675323681475
+     }
+    }
+   },
+   "bbox_diagonal_m": 23.6606212936178,
+   "starts": {
+    "centre": {
+     "start_xy": [
+      -11.800000381469726,
+      10.099999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 85.46500000000002,
+     "one_revolution_m2": 10.332500000000001,
+     "one_revolution_pct_of_ceiling": 12.089744339788217,
+     "geodesic_max_m": 16.503839999999975,
+     "beyond_one_range_m2": 35.92000000000001,
+     "beyond_one_range_pct": 42.02890071959282,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 49.54500000000001,
+       "cum_m2": 49.54500000000001
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 19.64249999999999,
+       "cum_m2": 69.1875
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 13.997500000000002,
+       "cum_m2": 83.185
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 2.2800000000000153,
+       "cum_m2": 85.46500000000002
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46500000000002
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46500000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46500000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 85.46500000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.32015621187164245,
+     "open_directions": 2,
+     "eccentricity_m": 14.6432503525603
+    },
+    "mid1": {
+     "start_xy": [
+      -13.950000381469726,
+      0.7999996185302756
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 85.46500000000002,
+     "one_revolution_m2": 11.422500000000001,
+     "one_revolution_pct_of_ceiling": 13.365120224653367,
+     "geodesic_max_m": 20.96448999999997,
+     "beyond_one_range_m2": 61.475000000000016,
+     "beyond_one_range_pct": 71.93002983677529,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 23.990000000000002,
+       "cum_m2": 23.990000000000002
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 5.754999999999999,
+       "cum_m2": 29.745
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 13.312500000000004,
+       "cum_m2": 43.057500000000005
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 32.2475,
+       "cum_m2": 75.305
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 8.767499999999998,
+       "cum_m2": 84.0725
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 1.3925000000000125,
+       "cum_m2": 85.46500000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46500000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 85.46500000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.73824115301167,
+     "open_directions": 4,
+     "eccentricity_m": 20.215432893255116
+    },
+    "mid2": {
+     "start_xy": [
+      -12.450000381469726,
+      15.299999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 85.46500000000002,
+     "one_revolution_m2": 21.447500000000005,
+     "one_revolution_pct_of_ceiling": 25.095068156555314,
+     "geodesic_max_m": 21.72454999999997,
+     "beyond_one_range_m2": 36.047500000000014,
+     "beyond_one_range_pct": 42.17808459603347,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 49.417500000000004,
+       "cum_m2": 49.417500000000004
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 14.3825,
+       "cum_m2": 63.800000000000004
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 7.002500000000005,
+       "cum_m2": 70.80250000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 10.167500000000004,
+       "cum_m2": 80.97000000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 4.122500000000002,
+       "cum_m2": 85.09250000000002
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.3725000000000023,
+       "cum_m2": 85.46500000000002
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46500000000002
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 85.46500000000002
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.9513148795220223,
+     "open_directions": 3,
+     "eccentricity_m": 19.863961030678954
+    },
+    "mid3": {
+     "start_xy": [
+      -13.950000381469726,
+      5.299999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 85.46000000000001,
+     "one_revolution_m2": 9.64,
+     "one_revolution_pct_of_ceiling": 11.280131055464544,
+     "geodesic_max_m": 15.718929999999979,
+     "beyond_one_range_m2": 62.54750000000001,
+     "beyond_one_range_pct": 73.18921132693659,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 22.9125,
+       "cum_m2": 22.9125
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 35.31,
+       "cum_m2": 58.222500000000004
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 22.267500000000005,
+       "cum_m2": 80.49000000000001
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 4.969999999999999,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.6020797289396148,
+     "open_directions": 2,
+     "eccentricity_m": 14.969848480983524
+    },
+    "mid4": {
+     "start_xy": [
+      -9.950000381469726,
+      12.799999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 85.46000000000001,
+     "one_revolution_m2": 23.950000000000003,
+     "one_revolution_pct_of_ceiling": 28.024806927217416,
+     "geodesic_max_m": 21.49022999999997,
+     "beyond_one_range_m2": 33.212500000000006,
+     "beyond_one_range_pct": 38.86321085888135,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 52.2475,
+       "cum_m2": 52.2475
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 12.939999999999998,
+       "cum_m2": 65.1875
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 6.0625,
+       "cum_m2": 71.25
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 10.377500000000012,
+       "cum_m2": 81.62750000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 3.4599999999999937,
+       "cum_m2": 85.0875
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.3725000000000023,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 1.40356688476182,
+     "open_directions": 2,
+     "eccentricity_m": 19.629646455628198
+    },
+    "mid5": {
+     "start_xy": [
+      -13.950000381469726,
+      12.299999618530276
+     ],
+     "lidar_m": 4.0,
+     "ceiling_m2": 85.46000000000001,
+     "one_revolution_m2": 19.432500000000005,
+     "one_revolution_pct_of_ceiling": 22.738708167563775,
+     "geodesic_max_m": 19.09732999999997,
+     "beyond_one_range_m2": 32.282500000000006,
+     "beyond_one_range_pct": 37.774982447928856,
+     "rings": [
+      {
+       "from_m": 0.0,
+       "to_m": 4.0,
+       "new_m2": 53.1775,
+       "cum_m2": 53.1775
+      },
+      {
+       "from_m": 4.0,
+       "to_m": 8.0,
+       "new_m2": 13.470000000000006,
+       "cum_m2": 66.64750000000001
+      },
+      {
+       "from_m": 8.0,
+       "to_m": 12.0,
+       "new_m2": 8.81750000000001,
+       "cum_m2": 75.46500000000002
+      },
+      {
+       "from_m": 12.0,
+       "to_m": 16.0,
+       "new_m2": 8.992499999999993,
+       "cum_m2": 84.45750000000001
+      },
+      {
+       "from_m": 16.0,
+       "to_m": 20.0,
+       "new_m2": 1.0024999999999977,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 20.0,
+       "to_m": 24.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 24.0,
+       "to_m": 28.0,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      },
+      {
+       "from_m": 28.0,
+       "to_m": null,
+       "new_m2": 0.0,
+       "cum_m2": 85.46000000000001
+      }
+     ],
+     "degenerate": false,
+     "clearance_m": 0.4242640687119285,
+     "open_directions": 3,
+     "eccentricity_m": 17.23675323681475
+    }
+   },
+   "grid_shape": [
+    738,
+    521
+   ]
+  }
+ }
+}

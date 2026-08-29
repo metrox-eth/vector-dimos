@@ -1,0 +1,214 @@
+arms: pr2830, stock, stock+B6, stock+B9, stock+H6k1.5, stock+H6k2, stock+H6k3
+maps: bigoffice
+
+=== config shipped, stock  ->  stock+H6k1.5   (6 paired starts) ===
+metric                                          stock   stock+H6k1.5    change   better on
+cross-map swings                                 0.50           1.00   +100.0 %   1/6   [totals 4 -> 4]
+round trips                                      0.00           0.00     +nan %   0/6   [totals 0 -> 0]
+goal-to-goal total per run (m)                  41.87          40.68     -2.8 %   3/6   [totals 263 -> 255]
+total path (m)                                  37.53          36.02     -4.0 %   2/6
+final coverage (%)                              87.95          88.44     +0.6 %   1/6
+path to 50 % of the ceiling (m)                  8.96           8.96     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 30.05          28.08     -6.6 %   3/5
+median robot to goal (m)                         3.95           3.92     -0.6 %   4/6
+goals issued                                     8.50           9.50    +11.8 %   2/6
+goals reached                                    4.00           4.50    +12.5 %   3/6
+goals after the last one reached                 2.50           2.00    -20.0 %   1/6
+decision time (ms)                           12283.55       13210.40     +7.5 %   1/6
+  cross_map_swings: total 4 -> 4, runs with at least one 3/6 -> 4/6
+  round_trips: total 0 -> 0, runs with at least one 0/6 -> 0/6
+
+=== config scoring, stock  ->  stock+H6k1.5   (6 paired starts) ===
+metric                                          stock   stock+H6k1.5    change   better on
+cross-map swings                                 1.00           0.50    -50.0 %   2/6   [totals 7 -> 4]
+round trips                                      0.50           0.00   -100.0 %   2/6   [totals 4 -> 1]
+goal-to-goal total per run (m)                  43.91          29.87    -32.0 %   2/6   [totals 259 -> 189]
+total path (m)                                  59.97          64.11     +6.9 %   1/6
+final coverage (%)                              90.63          90.63     +0.0 %   3/6
+path to 50 % of the ceiling (m)                  9.02           9.02     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 27.60          31.86    +15.4 %   0/6
+median robot to goal (m)                         4.20           3.92     -6.5 %   3/6
+goals issued                                     8.50           6.50    -23.5 %   2/6
+goals reached                                    6.00           5.50     -8.3 %   1/6
+goals after the last one reached                 1.50           1.00    -33.3 %   2/6
+decision time (ms)                           13578.05       14788.29     +8.9 %   1/6
+  cross_map_swings: total 7 -> 4, runs with at least one 3/6 -> 3/6
+  round_trips: total 4 -> 1, runs with at least one 3/6 -> 1/6
+
+--- pre-declared test: stock+H6k1.5 against stock (both configs pooled) ---
+  swings       11 ->   8   PASS (must drop)
+  round trips   4 ->   1   PASS (must not rise)
+  total path   44.05 ->  42.13 m  -4.4 %   PASS (max +5 %)
+  coverage     90.53 ->  90.31 %  -0.2 %   PASS (max -5 %)
+  VERDICT: PASS
+
+=== config shipped, stock  ->  stock+H6k2   (6 paired starts) ===
+metric                                          stock     stock+H6k2    change   better on
+cross-map swings                                 0.50           1.00   +100.0 %   1/6   [totals 4 -> 4]
+round trips                                      0.00           0.00     +nan %   0/6   [totals 0 -> 0]
+goal-to-goal total per run (m)                  41.87          40.68     -2.8 %   3/6   [totals 263 -> 255]
+total path (m)                                  37.53          36.02     -4.0 %   2/6
+final coverage (%)                              87.95          88.44     +0.6 %   1/6
+path to 50 % of the ceiling (m)                  8.96           8.96     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 30.05          28.08     -6.6 %   3/5
+median robot to goal (m)                         3.95           3.92     -0.6 %   4/6
+goals issued                                     8.50           9.50    +11.8 %   2/6
+goals reached                                    4.00           4.50    +12.5 %   3/6
+goals after the last one reached                 2.50           2.00    -20.0 %   1/6
+decision time (ms)                           12283.55       14330.73    +16.7 %   1/6
+  cross_map_swings: total 4 -> 4, runs with at least one 3/6 -> 4/6
+  round_trips: total 0 -> 0, runs with at least one 0/6 -> 0/6
+
+=== config scoring, stock  ->  stock+H6k2   (6 paired starts) ===
+metric                                          stock     stock+H6k2    change   better on
+cross-map swings                                 1.00           0.50    -50.0 %   2/6   [totals 7 -> 4]
+round trips                                      0.50           0.00   -100.0 %   2/6   [totals 4 -> 1]
+goal-to-goal total per run (m)                  43.91          35.66    -18.8 %   2/6   [totals 259 -> 201]
+total path (m)                                  59.97          66.22    +10.4 %   1/6
+final coverage (%)                              90.63          90.63     +0.0 %   3/6
+path to 50 % of the ceiling (m)                  9.02           9.02     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 27.60          30.16     +9.3 %   1/6
+median robot to goal (m)                         4.20           3.92     -6.5 %   3/6
+goals issued                                     8.50           8.00     -5.9 %   2/6
+goals reached                                    6.00           6.00     +0.0 %   1/6
+goals after the last one reached                 1.50           1.50     +0.0 %   2/6
+decision time (ms)                           13578.05       14022.25     +3.3 %   3/6
+  cross_map_swings: total 7 -> 4, runs with at least one 3/6 -> 3/6
+  round_trips: total 4 -> 1, runs with at least one 3/6 -> 1/6
+
+--- pre-declared test: stock+H6k2 against stock (both configs pooled) ---
+  swings       11 ->   8   PASS (must drop)
+  round trips   4 ->   1   PASS (must not rise)
+  total path   44.05 ->  42.13 m  -4.4 %   PASS (max +5 %)
+  coverage     90.53 ->  90.36 %  -0.2 %   PASS (max -5 %)
+  VERDICT: PASS
+
+=== config shipped, stock  ->  stock+H6k3   (6 paired starts) ===
+metric                                          stock     stock+H6k3    change   better on
+cross-map swings                                 0.50           1.00   +100.0 %   1/6   [totals 4 -> 4]
+round trips                                      0.00           0.00     +nan %   0/6   [totals 0 -> 0]
+goal-to-goal total per run (m)                  41.87          40.68     -2.8 %   3/6   [totals 263 -> 255]
+total path (m)                                  37.53          36.02     -4.0 %   2/6
+final coverage (%)                              87.95          88.44     +0.6 %   1/6
+path to 50 % of the ceiling (m)                  8.96           8.96     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 30.05          28.08     -6.6 %   3/5
+median robot to goal (m)                         3.95           3.92     -0.6 %   4/6
+goals issued                                     8.50           9.50    +11.8 %   2/6
+goals reached                                    4.00           4.50    +12.5 %   3/6
+goals after the last one reached                 2.50           2.00    -20.0 %   1/6
+decision time (ms)                           12283.55       13103.37     +6.7 %   1/6
+  cross_map_swings: total 4 -> 4, runs with at least one 3/6 -> 4/6
+  round_trips: total 0 -> 0, runs with at least one 0/6 -> 0/6
+
+=== config scoring, stock  ->  stock+H6k3   (6 paired starts) ===
+metric                                          stock     stock+H6k3    change   better on
+cross-map swings                                 1.00           0.50    -50.0 %   2/6   [totals 7 -> 4]
+round trips                                      0.50           0.00   -100.0 %   2/6   [totals 4 -> 1]
+goal-to-goal total per run (m)                  43.91          35.66    -18.8 %   2/6   [totals 259 -> 201]
+total path (m)                                  59.97          66.22    +10.4 %   1/6
+final coverage (%)                              90.63          90.63     +0.0 %   3/6
+path to 50 % of the ceiling (m)                  9.02           9.02     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 27.60          30.16     +9.3 %   1/6
+median robot to goal (m)                         4.20           3.92     -6.5 %   3/6
+goals issued                                     8.50           8.00     -5.9 %   2/6
+goals reached                                    6.00           6.00     +0.0 %   1/6
+goals after the last one reached                 1.50           1.50     +0.0 %   2/6
+decision time (ms)                           13578.05       12853.15     -5.3 %   4/6
+  cross_map_swings: total 7 -> 4, runs with at least one 3/6 -> 3/6
+  round_trips: total 4 -> 1, runs with at least one 3/6 -> 1/6
+
+--- pre-declared test: stock+H6k3 against stock (both configs pooled) ---
+  swings       11 ->   8   PASS (must drop)
+  round trips   4 ->   1   PASS (must not rise)
+  total path   44.05 ->  42.13 m  -4.4 %   PASS (max +5 %)
+  coverage     90.53 ->  90.36 %  -0.2 %   PASS (max -5 %)
+  VERDICT: PASS
+
+=== config shipped, stock  ->  stock+B6   (6 paired starts) ===
+metric                                          stock       stock+B6    change   better on
+cross-map swings                                 0.50           1.00   +100.0 %   1/6   [totals 4 -> 4]
+round trips                                      0.00           0.00     +nan %   0/6   [totals 0 -> 0]
+goal-to-goal total per run (m)                  41.87          40.68     -2.8 %   3/6   [totals 263 -> 255]
+total path (m)                                  37.53          36.02     -4.0 %   2/6
+final coverage (%)                              87.95          88.44     +0.6 %   1/6
+path to 50 % of the ceiling (m)                  8.96           8.96     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 30.05          28.08     -6.6 %   3/5
+median robot to goal (m)                         3.95           3.92     -0.6 %   4/6
+goals issued                                     8.50           9.50    +11.8 %   2/6
+goals reached                                    4.00           4.50    +12.5 %   3/6
+goals after the last one reached                 2.50           2.00    -20.0 %   1/6
+decision time (ms)                           12283.55       14559.13    +18.5 %   1/6
+  cross_map_swings: total 4 -> 4, runs with at least one 3/6 -> 4/6
+  round_trips: total 0 -> 0, runs with at least one 0/6 -> 0/6
+
+=== config scoring, stock  ->  stock+B6   (6 paired starts) ===
+metric                                          stock       stock+B6    change   better on
+cross-map swings                                 1.00           0.50    -50.0 %   2/6   [totals 7 -> 4]
+round trips                                      0.50           0.00   -100.0 %   2/6   [totals 4 -> 1]
+goal-to-goal total per run (m)                  43.91          35.66    -18.8 %   2/6   [totals 259 -> 201]
+total path (m)                                  59.97          66.22    +10.4 %   1/6
+final coverage (%)                              90.63          90.63     +0.0 %   3/6
+path to 50 % of the ceiling (m)                  9.02           9.02     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 27.60          30.16     +9.3 %   1/6
+median robot to goal (m)                         4.20           3.92     -6.5 %   3/6
+goals issued                                     8.50           8.00     -5.9 %   2/6
+goals reached                                    6.00           6.00     +0.0 %   1/6
+goals after the last one reached                 1.50           1.50     +0.0 %   2/6
+decision time (ms)                           13578.05       14595.33     +7.5 %   2/6
+  cross_map_swings: total 7 -> 4, runs with at least one 3/6 -> 3/6
+  round_trips: total 4 -> 1, runs with at least one 3/6 -> 1/6
+
+--- pre-declared test: stock+B6 against stock (both configs pooled) ---
+  swings       11 ->   8   PASS (must drop)
+  round trips   4 ->   1   PASS (must not rise)
+  total path   44.05 ->  42.13 m  -4.4 %   PASS (max +5 %)
+  coverage     90.53 ->  90.36 %  -0.2 %   PASS (max -5 %)
+  VERDICT: PASS
+
+=== config shipped, stock  ->  stock+B9   (6 paired starts) ===
+metric                                          stock       stock+B9    change   better on
+cross-map swings                                 0.50           0.50     +0.0 %   2/6   [totals 4 -> 3]
+round trips                                      0.00           0.00     +nan %   0/6   [totals 0 -> 0]
+goal-to-goal total per run (m)                  41.87          42.93     +2.5 %   3/6   [totals 263 -> 260]
+total path (m)                                  37.53          37.97     +1.2 %   3/6
+final coverage (%)                              87.95          87.78     -0.2 %   0/6
+path to 50 % of the ceiling (m)                  8.96           8.96     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 30.05          30.03     -0.1 %   3/5
+median robot to goal (m)                         3.95           3.96     +0.2 %   2/6
+goals issued                                     8.50           9.00     +5.9 %   0/6
+goals reached                                    4.00           4.00     +0.0 %   2/6
+goals after the last one reached                 2.50           2.00    -20.0 %   1/6
+decision time (ms)                           12283.55       13138.24     +7.0 %   0/6
+  cross_map_swings: total 4 -> 3, runs with at least one 3/6 -> 3/6
+  round_trips: total 0 -> 0, runs with at least one 0/6 -> 0/6
+
+=== config scoring, stock  ->  stock+B9   (6 paired starts) ===
+metric                                          stock       stock+B9    change   better on
+cross-map swings                                 1.00           0.50    -50.0 %   3/6   [totals 7 -> 3]
+round trips                                      0.50           0.00   -100.0 %   3/6   [totals 4 -> 0]
+goal-to-goal total per run (m)                  43.91          39.63     -9.7 %   3/6   [totals 259 -> 228]
+total path (m)                                  59.97          57.75     -3.7 %   2/6
+final coverage (%)                              90.63          90.89     +0.3 %   4/6
+path to 50 % of the ceiling (m)                  9.02           9.02     +0.0 %   0/6
+path to 80 % of the ceiling (m)                 27.60          25.55     -7.4 %   1/6
+median robot to goal (m)                         4.20           4.00     -4.7 %   3/6
+goals issued                                     8.50           8.50     +0.0 %   2/6
+goals reached                                    6.00           6.50     +8.3 %   2/6
+goals after the last one reached                 1.50           1.50     +0.0 %   1/6
+decision time (ms)                           13578.05       14335.86     +5.6 %   2/6
+  cross_map_swings: total 7 -> 3, runs with at least one 3/6 -> 3/6
+  round_trips: total 4 -> 0, runs with at least one 3/6 -> 0/6
+
+--- pre-declared test: stock+B9 against stock (both configs pooled) ---
+  swings       11 ->   6   PASS (must drop)
+  round trips   4 ->   0   PASS (must not rise)
+  total path   44.05 ->  42.94 m  -2.5 %   PASS (max +5 %)
+  coverage     90.53 ->  90.62 %  +0.1 %   PASS (max -5 %)
+  VERDICT: PASS
+
+======== summary ========
+  stock+H6k1.5       vs stock    swings  11->  8  round trips   4->  1  path   -4.4 %  cov  -0.2 %  PASS
+  stock+H6k2         vs stock    swings  11->  8  round trips   4->  1  path   -4.4 %  cov  -0.2 %  PASS
+  stock+H6k3         vs stock    swings  11->  8  round trips   4->  1  path   -4.4 %  cov  -0.2 %  PASS
+  stock+B6           vs stock    swings  11->  8  round trips   4->  1  path   -4.4 %  cov  -0.2 %  PASS
+  stock+B9           vs stock    swings  11->  6  round trips   4->  0  path   -2.5 %  cov  +0.1 %  PASS

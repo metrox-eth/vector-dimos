@@ -1,0 +1,59 @@
+PRE-DECLARED, written before any sweep was run.
+Workspace: sim_2830_fix. Date 2026-08-29.
+
+WHAT IS BEING TESTED
+Two harness-side policy wrappers that re-rank the candidate list the upstream
+selector produced. The upstream selector files are not modified.
+
+  H, switch-margin hysteresis (precedent: explore_lite, Jiri Horner, ROS, in
+     tree since 2017: distance from the robot is a first-class term of the
+     frontier cost, with progress_timeout as the companion that prevents
+     sticking). Implemented as: keep the best-scoring candidate within a
+     6 m geodesic vicinity of the robot unless the best candidate anywhere
+     beats it by a factor k on the arm's OWN score. Sweep k in {1.5, 2, 3}.
+
+  B, finish-the-branch (precedent: segment / room-based exploration, Bormann
+     et al., ipa_building_navigation / ipa_room_exploration: the robot finishes
+     the segment it is in before the planner may move it to another). While any
+     candidate lies within geodesic radius R of the robot, candidates outside R
+     are not eligible. Sweep R in {6, 9} m. B is H with k = infinity.
+
+Vicinity is measured as route length under the PLANNER's own cost rule
+(explore_sim.plan: blocked at 100, unknown at 80), one wave from the robot per
+decision, which is the shape explore_lite uses (one navfn potential field per
+cycle, every frontier's cost read out of it).
+
+HYPOTHESIS, per candidate, per base arm (stock and PR #2830 separately)
+  Compared with the SAME arm without the wrapper, on the same paired starts:
+   1. total cross-map swings must DROP.
+   2. total round trips must NOT RISE.
+   3. median total path must not be worse than +5 % relative.
+   4. median final coverage must not be worse than -5 % relative.
+  A candidate PASSES only if all four hold. Anything else is a failure and is
+  reported as one.
+
+SWEEP PROTOCOL
+  Parameter sweeps: bigoffice only, 4 m lidar, the 6 middle starts, both
+  configs, 24 runs per (candidate arm) sweep. Final winning configuration:
+  both maps, 4 m, 6+6 middle starts, both configs, four arms
+  (stock, stock+fix, #2830, #2830+fix). Regression: the winning fix at 12 m
+  with the shipped bench's original starts, against ../sim_2830_bigoffice.
+
+  No tuning past these values. If no candidate passes, that is the result.
+
+WINNER SELECTION, declared before the sweep results were read
+  Among the candidates that PASS all four conditions on the stock arm over the
+  24 bigoffice runs: the largest absolute drop in total swings wins; ties broken
+  by fewer total round trips, then by lower median total path. If none passes,
+  no winner is declared and the report says so.
+
+ADDED AFTER THE DIAGNOSIS, BEFORE THE SWEEP
+  The diagnosis (diagnostic_swings.md) gives, over 64 swings: N 19 (not
+  crossings at all), A 14, A-blocked 8, B 2, C 21. Cause B is 3 %, so the
+  frontier-persistence stabiliser is NOT run. Cause A is the dominant fixable
+  cause and every one of its 14 cases is recoverable at k <= 2 with a 6 m
+  vicinity, so H and B are swept as planned. Cause C is 47 % of the 45 real
+  crossings and is partly irreducible on this map, so the expected effect is
+  bounded well below half the swings and the report will say so whatever the
+  sweep returns.
+

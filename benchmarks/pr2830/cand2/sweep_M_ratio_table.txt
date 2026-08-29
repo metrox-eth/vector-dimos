@@ -1,0 +1,22 @@
+M RATIO SWEEP, bigoffice only, 4 m, 6 middle starts, both configs, stock arm.
+Config `shipped` at the UPSTREAM 15 s goal timeout. 12 runs per arm.
+Winner rule (pre-declared): largest drop in REAL crossings; ties broken by
+fewer REAL round trips, then by lower median total path. M0 is a CONTROL
+(distance penalty only, no direction term) and cannot win.
+
+arm           real sw  real rt  raw sw  med path  med cov  shp path  sco path  shp cov  sco cov  g2g tot
+--------------------------------------------------------------------------------------------------------
+stock                                      29.40     81.4     12.05     59.97     55.7     90.6    411.5
+stock+M1                                   30.25     81.5     11.98     57.75     57.4     91.0    379.0
+stock+M2                                   30.25     81.3     13.56     57.75     58.7     90.6    375.6
+stock+M4.3                                 27.50     74.8     11.64     54.50     56.8     91.0    360.2
+stock+M0                                   30.25     81.5     12.05     57.75     57.4     91.0    389.5
+
+(crossing counts are in sweep_M.txt, re-derived from raw goal coordinates:
+ stock 7 real crossings / 4 real round trips; M0, M1, M2 and M4.3 all 4 / 0.)
+
+--- policy counters, summed over the 12 runs of each arm ---
+stock+M0     n_decisions=102  n_with_heading=89  n_head_changed=25  n_arm_top_backwards=55
+stock+M1     n_decisions=102  n_with_heading=89  n_head_changed=26  n_arm_top_backwards=55
+stock+M2     n_decisions=103  n_with_heading=90  n_head_changed=28  n_arm_top_backwards=56
+stock+M4.3   n_decisions=99  n_with_heading=86  n_head_changed=32  n_arm_top_backwards=49
