@@ -101,8 +101,8 @@ def panel_title(res):
     s = res["summary"]
     dm = s["d_robot_to_goal_median_m"]
     return (f"{ARM_LABEL[s['arm']]}\n"
-            f"{s['n_goals']} buts · med jump {dm:.2f} m · max {s['d_robot_to_goal_max_m']:.2f} m\n"
-            f"{s['path_m']:.1f} m parcourus · {s['coverage_pct']:.0f} % de couverture")
+            f"{s['n_goals']} goals · med jump {dm:.2f} m · max {s['d_robot_to_goal_max_m']:.2f} m\n"
+            f"{s['path_m']:.1f} m driven · {s['coverage_pct']:.0f} % coverage")
 
 
 def main(argv=None):
@@ -142,9 +142,9 @@ def main(argv=None):
     # ---- bancs.png / bancs_scoring.png : one row per map ------------------
     for config, fname, blurb in (
             ("shipped", "bancs.png",
-             "code upstream tel quel (get_exploration_goal), goal timeout 45 s"),
+             "upstream code as-is (get_exploration_goal), 45 s goal timeout"),
             ("scoring", "bancs_scoring.png",
-             "le scoring seul : pas d'auto-arrêt, pas de goal timeout, filtre de but raté maison")):
+             "scoring only: no self-stop, no goal timeout, our failed-goal filter")):
         rows = [(m, best_start(m, config)) for m in maps]
         rows = [(m, st) for m, st in rows if st]
         fig, axes = plt.subplots(len(rows), 2, figsize=(11.5, 4.6 * len(rows)))
@@ -153,12 +153,12 @@ def main(argv=None):
             for j, arm in enumerate(("stock", "pr2830")):
                 draw_run(axes[i, j], worlds[m], pick(m, st, config, arm),
                          panel_title(pick(m, st, config, arm)))
-            axes[i, 0].set_ylabel(f"{m}\ndépart « {st} »", fontsize=9, fontweight="bold")
+            axes[i, 0].set_ylabel(f"{m}\nstart '{st}'", fontsize=9, fontweight="bold")
         fig.suptitle("dimOS frontier exploration — wavefront stock vs PR #2830\n"
-                     "cartes VECTOR réelles · même monde, même planificateur, même robot · "
-                     f"config « {config} » : {blurb}\n"
-                     "point noir = départ · flèches = le saut demandé (robot → but) · "
-                     "numéros = ordre des buts",
+                     "real recorded maps · same world, same planner, same robot · "
+                     f"config '{config}': {blurb}\n"
+                     "black dot = start · arrows = requested jump (robot → goal) · "
+                     "numbers = goal order",
                      fontsize=10, y=0.999)
         fig.tight_layout(rect=(0, 0, 1, 0.975))
         fig.savefig(os.path.join(HERE, fname), dpi=145)
@@ -179,9 +179,9 @@ def main(argv=None):
                     axes[i, j].axis("off")
                     continue
                 draw_run(axes[i, j], worlds[m], r, panel_title(r))
-            axes[i, 0].set_ylabel(f"départ « {st} »", fontsize=9, fontweight="bold")
-        fig.suptitle(f"{m} — wavefront stock (gauche) vs PR #2830 (droite), "
-                     f"config « {config} », les 5 poses de départ", fontsize=11)
+            axes[i, 0].set_ylabel(f"start '{st}'", fontsize=9, fontweight="bold")
+        fig.suptitle(f"{m}: wavefront stock (left) vs PR #2830 (right), "
+                     f"config '{config}', all start poses", fontsize=11)
         fig.tight_layout(rect=(0, 0, 1, 0.99))
         fig.savefig(os.path.join(HERE, f"banc_{m}.png"), dpi=140)
         plt.close(fig)
@@ -205,14 +205,14 @@ def main(argv=None):
                         alpha=0.75, lw=1.3, label=ARM_LABEL[arm] if first else None)
                 first = False
         ax.set_title(m, fontsize=9)
-        ax.set_xlabel("chemin parcouru (m)", fontsize=8)
+        ax.set_xlabel("path driven (m)", fontsize=8)
         if k == 0:
-            ax.set_ylabel("couverture (% du plafond visible)", fontsize=8)
+            ax.set_ylabel("coverage (% of visible ceiling)", fontsize=8)
         ax.grid(alpha=0.25, lw=0.5)
         ax.tick_params(labelsize=7)
     axes[0, 0].legend(fontsize=7, loc="lower right")
-    fig.suptitle("Couverture en fonction du chemin — un trait par pose de départ, "
-                 "config « scoring » (chaque bras paie le trajet que ses choix coûtent)",
+    fig.suptitle("Coverage vs path, one line per start pose, "
+                 "config 'scoring' (each arm pays the path its choices cost)",
                  fontsize=10)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     fig.savefig(os.path.join(HERE, "couverture.png"), dpi=145)
