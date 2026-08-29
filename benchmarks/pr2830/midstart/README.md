@@ -140,7 +140,7 @@ within the next three jumps by another swing whose direction opposes it:
 This is the one place where the PR moves the needle on the behaviour under test, and it moves
 it in the right direction: in the `scoring` config, half the stock runs contain a round trip
 and a quarter of the #2830 runs do. It is 6 runs against 3 runs. That is a count on 12 pairs,
-not a test, and in the `shipped` config, where the 45 s goal timeout cuts a long walk off
+not a test, and in the `shipped` config, where the 45 s goal timeout our deployment configures (upstream default is 15 s) cuts a long walk off
 after about 6.7 m, the effect is not visible at all (1 run against 2).
 
 ### Total goal-to-goal distance
@@ -162,7 +162,7 @@ improvement is a few runs being much tidier, not a systematic reduction.
 Medians over runs, and the paired count of how often #2830 is on the better side. All 12
 start pairs per config unless noted.
 
-### Config `shipped` (upstream code as-is, 45 s goal timeout), 24 runs
+### Config `shipped` (upstream loop, with our deployment's 45 s goal timeout; upstream default is 15 s), 24 runs
 
 | metric | stock | #2830 | change | #2830 better on |
 |---|---|---|---|---|
@@ -304,7 +304,7 @@ across this map from the middle, and this PR is not the change that stops it.
 7. **The swing threshold is a choice.** Half the passable-floor bounding-box diagonal gives
    11.80 m on `bigoffice` and 11.83 m on `bigoffice_hc`. The raw goal-to-goal distances are
    in the CSV and JSON; a different threshold gives a different count.
-8. **The 45 s goal timeout in config `shipped` cuts a walk at about 6.7 m** at 0.15 m/s. That
+8. **The 45 s goal timeout our deployment configures in config `shipped` (upstream default is 15 s) cuts a walk at about 6.7 m** at 0.15 m/s. That
    is why the round-trip effect only shows in `scoring`: in `shipped` neither arm is allowed
    to finish a long crossing.
 9. **Neither scorer models body width.** The costmap they are handed is inflated 0.25 m while
