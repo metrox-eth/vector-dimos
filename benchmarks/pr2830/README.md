@@ -18,8 +18,11 @@ before running and re-derives its headline counts from raw goal coordinates.
 Raw run JSONs are versioned in each volume (fidelity/raw, resid, go2) and the extracted occupancy maps in [maps/](maps/), so every table can be recomputed from this repo alone.
 
 Verdict of the dossier: about half of stock's cross-map crossings in Go2 conditions
-are fixable errors, one signed-direction change removes all of them, and the rest is
-a robot that finished a region and has to walk. Full numbers in each volume.
+(at a 6 m vicinity; the split is radius-dependent) are fixable errors. One
+signed-direction change removes the whole class-A share of them (24 to 0; all fixable
+classes together 30 to 5), and the rest is locally forced: no available alternative
+within the vicinity at that moment. The verdict is unchanged under faithful loop
+timing at the 0.55 m/s planner cap. Full numbers and failures in each volume.
 
 ## The original comment posted on PR #2830
 
