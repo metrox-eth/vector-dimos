@@ -1,0 +1,20 @@
+
+=== bigoffice ===  lidar 4.0 m  passable-floor bbox diagonal 23.6 m  (cross-map swing threshold 11.8 m)
+start          x       y  clear  ways  ceiling   1 turn  1 turn %  geo max  beyond 1 range
+centre    -11.90    9.65   0.25     2    86.7m2    11.3m2     13.0%    15.7m           45.2%
+mid1      -13.95    0.80   0.85     3    86.7m2    11.9m2     13.7%    20.9m           71.7%
+mid2      -11.95   15.30   0.46     3    86.7m2    20.6m2     23.7%    21.4m           41.7%
+mid3      -13.95    5.30   0.65     2    86.7m2    10.4m2     12.0%    15.6m           71.3%
+mid4      -15.45   12.30   0.35     2    86.7m2     8.5m2      9.8%    19.9m           49.1%
+mid5       -9.95   12.80   1.42     2    86.7m2    23.8m2     27.5%    21.0m           37.4%
+
+=== bigoffice_hc ===  lidar 4.0 m  passable-floor bbox diagonal 23.7 m  (cross-map swing threshold 11.8 m)
+start          x       y  clear  ways  ceiling   1 turn  1 turn %  geo max  beyond 1 range
+centre    -11.80   10.10   0.32     2    85.5m2    10.3m2     12.1%    16.5m           42.0%
+mid1      -13.95    0.80   0.74     4    85.5m2    11.4m2     13.4%    21.0m           71.9%
+mid2      -12.45   15.30   0.95     3    85.5m2    21.4m2     25.1%    21.7m           42.2%
+mid3      -13.95    5.30   0.60     2    85.5m2     9.6m2     11.3%    15.7m           73.2%
+mid4       -9.95   12.80   1.40     2    85.5m2    24.0m2     28.0%    21.5m           38.9%
+mid5      -13.95   12.30   0.42     3    85.5m2    19.4m2     22.7%    19.1m           37.8%
+
+-> gate_4m.json

@@ -1,0 +1,48 @@
+
+=== config « shipped » (24 runs) ========================================
+metrique                                                     mediane des runs     ecart   comparaisons appariees
+d mediane robot->but (m)                     stock    3.97   #2830    3.91     -1.6 %   #2830 meilleur sur 10/12 paires
+d max robot->but (m)                         stock   11.20   #2830    9.98    -10.9 %   #2830 meilleur sur 6/12 paires
+d mediane but->but (m)                       stock    4.14   #2830    3.76     -9.3 %   #2830 meilleur sur 8/12 paires
+d max but->but (m)                           stock   12.28   #2830   12.38     +0.9 %   #2830 meilleur sur 6/12 paires
+saut but->but CUMULE (m) [ping-pong a]       stock   41.87   #2830   39.58     -5.5 %   #2830 meilleur sur 5/12 paires
+traversees de carte [ping-pong b]            stock    1.00   #2830    1.00     +0.0 %   #2830 meilleur sur 4/12 paires
+part des buts au-dela de 5 m (%)             stock   21.59   #2830   23.61     +9.4 %   #2830 meilleur sur 5/12 paires
+chemin pour 50 % du plafond (m)              stock    9.26   #2830    7.33    -20.8 %   #2830 meilleur sur 5/12 paires
+chemin pour 80 % du plafond (m)              stock   28.84   #2830   29.61     +2.7 %   #2830 meilleur sur 5/8 paires
+chemin pour 90 % du plafond (m)              stock   38.14   #2830   35.07     -8.1 %   #2830 meilleur sur 2/2 paires
+chemin total (m)                             stock   36.79   #2830   38.09     +3.6 %   #2830 meilleur sur 6/12 paires
+couverture finale (%)                        stock   85.48   #2830   88.13     +3.1 %   #2830 meilleur sur 7/12 paires
+buts publies                                 stock    9.00   #2830   10.00    +11.1 %   #2830 meilleur sur 4/12 paires
+buts atteints                                stock    4.00   #2830    5.00    +25.0 %   #2830 meilleur sur 9/12 paires
+buts apres le dernier atteint                stock    3.00   #2830    2.00    -33.3 %   #2830 meilleur sur 7/12 paires
+inversions de sens                           stock    0.00   #2830    0.00     +nan %   #2830 meilleur sur 2/12 paires
+decision (ms)                                stock 10432.66   #2830 10885.62     +4.3 %   #2830 meilleur sur 3/12 paires
+  tous les buts confondus, stock  : n= 111  med  3.98 m  p90  9.29 m  max 19.43 m  part > 5 m: 25.2 %
+  tous les buts confondus, pr2830 : n= 121  med  3.92 m  p90  8.36 m  max 17.91 m  part > 5 m: 21.5 %
+  ping-pong, stock  : 12 runs  saut but->but cumule med  41.87 m total   538.8 m  |  traversees de carte total  11  med 1.0  runs avec au moins une:  7/12
+  ping-pong, pr2830 : 12 runs  saut but->but cumule med  39.58 m total   558.6 m  |  traversees de carte total  11  med 1.0  runs avec au moins une:  7/12
+
+=== config « scoring » (24 runs) ========================================
+metrique                                                     mediane des runs     ecart   comparaisons appariees
+d mediane robot->but (m)                     stock    3.99   #2830    3.94     -1.2 %   #2830 meilleur sur 8/12 paires
+d max robot->but (m)                         stock   14.38   #2830   15.42     +7.3 %   #2830 meilleur sur 6/12 paires
+d mediane but->but (m)                       stock    3.92   #2830    3.79     -3.4 %   #2830 meilleur sur 9/12 paires
+d max but->but (m)                           stock   18.82   #2830   18.66     -0.9 %   #2830 meilleur sur 6/12 paires
+saut but->but CUMULE (m) [ping-pong a]       stock   62.72   #2830   47.03    -25.0 %   #2830 meilleur sur 7/12 paires
+traversees de carte [ping-pong b]            stock    1.50   #2830    1.00    -33.3 %   #2830 meilleur sur 5/12 paires
+part des buts au-dela de 5 m (%)             stock   37.86   #2830   25.00    -34.0 %   #2830 meilleur sur 8/12 paires
+chemin pour 50 % du plafond (m)              stock    9.32   #2830    7.33    -21.4 %   #2830 meilleur sur 5/12 paires
+chemin pour 80 % du plafond (m)              stock   29.36   #2830   31.92     +8.7 %   #2830 meilleur sur 3/12 paires
+chemin pour 90 % du plafond (m)              stock   52.52   #2830   60.46    +15.1 %   #2830 meilleur sur 2/6 paires
+chemin total (m)                             stock   60.03   #2830   55.05     -8.3 %   #2830 meilleur sur 4/12 paires
+couverture finale (%)                        stock   90.43   #2830   90.16     -0.3 %   #2830 meilleur sur 4/12 paires
+buts publies                                 stock    9.50   #2830    9.50     +0.0 %   #2830 meilleur sur 4/12 paires
+buts atteints                                stock    6.00   #2830    6.00     +0.0 %   #2830 meilleur sur 4/12 paires
+buts apres le dernier atteint                stock    2.00   #2830    2.50    +25.0 %   #2830 meilleur sur 2/12 paires
+inversions de sens                           stock    1.00   #2830    1.00     +0.0 %   #2830 meilleur sur 3/12 paires
+decision (ms)                                stock 10520.50   #2830 10718.90     +1.9 %   #2830 meilleur sur 6/12 paires
+  tous les buts confondus, stock  : n= 106  med  3.99 m  p90 13.08 m  max 19.79 m  part > 5 m: 38.7 %
+  tous les buts confondus, pr2830 : n= 115  med  3.96 m  p90 11.15 m  max 19.01 m  part > 5 m: 32.2 %
+  ping-pong, stock  : 12 runs  saut but->but cumule med  62.72 m total   698.5 m  |  traversees de carte total  22  med 1.5  runs avec au moins une:  9/12
+  ping-pong, pr2830 : 12 runs  saut but->but cumule med  47.03 m total   708.0 m  |  traversees de carte total  20  med 1.0  runs avec au moins une: 11/12
