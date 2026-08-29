@@ -70,8 +70,8 @@ def main(npz=None, out=None):
     ax.legend(fontsize=8, loc="lower left")
     ax.set_title(f"go2_bigoffice, extracted map ({w}x{h} @ {res} m = "
                  f"{w * res:.1f} x {h * res:.1f} m)\n"
-                 f"blanc = jamais observe · beige = libre · gris = occupe · "
-                 f"vert = sol praticable connexe pour un corps de 0.46 m "
+                 f"white = never observed · beige = free · grey = occupied · "
+                 f"green = connected floor reachable by a 0.46 m body "
                  f"({body.sum() * res * res:.0f} m2)", fontsize=9)
     fig.tight_layout()
     fig.savefig(out, dpi=130)
