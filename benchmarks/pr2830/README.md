@@ -12,7 +12,10 @@ before running and re-derives its headline counts from raw goal coordinates.
 | [fleet/](fleet/) | does that policy generalize? 6 new floors from public dimOS datasets | no; the radius was a one-floor artefact |
 | [cand2/](cand2/) | signed direction term and lazy TSP tour; upstream 15 s timeout | direction term strong where measurable; timeout dominates |
 | [go2/](go2/) | everything re-judged with the Go2's own body and measured speed | the swing is real in Go2 conditions; remedy passes on 2 maps |
-| [resid/](resid/) | are the remaining crossings fixable or legitimate? | fixable class goes to zero under the remedy; residual is legitimate walking |
+| [resid/](resid/) | are the remaining crossings fixable or locally forced? | fixable class goes to zero under the remedy; residual is locally forced under R=6 m (see correction_sensibilite.md: the split is radius-dependent) |
+| [fidelity/](fidelity/) | external audit found the harness froze the robot during selection and ran above the 0.55 m/s planner cap; does anything survive a faithful loop? | the swing survives strengthened (the frozen harness under-counted); the remedy verdict is unchanged; 47.5 % of path is walked during selection computes |
+
+Raw run JSONs are versioned in each volume (fidelity/raw, resid, go2) and the extracted occupancy maps in [maps/](maps/), so every table can be recomputed from this repo alone.
 
 Verdict of the dossier: about half of stock's cross-map crossings in Go2 conditions
 are fixable errors, one signed-direction change removes all of them, and the rest is

@@ -25,7 +25,13 @@ CLASSES, unchanged and declared in ../sim_2830_fix/diagnostic_swings.md:
 R_near = 6.0 m of GEODESIC route length, the value the fix job declared, kept
 unchanged at BOTH lidar ranges so the two ranges are classified by one rule.
 At 4 m that is 1.5 lidar ranges, at 12 m it is 0.5; the sensitivity of the
-answer to that radius is printed (R = 6 / 9 / 12 m) rather than tuned.
+answer to that radius is printed (R = 4 / 6 / 9 / 12 m) rather than tuned.
+
+2026-08-30: the vicinity predicate was corrected, see correction_sensibilite.md
+and recompute_sensitivity.py. Re-running this file overwrites
+resid_classification.json; the corrected numbers live in
+resid_classification_v2.json, which was derived from the stored candidate lists
+without re-running any simulation.
 """
 from __future__ import annotations
 
@@ -188,9 +194,17 @@ def classify_run(res, rng):
                        "is_chosen": is_chosen(c)}
                       for j, c in enumerate(cands)],
         }
+        # CORRECTED 2026-08-30. Both fields must exclude the CHOSEN candidate:
+        # "the nearest OTHER candidate" cannot be the goal that was taken. The
+        # second predicate used to exclude only the suppressed ones, which let
+        # the chosen goal count as its own nearest alternative and inflated the
+        # vicinity sensitivity table (see correction_sensibilite.md). The buggy
+        # value is still emitted, under a _buggy key, for the audit trail.
         for key, pred in (("nearest_other_geo_m",
                            lambda j, c: (not is_chosen(c)) and (not is_suppressed(c))),
                           ("nearest_other_available_geo_m",
+                           lambda j, c: (not is_chosen(c)) and (not is_suppressed(c))),
+                          ("nearest_other_available_geo_m_buggy",
                            lambda j, c: not is_suppressed(c))):
             v = [geo[j] for j, c in enumerate(cands)
                  if pred(j, c) and math.isfinite(geo[j])]
@@ -441,17 +455,19 @@ def main(argv):
 
     # ---- vicinity sensitivity --------------------------------------------
     print("\nvicinity sensitivity: at how many traced swings was an AVAILABLE "
-          "candidate within R metres of route length")
-    for arm in ("stock", "stock+M4.3"):
-        sub = [r for r in rows if r["arm"] == arm]
-        if not sub:
-            continue
-        line = f"  {arm:11s} n={len(sub):3d}  "
-        for R in (6.0, 9.0, 12.0):
-            n = sum(1 for r in sub if r["nearest_other_available_geo_m"] is not None
-                    and r["nearest_other_available_geo_m"] <= R)
-            line += f"R={R:g}: {n:3d}   "
-        print(line)
+          "candidate OTHER THAN THE ONE TAKEN within R metres of route length")
+    for rng in ("4m", "12m", None):
+        for arm in ("stock", "stock+M4.3"):
+            sub = [r for r in rows if r["arm"] == arm
+                   and (rng is None or r["range"] == rng)]
+            if not sub:
+                continue
+            line = f"  {(rng or 'pooled'):7s} {arm:11s} n={len(sub):3d}  "
+            for R in (4.0, 6.0, 9.0, 12.0):
+                n = sum(1 for r in sub if r["nearest_other_available_geo_m"] is not None
+                        and r["nearest_other_available_geo_m"] <= R)
+                line += f"R={R:g}: {n:3d}   "
+            print(line)
 
     # ---- the two N filters -----------------------------------------------
     nstr = sum(v["swings_real_straightline"] for v in per_run.values())

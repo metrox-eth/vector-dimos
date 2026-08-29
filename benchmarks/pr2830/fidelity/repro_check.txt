@@ -1,0 +1,1 @@
+6 runs compared on 13 summary fields plus every goal coordinate: 0 disagreements. 0 goals flagged path-exhausted.
