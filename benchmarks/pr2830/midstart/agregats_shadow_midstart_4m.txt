@@ -1,0 +1,24 @@
+221 points de decision, etat de carte identique pour les deux scoreurs
+
+--- le conducteur est stock (106 decisions) ---
+  meme frontiere choisie par les deux : 80/106 (75 %)
+  quand ils different (26): distance a vol d'oiseau du but choisi
+     stock   med  5.94 m  max 19.46 m
+     pr2830  med  3.54 m  max 19.81 m
+     le choix de pr2830 est plus proche dans 23/26 cas
+
+--- le conducteur est pr2830 (115 decisions) ---
+  meme frontiere choisie par les deux : 89/115 (77 %)
+  quand ils different (26): distance a vol d'oiseau du but choisi
+     pr2830  med  3.78 m  max 18.72 m
+     stock   med  7.13 m  max 17.10 m
+     le choix de stock est plus proche dans 2/26 cas
+
+--- ecart entre le chemin A* reel (l'instrument de #2830) et la ligne droite ---
+  n=442  median 1.10 x  p90 2.26 x  max 7.68 x
+  part des buts ou le detour depasse +50 % : 13.3 %
+  part des buts ou le detour depasse +20 % : 30.1 %
+
+--- par carte ---
+  bigoffice         98 decisions, meme choix  77 %
+  bigoffice_hc     123 decisions, meme choix  76 %

@@ -1,0 +1,22 @@
+
+=== bigoffice ===  passable bbox diagonal 23.6 m
+  eccentricity over the passable floor: 12.7 to 26.1 m, central cut at 21.0 m (60th pct)
+  candidates: 9544 cells central and clear, 100 on the 0.5 m lattice, 74 with at least 2 ways out (19 of them with 3 or more)
+    centre  (-11.90,  9.65)  clearance 0.25 m  ways out 2  eccentricity 15.1 m
+    mid1    (-13.95,  0.80)  clearance 0.85 m  ways out 3  eccentricity 20.9 m
+    mid2    (-11.95, 15.30)  clearance 0.46 m  ways out 3  eccentricity 20.8 m
+    mid3    (-13.95,  5.30)  clearance 0.65 m  ways out 2  eccentricity 15.6 m
+    mid4    (-15.45, 12.30)  clearance 0.35 m  ways out 2  eccentricity 19.3 m
+    mid5    ( -9.95, 12.80)  clearance 1.42 m  ways out 2  eccentricity 20.4 m
+  closest pair of starts: 3.20 m
+
+=== bigoffice_hc ===  passable bbox diagonal 23.7 m
+  eccentricity over the passable floor: 12.0 to 25.8 m, central cut at 20.4 m (60th pct)
+  candidates: 9553 cells central and clear, 96 on the 0.5 m lattice, 61 with at least 2 ways out (18 of them with 3 or more)
+    centre  (-11.80, 10.10)  clearance 0.32 m  ways out 2  eccentricity 14.6 m
+    mid1    (-13.95,  0.80)  clearance 0.74 m  ways out 4  eccentricity 20.2 m
+    mid2    (-12.45, 15.30)  clearance 0.95 m  ways out 3  eccentricity 19.9 m
+    mid3    (-13.95,  5.30)  clearance 0.60 m  ways out 2  eccentricity 15.0 m
+    mid4    ( -9.95, 12.80)  clearance 1.40 m  ways out 2  eccentricity 19.6 m
+    mid5    (-13.95, 12.30)  clearance 0.42 m  ways out 3  eccentricity 17.2 m
+  closest pair of starts: 3.08 m

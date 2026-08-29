@@ -1,0 +1,11 @@
+=== config shipped ===
+  stock   swings  11  median position in the run 0.78 (1.00 = the last jump)  |  there-and-back pairs  2 in 1/12 runs
+  pr2830  swings  11  median position in the run 0.64 (1.00 = the last jump)  |  there-and-back pairs  3 in 2/12 runs
+
+=== config scoring ===
+  stock   swings  22  median position in the run 0.78 (1.00 = the last jump)  |  there-and-back pairs 13 in 6/12 runs
+  pr2830  swings  20  median position in the run 0.74 (1.00 = the last jump)  |  there-and-back pairs  7 in 3/12 runs
+
+=== goals issued before the first cross-map swing (stock only) ===
+  shipped  n=7  median goal index of the first swing 7.0  values [5, 6, 7, 7, 7, 8, 9]
+  scoring  n=9  median goal index of the first swing 7.0  values [3, 5, 6, 7, 7, 8, 9, 9, 10]
