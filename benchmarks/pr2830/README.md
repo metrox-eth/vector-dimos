@@ -4,6 +4,14 @@ Offline benchmarks of dimOS frontier exploration on recorded maps. All runs use 
 real upstream selector files, unmodified; every volume pre-declares its hypotheses
 before running and re-derives its headline counts from raw goal coordinates.
 
+Two pictures first. Same start, same upstream config, faithful loop timing; orange = a cross-map crossing:
+
+![stock vs signed momentum, hk_park](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/fidelity/hero_before_after.png)
+
+And exploration from the middle of a floor does finish it, once the selector's info-gain self-stop is out of the way (that self-stop is a separate, open observation):
+
+![full floor conquest, hk_entrance](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/fidelity/hero_full_floor.png)
+
 | volume | question | answer |
 |---|---|---|
 | this file, below | does PR #2830's scoring reproduce its claims? | dispersion yes, travel on large maps only |
