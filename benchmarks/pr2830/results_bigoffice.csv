@@ -1,0 +1,49 @@
+carte,strategie,config,depart,n_buts,buts_atteints,buts_sans_chemin,buts_apres_dernier_atteint,d_mediane_but_a_but_m,d_max_but_a_but_m,d_mediane_robot_a_but_m,d_max_robot_a_but_m,d_mediane_robot_a_but_atteints_m,chemin_total_m,chemin_a_50pct_m,chemin_a_80pct_m,chemin_a_90pct_m,couverture_m2,plafond_visible_m2,couverture_pct,inversions_de_sens,contacts_corps,duree_sim_s,decision_ms_moy,fin_de_run
+bigoffice,stock,shipped,centre,7,1,0,2,7.429,15.243,4.946,13.270,2.345,31.186,3.478,,,67.270,87.890,76.539,0,0,295.020,16300.506,explorer stopped itself: no information gain
+bigoffice,pr2830,shipped,centre,7,1,1,5,6.047,15.778,8.776,12.589,4.020,27.633,3.478,,,67.165,87.890,76.419,0,0,295.082,17460.267,explorer stopped itself: no information gain
+bigoffice,stock,scoring,centre,6,3,3,2,9.671,19.020,7.217,16.547,4.732,37.622,3.478,29.643,,79.023,87.890,89.911,0,0,430.550,18276.446,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,pr2830,scoring,centre,6,3,3,2,10.050,18.322,7.175,15.942,4.395,37.259,3.478,29.540,,78.598,87.890,89.427,0,0,440.269,18332.500,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,stock,shipped,pose,7,1,0,6,8.256,14.758,7.990,11.460,6.009,33.759,1.150,,,66.605,87.890,75.782,0,0,319.375,16785.766,explorer stopped itself: no information gain
+bigoffice,pr2830,shipped,pose,8,2,0,2,8.362,14.847,8.534,14.949,2.526,36.925,0.830,,,67.900,87.890,77.256,0,0,324.483,17874.845,explorer stopped itself: no information gain
+bigoffice,stock,scoring,pose,4,2,2,2,9.549,15.146,7.516,9.385,5.344,47.216,1.150,38.169,41.569,80.603,87.890,91.708,0,0,517.948,15229.162,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,pr2830,scoring,pose,5,3,2,2,5.869,18.278,3.946,15.867,3.946,56.430,0.830,14.589,42.648,79.545,87.890,90.505,0,0,526.780,17426.358,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,stock,shipped,spread1,8,0,0,8,3.206,9.463,9.387,10.110,,37.149,16.925,19.828,29.340,79.243,87.890,90.161,0,0,363.966,16304.337,explorer stopped itself: no information gain
+bigoffice,pr2830,shipped,spread1,7,1,0,2,5.843,13.111,5.712,9.049,3.397,34.015,16.925,19.814,27.500,79.985,87.890,91.006,0,0,305.442,16905.814,explorer stopped itself: no information gain
+bigoffice,stock,scoring,spread1,5,4,1,1,6.218,10.153,4.795,10.014,4.515,48.027,17.710,20.053,33.670,80.005,87.890,91.029,0,0,479.970,16561.913,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,pr2830,scoring,spread1,5,4,1,1,6.218,10.153,4.795,10.014,4.515,48.027,17.710,20.053,33.670,80.005,87.890,91.029,0,0,479.970,16192.487,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,stock,shipped,spread2,9,1,0,2,3.746,17.054,10.462,16.820,3.645,45.622,10.157,30.648,,78.650,87.890,89.487,0,0,407.008,17326.892,explorer stopped itself: no information gain
+bigoffice,pr2830,shipped,spread2,8,2,1,2,2.434,13.430,7.373,12.367,3.840,36.740,19.688,22.309,32.404,79.663,87.890,90.639,0,0,322.911,17600.102,explorer stopped itself: no information gain
+bigoffice,stock,scoring,spread2,6,3,3,3,14.897,17.989,14.704,16.064,6.646,73.321,10.002,26.182,68.439,79.728,87.890,90.713,0,0,705.365,16984.540,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,pr2830,scoring,spread2,6,4,2,1,3.543,13.430,3.630,12.367,3.630,48.715,19.773,22.383,34.336,80.128,87.890,91.168,0,0,486.096,16041.128,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,stock,shipped,spread3,9,0,1,9,3.123,15.045,10.600,15.836,,32.955,7.623,24.829,30.632,79.448,87.890,90.394,0,0,368.888,16713.090,explorer stopped itself: no information gain
+bigoffice,pr2830,shipped,spread3,7,1,1,2,4.621,18.504,4.825,15.969,3.339,30.996,7.623,21.891,,77.695,87.890,88.400,0,0,265.543,16055.058,explorer stopped itself: no information gain
+bigoffice,stock,scoring,spread3,2,1,1,1,9.870,9.870,8.178,9.691,6.665,34.220,7.710,25.144,33.928,79.208,87.890,90.121,0,0,381.745,16225.078,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,pr2830,scoring,spread3,7,5,2,2,4.647,18.453,4.825,16.204,4.825,64.883,8.068,22.897,46.733,81.158,87.890,92.340,0,0,634.342,17947.524,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,stock,shipped,spread4,7,1,0,3,2.799,8.791,8.151,10.165,4.005,33.502,13.966,16.616,26.020,79.288,87.890,90.212,0,0,310.930,18886.943,explorer stopped itself: no information gain
+bigoffice,pr2830,shipped,spread4,7,1,0,3,8.388,14.004,6.687,9.763,4.005,33.488,13.966,16.616,26.020,79.288,87.890,90.212,0,0,310.651,17703.913,explorer stopped itself: no information gain
+bigoffice,stock,scoring,spread4,4,3,1,1,8.821,10.126,6.624,10.029,4.214,51.057,13.833,16.515,50.779,79.205,87.890,90.118,0,0,531.864,14961.740,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice,pr2830,scoring,spread4,4,3,1,1,8.821,10.126,6.624,10.029,4.214,51.057,13.833,16.515,50.779,79.205,87.890,90.118,0,0,531.864,14566.636,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,stock,shipped,centre,7,0,0,7,5.014,15.145,10.257,15.003,,36.059,3.451,22.333,,72.350,86.855,83.300,0,0,319.028,19097.509,explorer stopped itself: no information gain
+bigoffice_hc,pr2830,shipped,centre,7,1,0,3,9.871,14.627,8.154,14.591,3.145,28.624,3.778,,,67.523,86.855,77.742,0,0,315.915,16959.967,explorer stopped itself: no information gain
+bigoffice_hc,stock,scoring,centre,7,1,6,6,6.405,17.730,14.329,15.458,3.684,65.090,3.451,24.849,64.800,79.245,86.855,91.238,0,0,615.036,15624.496,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,pr2830,scoring,centre,8,2,6,6,5.711,17.731,10.320,15.458,4.999,71.924,3.778,31.380,68.720,80.280,86.855,92.430,0,0,675.635,15835.777,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,stock,shipped,pose,9,2,0,2,9.078,15.379,6.775,15.488,5.645,48.892,2.046,36.588,,74.915,86.855,86.253,0,0,401.556,16409.825,explorer stopped itself: no information gain
+bigoffice_hc,pr2830,shipped,pose,7,2,0,2,5.941,13.876,4.477,10.405,2.742,30.269,1.711,20.944,,76.835,86.855,88.464,2,1,281.668,16352.004,explorer stopped itself: no information gain
+bigoffice_hc,stock,scoring,pose,14,1,13,13,12.334,19.047,12.439,19.029,5.984,112.288,2.046,26.782,89.847,79.818,86.855,91.897,5,2,1061.553,14619.570,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,pr2830,scoring,pose,11,5,6,6,3.856,18.962,6.308,12.764,5.152,51.441,1.711,24.671,39.363,80.535,86.855,92.724,5,2,522.850,15149.829,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,stock,shipped,spread1,7,0,7,7,0.000,0.268,3.540,4.767,,1.127,,,,5.460,86.855,6.286,0,0,19.573,16850.930,explorer stopped itself: no information gain
+bigoffice_hc,pr2830,shipped,spread1,0,0,0,0,,,,,,0.000,,,,3.473,86.855,3.998,0,0,12.000,,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,stock,scoring,spread1,1,0,1,1,,,4.767,4.767,,0.250,,,,4.458,86.855,5.132,0,0,14.667,16460.068,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,pr2830,scoring,spread1,0,0,0,0,,,,,,0.000,,,,3.473,86.855,3.998,0,0,12.000,,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,stock,shipped,spread2,7,0,0,7,7.432,15.930,9.603,14.719,,36.696,10.083,,,65.963,86.855,75.946,0,0,316.816,14951.423,explorer stopped itself: no information gain
+bigoffice_hc,pr2830,shipped,spread2,9,2,0,2,3.242,15.349,6.197,13.709,2.494,42.690,10.083,32.504,,77.628,86.855,89.376,2,1,375.870,15476.790,explorer stopped itself: no information gain
+bigoffice_hc,stock,scoring,spread2,15,2,13,13,11.263,17.620,12.271,16.070,5.799,123.160,10.282,32.272,101.906,79.663,86.855,91.719,2,1,1150.091,10729.066,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,pr2830,scoring,spread2,15,2,13,13,12.247,18.484,12.989,18.657,5.799,123.160,10.282,32.272,101.906,79.663,86.855,91.719,2,1,1150.091,11002.786,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,stock,shipped,spread3,8,1,1,4,7.282,15.251,8.066,14.870,4.378,37.760,7.791,23.066,,73.728,86.855,84.886,0,0,342.024,12697.714,explorer stopped itself: no information gain
+bigoffice_hc,pr2830,shipped,spread3,9,3,2,2,4.206,15.001,6.029,10.895,2.775,35.573,7.734,26.936,34.682,78.530,86.855,90.415,0,0,334.777,16052.192,explorer stopped itself: no information gain
+bigoffice_hc,stock,scoring,spread3,14,1,13,13,11.288,19.032,12.464,19.202,6.648,83.753,8.117,23.615,62.340,80.050,86.855,92.165,2,1,868.640,10799.511,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,pr2830,scoring,spread3,13,5,8,8,4.308,18.993,6.648,12.878,5.612,54.616,8.117,27.619,47.167,80.318,86.855,92.473,4,2,590.707,11754.176,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,stock,shipped,spread4,9,0,3,9,6.816,14.753,7.068,14.846,,31.353,5.847,26.544,,78.040,86.855,89.851,0,0,318.573,11225.023,explorer stopped itself: no information gain
+bigoffice_hc,pr2830,shipped,spread4,8,2,2,2,6.483,17.754,4.694,15.960,3.337,25.188,5.847,20.063,,77.870,86.855,89.655,1,0,262.772,12926.429,explorer stopped itself: no information gain
+bigoffice_hc,stock,scoring,spread4,4,1,3,3,17.022,17.854,7.879,14.792,5.354,24.721,5.896,20.209,,77.195,86.855,88.878,0,0,261.215,18111.559,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
+bigoffice_hc,pr2830,scoring,spread4,9,4,5,5,2.610,17.667,4.025,16.624,3.503,27.226,5.896,20.743,,77.965,86.855,89.765,0,0,297.321,11246.535,harness: 6 decisions in a row with < 0.1 m of motion and < 0.05 m2 of map
