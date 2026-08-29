@@ -1,0 +1,105 @@
+sim_2830_fidelity - stageA
+240 runs, re-derived from raw goal coordinates: 240 checked, 0 disagreements
+N-churn = class N = the goal sequence jumped and the robot did not (new goal within R_NEAR = 6 m of the robot when the goal took effect). Published, never dropped.
+sel drv = selection windows the robot spent still driving to the OLD goal; sel m = metres walked inside them; stale = median |d(robot,goal) at publish - at decision| in m.
+
+=== range 4 m | config shipped | T_sel 0 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     0        0    0   0  0/6      11.5     45.04    52.9%        0        0     0.0   0.00    0
+hk_park        6     0        0    0   0  0/6      11.0     38.45    47.7%        0        0     0.0   0.00    0
+hk_elevator    6     5        0    5   0  4/6      14.5     58.14    90.6%        0        0     0.0   0.00    0
+hk_entrance    6     1        0    1   0  1/6      10.0     37.72    35.9%        0        0     0.0   0.00    0
+  -> G1 at 4 m, T_sel 0 s: real crossings on 2 of 4 discriminating maps. HOLDS (bar: >= 2 of 4)
+
+=== range 4 m | config shipped | T_sel 5 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     3        0    3   1  2/6      11.5     49.58    52.0%       36        6    54.3   0.05    0
+hk_park        6     1        0    1   0  1/6      10.5     42.70    43.9%       23        8    30.2   0.00    0
+hk_elevator    6     4        0    4   0  3/6      14.5     71.31    96.7%       52       16    73.7   0.06    0
+hk_entrance    6     3        2    5   0  3/6      16.5     75.00    59.4%       48       12    75.9   0.03    0
+  -> G1 at 4 m, T_sel 5 s: real crossings on 4 of 4 discriminating maps. HOLDS (bar: >= 2 of 4)
+
+=== range 4 m | config shipped | T_sel 15 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     1        0    1   0  1/6      11.0     57.53    52.2%       34        9   132.7   0.07    0
+hk_park        6     3        0    3   0  3/6      11.5     52.85    49.3%       25       13    81.3   0.00    0
+hk_elevator    6     4        0    4   0  3/6      12.5     59.77    89.7%       35       21   120.0   0.06    0
+hk_entrance    6     2        1    3   0  1/6      11.0     65.85    49.0%       45       26   156.4   0.22    0
+  -> G1 at 4 m, T_sel 15 s: real crossings on 4 of 4 discriminating maps. HOLDS (bar: >= 2 of 4)
+
+=== range 4 m | config scoring | T_sel 0 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     0        0    0   0  0/6       6.0    102.89    88.0%        0        0     0.0   0.00    0
+hk_park        6     4        0    4   0  4/6      12.5    190.44    76.7%        0        0     0.0   0.00    0
+hk_elevator    6     5        0    5   1  3/6      11.5     88.87    97.6%        0        0     0.0   0.00    0
+hk_entrance    6     3        0    3   0  3/6      17.5    161.46    91.1%        0        0     0.0   0.00    0
+
+=== range 4 m | config scoring | T_sel 15 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     0        0    0   0  0/6       6.0    102.89    88.0%        0        0     0.0   0.00    0
+hk_park        6     4        0    4   0  4/6      12.5    190.44    76.7%        0        0     0.0   0.00    0
+hk_elevator    6     5        0    5   1  3/6      11.5     88.87    97.6%        0        0     0.0   0.00    0
+hk_entrance    6     3        0    3   0  3/6      17.5    161.46    91.1%        0        0     0.0   0.00    0
+
+=== range 12 m | config shipped | T_sel 0 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     1        1    2   0  1/6      10.0     37.63    41.8%        0        0     0.0   0.00    0
+hk_park        6     3        0    3   0  3/6       8.5     38.06    58.0%        0        0     0.0   0.00    0
+hk_elevator    6     9        1   10   3  5/6       8.0     36.23    95.7%        0        0     0.0   0.00    0
+hk_entrance    6     3        0    3   0  3/6       8.0     38.43    69.6%        0        0     0.0   0.00    0
+  -> G1 at 12 m, T_sel 0 s: real crossings on 4 of 4 discriminating maps. HOLDS (bar: >= 2 of 4)
+
+=== range 12 m | config shipped | T_sel 5 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     2        0    2   0  2/6       7.5     39.21    44.4%       41        6    57.0   0.57    0
+hk_park        6     5        0    5   0  5/6       7.5     47.20    63.3%       41        4    74.1   1.09    0
+hk_elevator    6    10        0   10   4  4/6       7.0     44.51    96.7%       39        8    65.5   1.06    0
+hk_entrance    6     5        0    5   1  3/6       9.5     59.84    80.8%       43        5    76.2   0.75    0
+  -> G1 at 12 m, T_sel 5 s: real crossings on 4 of 4 discriminating maps. HOLDS (bar: >= 2 of 4)
+
+=== range 12 m | config shipped | T_sel 15 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     3        0    3   0  3/6       8.5     51.96    58.8%       44       15   152.6   0.64    0
+hk_park        6    12        0   12   6  5/6       9.5     78.49    66.0%       46       13   219.2   2.79    0
+hk_elevator    6    10        0   10   4  5/6       7.5     62.55    97.1%       36       15   161.8   2.46    0
+hk_entrance    6     3        0    3   0  2/6       9.0     67.40    81.1%       37       16   164.3   1.05    0
+  -> G1 at 12 m, T_sel 15 s: real crossings on 4 of 4 discriminating maps. HOLDS (bar: >= 2 of 4)
+
+=== range 12 m | config scoring | T_sel 0 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     4        1    5   1  3/6       5.5    121.13    88.2%        0        0     0.0   0.00    0
+hk_park        6     2        1    3   0  2/6       5.0    172.12    79.8%        0        0     0.0   0.00    0
+hk_elevator    6     8        0    8   3  5/6       5.0     73.00    98.7%        0        0     0.0   0.00    0
+hk_entrance    6     2        0    2   0  2/6       6.0     73.04    92.5%        0        0     0.0   0.00    0
+
+=== range 12 m | config scoring | T_sel 15 s | arm stock ===
+map            n  REAL  N-churn  raw  rt  >=1 med goals  med path  med cov  sel drv  arrived   sel m  stale  cap
+hk_office      6     4        1    5   1  3/6       5.5    121.13    88.2%        0        0     0.0   0.00    0
+hk_park        6     2        1    3   0  2/6       5.0    172.12    79.8%        0        0     0.0   0.00    0
+hk_elevator    6     8        0    8   3  5/6       5.0     73.00    98.7%        0        0     0.0   0.00    0
+hk_entrance    6     2        0    2   0  2/6       6.5     73.04    92.5%        0        0     0.0   0.00    0
+
+==============================================================================
+PAIRED BY START: T_sel 0 (frozen) against each faithful value, config shipped
+==============================================================================
+ 4 m  T_sel 0 -> 5     n=24 starts   REAL   6 -> 11   N-churn  0 -> 2   per start up/flat/down 5/18/1   goals 12.0 -> 13.5   path   43.9 ->   57.4 m   cov  52.3 ->  56.5 %
+ 4 m  T_sel 0 -> 15    n=24 starts   REAL   6 -> 10   N-churn  0 -> 1   per start up/flat/down 6/16/2   goals 12.0 -> 11.0   path   43.9 ->   57.5 m   cov  52.3 ->  57.6 %
+12 m  T_sel 0 -> 5     n=24 starts   REAL  16 -> 22   N-churn  2 -> 0   per start up/flat/down 7/15/2   goals 8.5 -> 8.0   path   36.6 ->   45.3 m   cov  63.7 ->  67.5 %
+12 m  T_sel 0 -> 15    n=24 starts   REAL  16 -> 28   N-churn  2 -> 0   per start up/flat/down 10/11/3   goals 8.5 -> 8.5   path   36.6 ->   63.8 m   cov  63.7 ->  73.6 %
+
+==============================================================================
+PRE-DECLARED CHECK: config `scoring` at T_sel 0 vs 15 must be identical in space
+==============================================================================
+  DIFFERS 12m hk_entrance/mid5: n_goals, path_m, area_m2, coverage_pct, goals_no_path, goal coordinates
+  47 pairs identical, 1 differ.
+
+==============================================================================
+PLAIN FAILURES AND CAPPED RUNS
+==============================================================================
+wall-capped runs (900 s): 0 of 240
+runs that published ZERO goals: 0
+end_reason distribution:
+   121  harness
+   119  explorer stopped itself
+starts with <= 1 goal in EVERY cell they appear in:
+  hk_entrance/centre

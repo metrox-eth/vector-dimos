@@ -1,0 +1,52 @@
+ISOLATED MEASUREMENT OF THE dimOS FRONTIER SELECTION (T_sel anchor)
+==============================================================================
+rig      : 12th Gen Intel Core i9-12900KF, 24 threads
+load     : 6 concurrent workers on 24 threads, nothing else running
+profile  : go2ctrl, arm stock, config shipped, lidar 4.0 m, T_sel 0.0
+timed    : one call to WavefrontFrontierExplorer.get_exploration_goal
+           per decision, which is detect_frontiers (full-grid python
+           BFS) + _rank_frontiers, on the 0.25 m-inflated costmap
+
+map            cfg      lidar    n   median     p10     p90      max
+hk_elevator    shipped      4   88    11.79   11.10   12.39    13.19
+hk_entrance    shipped      4   57     9.27    8.57    9.90    10.53
+hk_office      shipped      4   64    10.82   10.37   11.21    11.68
+hk_park        shipped      4   59     7.68    6.64    8.13     8.86
+
+POOLED over 268 decisions: median 10.58 s, p10 7.58 s, p90 12.02 s, max 13.19 s
+
+CROSS-CHECK, the recorded go2 bench's own decide_ms_mean per run, on the
+384-core box under 24-60 concurrent workers, so an UPPER bound:
+  4 m : hk_park 11.2 s, hk_entrance 12.4 s, hk_office 15.5 s,
+        hk_elevator 16.8 s, hk_allaround 34.6 s
+  12 m: hk_park 10.6 s, hk_entrance 11.5 s, hk_office 14.9 s,
+        hk_elevator 16.1 s
+
+READING. The sweep {0, 5, 15} s was fixed by hypotheses_fidelity.txt
+before this ran and is not changed by it. What this number decides is
+only which faithful value Stage B runs at, by the pre-declared rule:
+the swept faithful value closest to the median above, ties to the smaller.
+  measured median 10.58 s  ->  Stage B T_sel = 15 s
+
+ADDENDUM, written when the number landed
+----------------------------------------
+The job brief anchored on "~8 s median". Our own isolated measurement is
+10.58 s pooled. 8 s is inside the per-map spread (hk_park 7.68 s is the
+cheapest floor, hk_elevator 11.79 s the dearest), so the brief's figure is
+consistent with what we measure, but it is not what we measure, and this file
+reports what we measure. Neither value changes the sweep, which was fixed
+before the measurement ran.
+
+Under the pre-declared rule the median 10.58 s selects T_sel = 15 s for Stage B
+(|10.58 - 15| = 4.42 against |10.58 - 5| = 5.58). Had the brief's 8 s been used
+instead, the rule would have selected 5 s. Both faithful values are in Stage A,
+so the reader can see the verdict at either one and is not asked to take the
+choice on trust.
+
+Measured at 4 m only. The recorded go2 bench's own per-run means put 12 m
+decisions within about 1 s of 4 m ones on these four floors, so the anchor is
+not range-sensitive here.
+
+This is OUR silicon and OUR grids. The robot's onboard compute is not measured
+by anything in this workspace, which is exactly why T_sel is swept and why the
+verdict is reported at every swept value rather than at one.

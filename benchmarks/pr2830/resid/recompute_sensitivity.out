@@ -1,0 +1,61 @@
+recomputed 94 traced decisions from the stored candidate lists
+  integrity check vs the values the buggy run stored: nearest_other_geo_m 0 mismatches, nearest_other_available_geo_m 0 mismatches
+  decisions whose value changes: 19 of 94; of those, 19 had the CHOSEN goal as their own 'nearest alternative'
+
+vicinity sensitivity: traced swings with an AVAILABLE candidate other than the one taken within R metres of route length
+scope      arm            n |              R=4              R=6              R=9             R=12
+                            | old -> corrected old -> corrected old -> corrected old -> corrected
+-------------------------------------------------------------------------------------------------
+4m         stock         20 |      5 -> 5            9 -> 9           15 -> 15          15 -> 15     
+4m         stock+M4.3    12 |      1 -> 0            1 -> 0            1 -> 0            1 -> 0      
+12m        stock         40 |      6 -> 5           17 -> 16          22 -> 21          26 -> 25     
+12m        stock+M4.3    22 |      0 -> 0            0 -> 0            0 -> 0            0 -> 0      
+pooled     stock         60 |     11 -> 10          26 -> 25          37 -> 36          41 -> 40     
+pooled     stock+M4.3    34 |      1 -> 0            1 -> 0            1 -> 0            1 -> 0      
+
+same, over the REAL crossings only (class N removed)
+4m         stock         20 |      5 -> 5            9 -> 9           15 -> 15          15 -> 15     
+4m         stock+M4.3    11 |      0 -> 0            0 -> 0            0 -> 0            0 -> 0      
+12m        stock         39 |      5 -> 5           16 -> 16          21 -> 21          25 -> 25     
+12m        stock+M4.3    22 |      0 -> 0            0 -> 0            0 -> 0            0 -> 0      
+pooled     stock         59 |     10 -> 10          25 -> 25          36 -> 36          40 -> 40     
+pooled     stock+M4.3    33 |      0 -> 0            0 -> 0            0 -> 0            0 -> 0      
+
+cross-check of the headline split at R = 6 m, recomputed from the corrected fields against the stored labels:
+  1 of 94 decisions differ
+   {"cell": ["12m", "hk_elevator", "shipped", "mid1", "stock", 6], "stored": "B", "recomputed": "A", "on_rounding_boundary": true, "n_near_raw_precision": 0}
+  using the full-precision n_near / n_near_blocked the original run stored (same corrected predicate): 0 decisions differ
+
+subgroup splits from the corrected data, real crossings only (class N removed)
+scope            arm          real    A  Abl    B    C |        fixable     legitimate
+--------------------------------------------------------------------------------------
+config shipped   stock          31   13    0    4   14 |   17 ( 55 %)     14 ( 45 %)
+config shipped   stock+M4.3     15    0    0    2   13 |    2 ( 13 %)     13 ( 87 %)
+config scoring   stock          28   11    0    2   15 |   13 ( 46 %)     15 ( 54 %)
+config scoring   stock+M4.3     18    0    0    3   15 |    3 ( 17 %)     15 ( 83 %)
+range 4m         stock          20    9    0    4    7 |   13 ( 65 %)      7 ( 35 %)
+range 4m         stock+M4.3     11    0    0    2    9 |    2 ( 18 %)      9 ( 82 %)
+range 12m        stock          39   15    0    2   22 |   17 ( 44 %)     22 ( 56 %)
+range 12m        stock+M4.3     22    0    0    3   19 |    3 ( 14 %)     19 ( 86 %)
+pooled           stock          59   24    0    6   29 |   30 ( 51 %)     29 ( 49 %)
+pooled           stock+M4.3     33    0    0    5   28 |    5 ( 15 %)     28 ( 85 %)
+
+fixable / legitimate split as a function of the vicinity radius R, old field -> corrected field
+arm            R |      real         A       B         C |           fixable %             legit %  bnd
+-------------------------------------------------------------------------------------------------------
+stock          4 |   59->59     10->10     6->6     43->43   |    27 -> 27             73 -> 73         0
+stock          6 |   59->59     25->25     5->5     29->29   |    51 -> 51             49 -> 49         1
+stock          9 |   58->58     35->35     0->0     23->23   |    60 -> 60             40 -> 40         0
+stock         12 |   57->57     38->38     0->0     19->19   |    67 -> 67             33 -> 33         0
+stock+M4.3     4 |   33->33      0->0      5->5     28->28   |    15 -> 15             85 -> 85         0
+stock+M4.3     6 |   33->33      0->0      5->5     28->28   |    15 -> 15             85 -> 85         0
+stock+M4.3     9 |   33->33      0->0      5->5     28->28   |    15 -> 15             85 -> 85         0
+stock+M4.3    12 |   33->33      0->0      5->5     28->28   |    15 -> 15             85 -> 85         0
+
+isolation: nearest AVAILABLE candidate other than the one taken, over the REAL crossings only (class N removed), as the report quotes it
+  stock       old       n= 59 median   7.19 m  min   1.70 m  max  47.88 m  (no other candidate at all: 0)
+  stock       corrected n= 59 median   6.65 m  min   1.70 m  max  47.88 m  (no other candidate at all: 4)
+  stock+M4.3  old       n= 33 median  27.33 m  min  12.02 m  max  45.80 m  (no other candidate at all: 0)
+  stock+M4.3  corrected n= 33 median  27.66 m  min  12.02 m  max  46.16 m  (no other candidate at all: 1)
+
+-> /tmp/claude-1000/-home-openclaw-lerobot/c23c4729-e991-4dc8-b2d5-9c140c6a8780/scratchpad/sim_2830_resid/resid_classification_v2.json

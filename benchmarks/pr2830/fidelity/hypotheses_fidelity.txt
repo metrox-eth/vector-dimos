@@ -1,0 +1,205 @@
+HYPOTHESES - sim_2830_fidelity
+Written 2026-08-30, BEFORE any comparative run of this job.
+Workspace: .../scratchpad/sim_2830_fidelity/
+
+WHY THIS JOB EXISTS
+===================
+An external audit of the dimOS exploration dossier found the harness'
+temporal semantics unfaithful, on three counts. All three were re-verified
+against the installed package in this job before any code was written, and the
+verification with its line references is loop_semantics.md. In short:
+
+  (1) TEMPORALITY. dimOS publishes a goal, waits goal_timeout = 15 s
+      (wavefront_frontier_goal_selector.py:823), and on timeout re-runs the
+      selection WITHOUT CANCELLING ANYTHING (:828 logs a warning and loops).
+      The navigator keeps driving the robot toward the OLD goal for the whole
+      of the next selection compute, which is their pure-python full-grid BFS
+      and costs seconds. Our harness froze the robot for that interval.
+  (2) SPEED. The autonomous stack walks at LocalPlanner._speed = 0.55 m/s
+      (local_planner.py:67), not the 0.60 m/s the go2 bench derived from
+      teleoperated recordings.
+  (3) VOCABULARY. Class C is "locally forced under R = 6 m", never
+      "legitimate". Class N events are goal churn without displacement and are
+      PUBLISHED SEPARATELY, never silently dropped from a table.
+
+WHAT IS BEING RE-JUDGED
+=======================
+G1 of ../sim_2830_go2/rapport_go2.md: "with the Go2 profile at 15 s shipped,
+the cross-map swing behavior the maintainer described is present under stock".
+It was declared to hold on >= 2 of the 4 discriminating maps and was reported
+as holding on 3 of 4 at 4 m and 4 of 4 at 12 m. Every one of those numbers was
+produced with a frozen robot at 0.60 m/s. This job asks whether G1 survives the
+corrected instrument, and if it does, whether the remedy still helps.
+
+THE PARAMETER
+=============
+T_sel = the selection compute, in SIMULATED seconds, per decision.
+
+  T_sel = 0   the OLD arm, in full: robot frozen through the selection AND
+              through the 2 s retry wait. This is every earlier bench in this
+              workspace, bit for bit. It is kept as an arm so the fidelity
+              change is read as a difference, not swapped in silently.
+  T_sel > 0   the faithful loop. On a goal whose pursuit ended on the 15 s
+              timeout the navigator was never cancelled, so the robot keeps
+              walking to that goal for T_sel more seconds; and the goal it is
+              handed next was chosen for the pose it had when the compute
+              STARTED (selector line 794 reads odometry at the top of the
+              loop). On a goal that was REACHED, or that the planner REFUSED,
+              the robot really is standing still, so T_sel there is standstill
+              and costs simulated time only. That asymmetry is modelled.
+
+SWEEP: T_sel in {0, 5, 15} s. THIS SET IS FIXED BY THIS DECLARATION AND CANNOT
+BE CHANGED BY THE MEASUREMENT BELOW.
+
+  An isolated measurement of the real selection cost (one worker, no
+  contention, this rig, config shipped, stock, 4 m, four maps, six starts) is
+  running while this file is written and will be reported in
+  t_sel_measurement.txt whatever it says. It is an ANCHOR for reading the
+  sweep, not a gate on it: 5 and 15 bracket the order of magnitude that any
+  full-grid python BFS over these grids can have, and the value that matters to
+  the verdict is whether the behaviour is stable ACROSS the bracket.
+  Cross-check already in hand, from the recorded go2 bench's own decide_ms_mean
+  field (384-core box, 24-60 concurrent workers, so an UPPER bound): per-map
+  medians 10.2 to 16.8 s at 4 m and 10.5 to 16.1 s at 12 m on the four maps,
+  34.6 s on hk_allaround.
+
+RULE FOR STAGE B's T_sel (declared now, so it cannot be chosen after seeing a
+result): the swept faithful value CLOSEST to the measured isolated median;
+on a tie, the SMALLER one.
+
+THE PROFILE
+===========
+go2ctrl: the go2 profile of ../sim_2830_go2/go2_profile.py with ONE change,
+speed 0.60 -> 0.55 m/s, for the reason in loop_semantics.md section 4. Body
+0.31 x 0.70 m, turn 0.63 rad/s, lethal clearance 0.225 m, pivot clearance
+0.383 m, scan every 0.25 m: all unchanged. 15 s x 0.55 = 8.25 m of walk before
+the loop pulls the robot off a goal, against 9.00 m in the go2 bench.
+
+Numbers in this job are therefore NOT subtractable from the go2 bench's: two
+things changed, the speed and the loop semantics. The T_sel = 0 arm here is the
+go2 bench's semantics at the corrected speed, and it is what the faithful arms
+are compared against.
+
+WHAT RUNS
+=========
+Maps: the HK floors and nothing else.
+  DISCRIMINATING (the grid, the verdicts turn on these four):
+    hk_office, hk_park, hk_elevator, hk_entrance
+  SET ASIDE, same rule and same reason as the go2 bench: hk_allaround. Its
+    swing threshold is 35.33 m, which a 4 m explorer cannot issue consecutive
+    goals across, and its scoring configuration has never finished in any job
+    in this workspace. If wall clock permits it is run shipped-only and
+    REPORTED, never averaged into a verdict, and if it is not run that is said.
+Starts: the 6 middle starts of midstarts.choose_mid_starts (centre, mid1..mid5),
+  recomputed for the Go2 body. No start is dropped after being seen.
+Ranges: 4 m and 12 m, both, judged separately and never pooled.
+Wall cap: 900 s per run, applied identically to every arm; a capped run is
+  reported as capped and never quietly dropped.
+
+STAGE A - stock only, does G1 survive?
+  arms:    stock
+  config shipped:  T_sel in {0, 5, 15}
+  config scoring:  T_sel in {0, 15} only.
+    PRE-DECLARED EXPECTATION, to be tested rather than assumed: in `scoring`
+    the goal timeout is not applied, so no goal ever ends on a timeout, so no
+    goal is ever still live during a selection, so T_sel is pure standstill and
+    the two runs should be IDENTICAL in space (same path, same goals, same
+    coverage) and differ only in simulated time and, through it, in the
+    failed-goal filter's 60 s clock. If they are not identical, that is a
+    finding about the harness and it is reported as one.
+  grid:    4 maps x 6 starts x (3 shipped + 2 scoring) x 2 ranges = 240 runs
+
+STAGE B - only if Stage A shows real crossings at the faithful settings.
+  arms:    stock vs stock+M4.3, at the Stage-B T_sel chosen by the rule above
+  configs: shipped and scoring, both ranges, same 6 starts, paired
+  grid:    4 maps x 6 starts x 2 arms x 2 configs x 2 ranges = 192 runs
+  If Stage A's faithful arms show zero real crossings on 3 or more of the 4
+  maps at both ranges, Stage B DOES NOT RUN and the report says so: there would
+  be nothing for a remedy to remove.
+
+METRICS - the same as every bench in this workspace, re-derived, never re-defined
+================================================================================
+Everything is recomputed from the RAW published goal coordinates of each run by
+a second independent pass (analyse_cand2.load), and its disagreement with the
+field the bench wrote while running is printed. The zero-disagreement statement
+is a deliverable.
+
+  swing threshold, per map:  half the bounding-box diagonal of the BODY-PASSABLE
+      floor of that map (midstarts.body_bbox_diagonal_m / 2). Per map, never
+      pooled, never averaged.
+  raw swing:      consecutive published goals further apart than that threshold.
+  class N:        a raw swing whose new goal is within R_NEAR = 6.0 m of the
+      robot AT THE MOMENT THE GOAL TOOK EFFECT. Vocabulary, fixed here:
+      class N is GOAL CHURN WITHOUT DISPLACEMENT - the goal sequence jumped
+      across the floor and the robot did not have to move to serve it.
+      N EVENTS ARE PUBLISHED AS THEIR OWN COLUMN IN EVERY TABLE. They are never
+      "dropped", and the word "dropped" is not used about them.
+  REAL crossing:  raw swing minus class N. The primary metric.
+  round trip:     a real crossing followed within 3 jumps by one whose direction
+      opposes it.
+  budgets:        median path (m) and median coverage (percentage POINTS of the
+      body-visible ceiling from that start), per map, per config.
+
+  A NOTE ON "from where". With a non-zero T_sel the pose the selector saw and
+  the pose the robot had when the goal took effect are different. The class-N
+  test uses the pose when the goal TOOK EFFECT, because the question class N
+  asks is whether the robot had to travel to serve the goal, and it starts
+  serving it at the publish. Both poses are recorded per goal (from_x/from_y
+  and dec_x/dec_y), they are equal at T_sel = 0, and their difference is
+  reported per run as sel_drift_median_m.
+
+  CLASS C VOCABULARY, fixed here and used in every sentence of the report: a
+  crossing that survives the N filter and has no available candidate within
+  R = 6 m is "LOCALLY FORCED UNDER R = 6 m". It is NOT called legitimate,
+  correct, or justified. R = 6 m is a choice of radius, not a fact about the
+  floor, and the phrase carries the radius with it.
+
+READING RULES
+=============
+G1 (restated for this job), per range, per T_sel:
+    "under stock, config shipped, real crossings > 0 on at least 2 of the 4
+     discriminating maps."
+  Reported per map and per T_sel. If G1 fails at T_sel = 5 and 15 while holding
+  at T_sel = 0, THAT IS THE HEADLINE OF THIS JOB and everything else is moot;
+  it goes first in the report, before any other number.
+
+Stage B, per map, both configs must hold:
+    stock+M4.3 has strictly FEWER real crossings than stock, and no more round
+    trips, with median path within +5 % and median coverage within -5 points.
+  A map where neither arm produces a crossing is NO EVENTS, not a pass.
+  Per-map failures are printed with the reason (metric, path budget, coverage
+  budget) and no map is averaged away.
+
+WHAT WOULD MAKE ME WRONG
+========================
+  - If T_sel = 15 shows MORE real crossings than T_sel = 0, the fidelity fix
+    strengthens G1 rather than threatening it, and the audit's finding, while
+    correct about the code, does not change the dossier's conclusion. That is a
+    reportable outcome and it is not a failure of this job.
+  - If crossings collapse to zero at both faithful settings, G1 as published
+    does not survive and the go2 report's headline must be withdrawn.
+  - If the two faithful settings disagree with each other (5 holds, 15 fails or
+    the reverse), the behaviour is a function of a parameter we cannot measure
+    on their hardware, and the honest verdict is "not decidable by this bench",
+    stated as such rather than resolved by picking the friendlier value.
+
+INTEGRITY
+=========
+  - Nothing is committed, pushed or posted. No git command is run.
+  - The two vendored upstream files pr2830/selector_base.py and
+    pr2830/selector_head.py are inputs only and are md5-checked at the end
+    (expected e77c328643c959a49077115e8a341f2c and
+    1ccc0c69fe88a72e402565feca988d26).
+  - Design (loop_semantics.md, the harness diff, this file) is done locally.
+    Run waves may execute on the rented box; results are copied back into this
+    workspace as they land, and the local rig is the fallback.
+  - RAN BEFORE THIS FILE, and named here: the isolated T_sel measurement (still
+    running as this is written), one 2-run pilot on hk_elevator that was killed
+    after ~7 minutes with its output never written and never read, and the
+    reproduction check described next.
+  - REPRODUCTION CHECK, run before any Stage A run: the modified harness at
+    profile go2 and T_sel = 0 must reproduce recorded go2-bench runs exactly,
+    goal coordinate by goal coordinate. If it does not, the plumbing changed
+    something at T_sel = 0 and this job stops until it is understood.
+  - Nothing outside this grid is run. No second speed, no second radius, no
+    re-run to chase a number.
