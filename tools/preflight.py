@@ -184,10 +184,27 @@ def check_usb_devices() -> None:
         # it TRANSMITS - press the button UNDER the pad (re-pair), then move a
         # stick. Home alone does nothing; blue blinking does not block.
         import os as _os
+        import subprocess as _sp
         js = _os.path.exists("/dev/input/js0")
         if os.environ.get("GAMEPAD", "0") == "1":
-            verdict(js, "manette (js0)", "presente - si muette: bouton SOUS le pad puis bouger un stick"
-                    if js else "ABSENTE - vol manette impossible")
+            if js:
+                verdict(True, "manette (js0)",
+                        "presente - si muette: bouton SOUS le pad puis bouger un stick")
+            else:
+                # The ShanWan receiver (2563:0526) is GLUED into the in-body hub
+                # (metrox 30/08: shock-proofed, inaccessible without teardown).
+                # So "absent from lsusb" never means "not plugged in" - it means
+                # the Jetson's USB layer wedged and only a reboot brings it back
+                # (lived 30/08 17:46: receiver invisible, reboot, back in
+                # seconds). Visible-but-no-js0 points at the joydev driver
+                # instead.
+                _seen = "2563:0526" in _sp.run(["lsusb"], capture_output=True,
+                                               text=True).stdout
+                verdict(False, "manette (js0)",
+                        "recepteur VISIBLE (2563:0526) mais pas de js0 - driver joydev: "
+                        "replug logiciel ou reboot du Jetson" if _seen else
+                        "recepteur INVISIBLE alors qu'il est fixe a demeure - couche USB "
+                        "gelee: sudo reboot du Jetson puis relancer (vecu 30/08)")
         else:
             print(f"  {'OK ' if js else '.. '}manette (js0) - {'presente' if js else 'absente (pas requise)'}")
     except Exception as exc:  # noqa: BLE001
