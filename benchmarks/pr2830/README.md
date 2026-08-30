@@ -25,12 +25,18 @@ And exploration from the middle of a floor does finish it, once the selector's i
 
 Raw run JSONs are versioned in each volume (fidelity/raw, resid, go2) and the extracted occupancy maps in [maps/](maps/), so every table can be recomputed from this repo alone.
 
-Verdict of the dossier: about half of stock's cross-map crossings in Go2 conditions
-(at a 6 m vicinity; the split is radius-dependent) are fixable errors. One
-signed-direction change removes the whole class-A share of them (24 to 0; all fixable
-classes together 30 to 5), and the rest is locally forced: no available alternative
-within the vicinity at that moment. The verdict is unchanged under faithful loop
-timing at the 0.55 m/s planner cap. Full numbers and failures in each volume.
+Verdict of the dossier, in its final honest form: **the evaluation world dominates
+the outcome.** The same selectors ping-pong everywhere on a raw accumulated map and
+barely at all on the dataset's own two-pass global map ([lesh_demo/](lesh_demo/), the
+forced quartet: all four arms reach ~97 % coverage from the exact building centre,
+0 to 2 crossings each). Simulation verdicts about exploration *strategy* are therefore
+fragile; a real robot decides. What survives across worlds: the info-gain self-stop
+quits floors early on slow or short-range setups; PR #2830 has a start-in-inflation
+edge case (A* returns None from a start 2 cells inside the inflation ring; minimal
+repro in lesh_demo/) and performs well once the start is cleared; the signed momentum
+term is mixed and map-dependent (it helped on some worlds, added path on the clean
+one). Earlier per-volume verdicts stand as historical record of that path, each
+corrected in place where wrong.
 
 ## The original comment posted on PR #2830
 
