@@ -210,3 +210,28 @@
   tête en bas. À confirmer à la frame de contrôle après montage définitif.
 - Le flux vidéo de manip vit maintenant en service systemd `realsense-live`
   (port 8089, Restart=always) — plus de dépendance aux sessions ssh.
+
+## Vol de la victoire — 23h00→23h16, le nouveau corps vole (verdict metrox)
+
+- **Le plus long vol autonome à ce jour : 933 s, 96,4 m parcourus**, emprise
+  7,7 × 5,5 m (la chambre atteinte pour la première fois, le bureau, la baie).
+  Config : caméra peintre basse (32 cm, calibrée 62fa581) + lidar ancre,
+  fast-block OFF (une variable à la fois).
+- Verdict metrox : « niveau Roomba d'il y a 20 ans — il se cogne, il mappe
+  correctement. La map est MIEUX. La navigation est moins bien. » La carte ne
+  tourne plus (ère lidar-écrivain) : les murs « se courbent un peu mais
+  reviennent, c'est assez droit ». 11 chocs pare-chocs, il s'auto-récupère
+  sauf le pied du backdrop (sous le bumper, patinage, aide manuelle).
+- **USB : tenu en roulant.** camera_floor 2269 msgs, médiane 400 ms, 4 trous
+  > 2 s sur 15,5 min (max 3,6 s). Carte finale 14,9 m² obstacles, 46,6 m² libres.
+- Chocs notables à rejouer sur la carte : ta chaise (mobile, avec pilote),
+  le meuble télé de la chambre (« jamais cogné là avant — trop loin »),
+  le pied du backdrop (peint ou pas ?).
+- **Prochains vols, dans l'ordre (une variable par vol)** :
+  (1) FAST-BLOCK ON — « les détections ne sont pas assez puissantes » = pile
+  le procès de OCCUPIED_AT=2 ; le trio attend depuis a306d9e.
+  (2) Le « coup de pouce du lidar » (metrox 23h16, forme à choisir) — candidat
+  simple : VECTOR_LIDAR_TO_MAP=1, la couche lidar réécrit murs/meubles à
+  37 cm PAR-DESSUS la couche caméra (le mode deux-couches de la doctrine).
+- Cockpit caméra : lag ~28 s côté navigateur (l'affichage s'empile, pas le
+  robot) — à traiter (même famille que le viewer nice+12 du 30/08 20h45).
