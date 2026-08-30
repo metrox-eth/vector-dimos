@@ -75,7 +75,7 @@ figure and inexplorable in replay whatever the strategy.
 
 ## GIF clock
 
-All four GIFs share ONE simulated-time scale, 1 frame = 10 s simulated, same
+All four GIFs share ONE simulated-time scale, 1 frame = 9 s simulated (a 10 s target rounded so the longest 1408 s run fits in 157 frames), same
 fps; a run that ends early holds its last frame. Pose continuity verified in
 the raw data before choosing the cadence: max consecutive-pose step 0.050 m =
 exactly one cell (v_max 0.550 m/s = the cap); apparent teleports at 20 s/frame

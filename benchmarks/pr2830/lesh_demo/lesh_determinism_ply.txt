@@ -1,0 +1,23 @@
+THE START (on the RAW grid)
+
+  extracted map extent   x [-18.48, 8.62] m, y [-15.72, 21.17] m
+  geometric centre       (-4.925, 2.725) m
+  the centre cell itself free=True, observed by the recording=True
+  START (nearest body-passable cell) (-5.150, 2.800) m, 0.237 m from the centre
+  it lands in a body-passable component of 293.8 m2 - rank 1 of 138 (largest is 293.8 m2)
+  for comparison, bench start centre  (  -4.20,   3.90)   1.38 m from the centre
+  for comparison, bench start mid1    (   3.05,  16.80)  16.18 m from the centre
+  for comparison, bench start mid2    ( -10.95,  16.30)  14.85 m from the centre
+  for comparison, bench start mid3    (  -2.95,  11.80)   9.29 m from the centre
+  for comparison, bench start mid4    (   2.55,   0.30)   7.86 m from the centre
+  for comparison, bench start mid5    (   3.05,   9.30)  10.34 m from the centre
+
+DETERMINISM: each cell executed twice, in separate processes
+  compared: every summary field except decide_ms_mean (wall clock, not a result), plus every goal coordinate, every pose, the whole coverage curve and the lidar-revolution count.
+
+  identical  stock/shipped              9 goals,  64.40 m, cov  42.23 %, end: explorer stopped itself: no information gain
+  identical  pr2830/shipped            14 goals, 101.53 m, cov  49.97 %, end: explorer stopped itself: no information gain
+  identical  stock+M4.3/complete       49 goals, 292.47 m, cov  97.56 %, end: complete: no frontier remains
+  identical  pr2830+M4.3/complete      49 goals, 261.08 m, cov  97.34 %, end: complete: no frontier remains
+
+  4 cells, 0 with any difference (PASS)
