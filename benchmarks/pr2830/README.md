@@ -4,40 +4,6 @@ Offline benchmarks of dimOS frontier exploration on recorded maps. All runs use 
 real upstream selector files, unmodified; every volume pre-declares its hypotheses
 before running and re-derives its headline counts from raw goal coordinates.
 
-The finished piece first: **the forced quartet** — the maintainer's literal test
-(spawn at the exact geometric centre of the building, 4 m lidar, faithful loop
-timing) on the dataset's own two-pass global map, every arm forced to explore to
-completion. All four reach ~97 % coverage with 0 to 2 cross-map crossings:
-
-![the forced quartet](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/lesh_demo/lesh_centre_ply_bigoffice_ply_4m.png)
-
-The animated runs (common clock, 1 frame = 9 simulated seconds) are in
-[lesh_demo/](lesh_demo/), one GIF per arm:
-
-![stock, complete stop](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/lesh_demo/lesh_ply_stock_complete.gif)
-
-The volumes are chronological, and the story matters as much as any single result:
-each volume's verdict was honest at the time and was then revised by a better
-instrument. **Every volume before `lesh_demo` ran on worlds built by raw lidar
-accumulation** (transients baked in forever) — the final volume showed that this
-choice of world, not the selectors, produced most of the ping-pong being measured.
-Read the per-row verdicts as history, not as current claims; the final verdict
-below supersedes them.
-
-| # | volume | world | question | verdict at the time (superseded where struck) |
-|---|---|---|---|---|
-| 1 | this file, below | accumulated | does PR #2830's scoring reproduce its claims? | dispersion yes, travel on large maps only |
-| 2 | [midstart/](midstart/) | accumulated | middle spawns, low lidar (maintainer's setup) | swings appear under stock; #2830 does not reduce them |
-| 3 | [fix/](fix/) | accumulated | why does each swing happen; does finish-your-branch help? | diagnosis A/B/C; fixed radius helps one floor |
-| 4 | [fleet/](fleet/) | accumulated (6 new floors) | does that policy generalize? | no; the radius was a one-floor artefact |
-| 5 | [cand2/](cand2/) | accumulated | signed direction term, lazy TSP, upstream 15 s timeout | direction term strong where measurable; timeout dominates |
-| 6 | [go2/](go2/) | accumulated | re-judged with the Go2's own body and measured speed | ~~the swing is real in Go2 conditions~~ (later shown world-dependent) |
-| 7 | [resid/](resid/) | accumulated | remaining crossings: fixable or locally forced? | ~~fixable class goes to zero under the remedy~~ (radius-dependent split; see correction_sensibilite.md) |
-| 8 | [fidelity/](fidelity/) | accumulated | external audit: does anything survive a faithful loop? | swing survives on that world; 47.5 % of path walked during selection computes |
-| 9 | [lesh_demo/](lesh_demo/) | **official two-pass map** | the maintainer's literal test, all arms forced to completion | **~97 % everywhere, 0-2 crossings, no champion — the world was the variable** |
-
-Raw run JSONs are versioned in each volume (fidelity/raw, resid, go2) and the extracted occupancy maps in [maps/](maps/), so every table can be recomputed from this repo alone.
-
 Verdict of the dossier, in its final honest form: **the evaluation world dominates
 the outcome.** The same selectors ping-pong everywhere on a raw accumulated map and
 barely at all on the dataset's own two-pass global map ([lesh_demo/](lesh_demo/), the
@@ -50,6 +16,39 @@ repro in lesh_demo/) and performs well once the start is cleared; the signed mom
 term is mixed and map-dependent (it helped on some worlds, added path on the clean
 one). Earlier per-volume verdicts stand as historical record of that path, each
 corrected in place where wrong.
+
+**The forced quartet** — the maintainer's literal test (spawn at the exact
+geometric centre, 4 m lidar, faithful loop timing) on the dataset's own two-pass
+global map, every arm forced to explore to completion. All four reach ~97 %
+coverage with 0 to 2 cross-map crossings:
+
+![the forced quartet](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/lesh_demo/lesh_centre_ply_bigoffice_ply_4m.png)
+
+Animated runs (common clock, 1 frame = 9 simulated seconds) in [lesh_demo/](lesh_demo/):
+
+![stock, complete stop](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/lesh_demo/lesh_ply_stock_complete.gif)
+
+## The path, newest first
+
+Each volume's verdict was honest at the time and was then revised by a better
+instrument. **Every volume before `lesh_demo` ran on worlds built by raw lidar
+accumulation** (transients baked in forever) — the final volume showed that this
+choice of world, not the selectors, produced most of the ping-pong being measured.
+Read per-row verdicts as history; the verdict above supersedes them.
+
+| volume | world | question | verdict at the time (struck where superseded) |
+|---|---|---|---|
+| [lesh_demo/](lesh_demo/) | **official two-pass map** | the maintainer's literal test, all arms forced to completion | **~97 % everywhere, 0-2 crossings, no champion — the world was the variable** |
+| [fidelity/](fidelity/) | accumulated | external audit: does anything survive a faithful loop? | swing survives on that world; 47.5 % of path walked during selection computes |
+| [resid/](resid/) | accumulated | remaining crossings: fixable or locally forced? | ~~fixable class goes to zero under the remedy~~ (radius-dependent split; see correction_sensibilite.md) |
+| [go2/](go2/) | accumulated | re-judged with the Go2's own body and measured speed | ~~the swing is real in Go2 conditions~~ (later shown world-dependent) |
+| [cand2/](cand2/) | accumulated | signed direction term, lazy TSP, upstream 15 s timeout | direction term strong where measurable; timeout dominates |
+| [fleet/](fleet/) | accumulated (6 new floors) | does the fixed-radius policy generalize? | no; the radius was a one-floor artefact |
+| [fix/](fix/) | accumulated | why does each swing happen; does finish-your-branch help? | diagnosis A/B/C; fixed radius helps one floor |
+| [midstart/](midstart/) | accumulated | middle spawns, low lidar (maintainer's setup) | swings appear under stock; #2830 does not reduce them |
+| this file, below | accumulated | does PR #2830's scoring reproduce its claims? | dispersion yes, travel on large maps only |
+
+Raw run JSONs are versioned in each volume (fidelity/raw, resid, go2, lesh_demo) and the extracted occupancy maps in [maps/](maps/), so every table can be recomputed from this repo alone.
 
 ## The original comment posted on PR #2830
 
