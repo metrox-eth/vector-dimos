@@ -13,6 +13,17 @@ through Python entry points and composes our blueprints with its own.
 
 ## Status — work in progress
 
+![VECTOR's longest autonomous run to date: 15 min 33 s, 96.4 m, the whole flat mapped by the depth camera. Orange: obstacles. The trajectory runs cyan (start) to magenta (end).](docs/images/map_20260830.png)
+
+**Latest (30 Aug 2026):** the mast is gone — the D455F now sits at body height
+on the front face (32 cm up, 6.3° down, calibrated by fitting the floor plane
+and proven by a roundtrip: the floor must come back at z = 0). Perception runs
+a two-layer doctrine: the 2D lidar anchors the pose and keeps the clock
+(kiss-icp), the depth camera paints the obstacles. In that mode the rover flew
+its longest autonomous run yet — 15 min 33 s, 96.4 m, every room of the flat,
+and the map stays straight (no doubling, no global rotation). One run, still
+an outlier to confirm.
+
 ![The flat, mapped by VECTOR: lidar + depth camera fused into a height-coloured voxel grid, built on the Jetson's GPU, watched live in Rerun](docs/images/voxel_map.jpg)
 
 What runs today, all of it on a Jetson Orin Nano 8GB unless said otherwise:
@@ -48,11 +59,14 @@ The launch sequence refuses to fly until all three are actually on screen:
 
 ![The VECTOR cockpit in flight: the organ panel (battery, lidar, odometry, IMU, camera, costmap, wheels, bumpers, per-core CPU, unified memory), the dimOS camera cockpit, and the live costmap in Rerun](docs/images/cockpit.jpg)
 
-Where it stops today: the anchored lap — driving the flat against a saved
-reference map and confirming the map comes out as one room, not two — is wired
-end to end and verified on the bus, but the validation lap itself hasn't been
-driven yet. Next after that: the gyro prior recalibration on the new mast, and
-a JetPack 7.2 / CUDA 13 rebuild of the wheel.
+Where it stops today: obstacle AVOIDANCE lags obstacle MAPPING. The map knows,
+the block comes too late — the rover still bumps (11 bumper hits on the record
+run) and recovers on its bumpers like an early Roomba. The measured latency
+chain (two viewpoints required per obstacle cell, map published every 5
+revolutions, replanning, inertia) is wired for trial as `VECTOR_FAST_BLOCK=1`;
+after that, the open question is the right lidar/depth-camera mix in the
+obstacle layer. Also on the bench: the anchored-lap validation drive, and a
+JetPack 7.2 / CUDA 13 rebuild of the wheel.
 
 ## How it plugs in
 
