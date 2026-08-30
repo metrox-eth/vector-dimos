@@ -888,9 +888,19 @@ class LidarOdometry(Module):
             position=Vector3(self._origin[0], self._origin[1], 0.0), orientation=_yaw_quat(self._origin[2])))
         if not self._searching:
             cam = self._pending_cam_pts
-            if cam is not None and time.monotonic() - cam[1] < 0.5:
-                world_pts = np.vstack([world_pts, cam[0]])
-            self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
+            # VECTOR_LIDAR_TO_MAP=0 (metrox doctrine, said for the ELEVENTH
+            # time on 30/08 and wired the same night - work item (a) of the
+            # 27/08 ORDRES entry): the 2D lidar's job is to ANCHOR (kiss-icp
+            # pose, untouched above), not to draw the world. The map-bound
+            # cloud then carries ONLY the RealSense points - the camera
+            # navigates, the lidar calibrates, "comme a la periode de Sam".
+            if os.environ.get("VECTOR_LIDAR_TO_MAP", "1").strip().lower() in ("0", "false", "off", "no"):
+                if cam is not None and time.monotonic() - cam[1] < 0.5:
+                    self.lidar.publish(PointCloud2.from_numpy(cam[0].astype(np.float32), frame_id=self.world_frame, timestamp=ts))
+            else:
+                if cam is not None and time.monotonic() - cam[1] < 0.5:
+                    world_pts = np.vstack([world_pts, cam[0]])
+                self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
         self.tf.publish(TFMessage(
             Transform(translation=Vector3(x, y, 0.0), rotation=q, frame_id=self.world_frame, child_frame_id=self.base_frame, ts=ts),
             Transform(translation=Vector3(0.0, 0.0, LIDAR_HEIGHT_M), rotation=Quaternion(0, 0, 0, 1),
