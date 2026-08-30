@@ -135,3 +135,13 @@
   bon étage existait déjà (`LIDAR_WRITES_OBSTACLES` dans costmap2d, prévu
   depuis le 27/08, jamais basculé). La règle du producteur a attrapé l'erreur
   en 10 min.
+- **Requalification finale du choc-sofa (metrox, 20h56)** : le sofa EST écrit
+  (le gros L rouge en haut à gauche de la carte) — le rover le percute parce
+  que le voxel devient « obstacle » TROP TARD par rapport à l'approche. La
+  chaîne du retard, additive : 2 impacts exigés depuis des points de vue
+  écartés de 10 cm (`OCCUPIED_AT=2`, `NEW_VIEWPOINT_M=0.10`, ~0,5 s) +
+  publication tous les 5 tours (`PUBLISH_EVERY=5`, ~0,6 s) + replanification +
+  inertie 1,5 m au lâcher. Total 1-3 s ≈ 20-60 cm à vitesse de croisière.
+  **Quatre boutons, une ligne chacun, un vol chacun** : OCCUPIED_AT 2→1 pour
+  les impacts caméra ; NEW_VIEWPOINT 0.10→0.05 ; PUBLISH_EVERY 5→1-2 en
+  autonomie ; rampe de décélération ZLAC (l'inertie).
