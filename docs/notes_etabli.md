@@ -149,3 +149,33 @@
   défauts notés (dead band manquante, collision de commandes au ré-engagement,
   inertie 1,5 m). Faire une PASSE complète et comparer à l'ère Sam : a-t-on
   dérivé, ou y a-t-il simplement à améliorer.
+
+## Vol de 21h03 — caméra seule + fast-block : RATÉ, long patinage (autopsie 21h20)
+
+- Verdict metrox : « Le dernier run était complètement raté, long patinage. »
+  E-stop manuel. La base (`explore.db`, 321 s) confirme : blocage t+124 s,
+  pose figée (+1.02,-1.70) pendant 197 s jusqu'à la mort de la pile.
+- **La RealSense a été parfaite tout le vol** : 804 camera_floor, médiane
+  400 ms, zéro trou > 2 s. La bataille du clignotement tient.
+- **La chaise de bureau n'a JAMAIS été peinte** : au blocage, cône 10-60 cm
+  devant = 0 occupée / 70 libres ; après 3 min le nez dessus, carte finale =
+  3 cellules. PAS un problème de délai — un TROU DE PERCEPTION courte portée :
+  approche en pivot sur place (15 cm dans les 10 dernières s), la chaise est
+  entrée dans la zone aveugle de profondeur (D455 mini ~40-60 cm) sans avoir
+  été peinte de loin ; pieds bas et fins sous le pare-chocs ET sous la bande
+  de sol convertie en obstacles.
+- **Fast-block : verdict REPORTÉ** — jamais rencontré d'obstacle peint à
+  bloquer. Pas d'explosion de fantômes (5,9 m² d'obstacles carte finale).
+  À retester sur un vol à DEUX couches.
+- **Ce que le raté prouve** : caméra seule = test d'isolation, pas un mode de
+  prod. La colonne de chaise, le lidar la voit à 37 cm de haut à toute
+  distance — exactement le trou que la couche lidar bouche. Doctrine deux
+  couches renforcée.
+- **Mystère e-stop (metrox, 21h07)** : patinage stoppé net mais moteurs
+  restés RAIDES après le bouton physique. Un moteur sans courant est mou →
+  signature d'un « quick stop » ZLAC (bouton sur l'entrée e-stop du drive,
+  qui reste alimenté et enabled), pas d'un coupe-circuit. Côté logiciel :
+  AUCUN paramètre ZLAC changé (seul registre jamais écrit : watchdog de comm
+  0x2000=1000 ms à l'enable, commit a5711f3 du 22/08). Vérification câblage
+  bouton en main, domaine metrox. Possible dérive pendant le rebuild des
+  3 jours (bus HAT → dongle USB-RS485, 3ca55a4).
