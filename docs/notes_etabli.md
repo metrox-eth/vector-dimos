@@ -115,3 +115,23 @@
   « comme à la période de Sam ». C'est le work-item (a) de sa doctrine du
   27/08 (ORDRES.md), resté inexécuté depuis — l'interrupteur était censé être
   câblé « au prochain vol ».
+
+## 30/08/2026 20h52 — LA DOCTRINE VALIDÉE EN VOL (RealSense-only v1)
+
+- **Verdict metrox, en direct** : « il explore, il voit les obstacles. Il a vu
+  les pieds de la table. Il détecte beaucoup mieux, beaucoup plus loin, il est
+  beaucoup plus précis dans ses manœuvres. Il descend la rampe magnifiquement
+  bien. » `VECTOR_LIDAR_TO_MAP=0` : la caméra dessine le monde, le lidar cale
+  la pose. La doctrine dite onze fois, validée au premier vol propre.
+- Fin du run : porte des chiottes oubliée ouverte — il a fini AUX CHIOTTES.
+  « Une belle fin. »
+- **Réserves à régler (boutons nommés)** : (1) le sofa toujours invisible —
+  mesurer UNE FOIS ce que la profondeur retourne face au sofa (tissu qui
+  absorbe l'IR ? géométrie vs bande de hauteur ?) ; (2) « un petit peu trop de
+  temps pour qu'un obstacle bloque » = `OCCUPIED_AT=2` + `NEW_VIEWPOINT_M=0.10`
+  — baisser = blocage plus vif, plus de fantômes ; réglage fin à un vol.
+- Leçon de câblage du soir : le premier interrupteur était au MAUVAIS étage
+  (filtre du nuage dans lidar_odometry → pipeline affamé, carte morte) ; le
+  bon étage existait déjà (`LIDAR_WRITES_OBSTACLES` dans costmap2d, prévu
+  depuis le 27/08, jamais basculé). La règle du producteur a attrapé l'erreur
+  en 10 min.
