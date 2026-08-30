@@ -17,7 +17,7 @@ term is mixed and map-dependent (it helped on some worlds, added path on the cle
 one). Earlier per-volume verdicts stand as historical record of that path, each
 corrected in place where wrong.
 
-**The forced quartet** — the maintainer's literal test (spawn at the exact
+**The forced quartet**, the maintainer's literal test (spawn at the exact
 geometric centre, 4 m lidar, faithful loop timing) on the dataset's own two-pass
 global map, every arm forced to explore to completion. All four reach ~97 %
 coverage with 0 to 2 cross-map crossings:
@@ -32,13 +32,13 @@ Animated runs (common clock, 1 frame = 9 simulated seconds) in [lesh_demo/](lesh
 
 Each volume's verdict was honest at the time and was then revised by a better
 instrument. **Every volume before `lesh_demo` ran on worlds built by raw lidar
-accumulation** (transients baked in forever) — the final volume showed that this
+accumulation** (transients baked in forever), the final volume showed that this
 choice of world, not the selectors, produced most of the ping-pong being measured.
 Read per-row verdicts as history; the verdict above supersedes them.
 
 | volume | world | question | verdict at the time (struck where superseded) |
 |---|---|---|---|
-| [lesh_demo/](lesh_demo/) | **official two-pass map** | the maintainer's literal test, all arms forced to completion | **~97 % everywhere, 0-2 crossings, no champion — the world was the variable** |
+| [lesh_demo/](lesh_demo/) | **official two-pass map** | the maintainer's literal test, all arms forced to completion | **~97 % everywhere, 0-2 crossings, no champion, the world was the variable** |
 | [fidelity/](fidelity/) | accumulated | external audit: does anything survive a faithful loop? | swing survives on that world; 47.5 % of path walked during selection computes |
 | [resid/](resid/) | accumulated | remaining crossings: fixable or locally forced? | ~~fixable class goes to zero under the remedy~~ (radius-dependent split; see correction_sensibilite.md) |
 | [go2/](go2/) | accumulated | re-judged with the Go2's own body and measured speed | ~~the swing is real in Go2 conditions~~ (later shown world-dependent) |
