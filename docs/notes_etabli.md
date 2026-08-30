@@ -73,3 +73,22 @@
   même sous MAXN. Prochains discriminants : un vol intérieur MAXN avec
   VECTOR_CAM_IMU=0 (l'IMU en vol reste suspecte), et/ou prioriser le worker
   caméra pendant les pics.
+
+## 30/08/2026 20h30 — verdict de fin de journée (metrox) + le découpage prouvé
+
+- **Bataille gagnée : la RealSense est revenue** — stable tout le vol, plus de
+  clignotement (la garde 8°/s retirée, `01c0554`). **La guerre, non** : le
+  comportement d'exploration est inchangé — « on a vraiment l'impression que
+  la RealSense ne le renseigne pas sur les obstacles » (metrox).
+- **L'autopsie choc-par-choc du dernier run le prouve et découpe en 2 familles**
+  (carte fraîche 0,1-0,5 s à chaque choc — pas un problème de retard) :
+  choc 1 : 0 cellule occupée devant = l'obstacle JAMAIS écrit (famille
+  MAPPING : règle des deux points de vue trop lente en approche ? bande de
+  hauteur qui croppe ?) ; chocs 2-3 : 13 et 3 cellules occupées devant = la
+  carte savait, il est entré quand même (famille PLANEUR : inflation vs corps
+  46 cm ? inertie 1,5 m ?).
+- **Ouverture de la prochaine session (30 min, sans robot)** : rejouer la
+  fenêtre du choc 1 depuis l'enregistrement — les points caméra de CET objet
+  sont-ils dans le nuage fusionné /lidar ? OUI → le portier costmap les refuse
+  (deux points de vue) ; NON → le crop dans lidar_odometry (bande z /
+  OBSTACLE_MAX). Une réponse binaire, un fichier.
