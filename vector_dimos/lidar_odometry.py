@@ -77,12 +77,16 @@ logger = setup_logger()
 
 PLANE_THICKNESS_M = 0.05
 LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (measured; centred in width, 3 cm behind the length centre)
-# D455F on the mast at the front bumper: 0.30 m ahead of the lidar (rover 54 cm
-# long, lidar 3 cm behind its centre), 0.80 m up (floor reads 0.80 m below the
-# optical axis, flat with range; depth scale checked against the lidar), level. Optical frame x right,
-# y down, z forward -> base: X = z, Y = -x, Z = -y.
-CAMERA_XYZ_BASE = (-0.20, 0.0, 0.56)  # camera on the REAR mast: 20 cm behind the lidar axis (tape-measured), 0.56 m up, floor-plane fit; sees the floor from ~0.95 m ahead, its own body not at all
-CAMERA_PITCH_RAD = math.radians(1.1)  # looks 1.1 deg DOWN (floor fit 24/08); roll -0.1 ignored
+# D455F remounted LOW on the front face (mast removed 30/08; blue-foam jig
+# 22h48 - PROVISIONAL, not screwed: recalibrate when it changes): 14 cm AHEAD
+# of the lidar axis (tape), UPRIGHT, 32 cm up (plane fit said 30; +2 cm centres the roundtrip floor at 0), 6.3 deg down (floor-plane fit
+# 22h49, 9217 inliers, floor first visible 43 cm from the lens). Optical frame
+# x right, y down, z forward -> base: X = z, Y = -x, Z = -y.
+CAMERA_XYZ_BASE = (0.14, 0.0, 0.32)
+CAMERA_PITCH_RAD = math.radians(6.3)
+CAMERA_ROLL180 = False         # upright again (the foam jig); the flip machinery
+                               # stays wired for the day a mount inverts it anew,
+                               # and the gyro yaw axis follows it (see gyro_axis).
 DEPTH_STRIDE = 8               # 640x480 -> 80x60 samples, 5 Hz: what the map needs, not more
 DEPTH_EVERY = 2                # one depth frame in two (15 fps -> 7.5 Hz; was 3, widened 27/08 - the camera is becoming THE detector)
 DEPTH_MAX_M = 3.0               # beyond that the floor noise (1-2 % of range) leaks into the band
@@ -254,6 +258,10 @@ class LidarOdometry(Module):
         # which IMU axis carries the robot's yaw rate, with its sign. The D455F
         # motion module reports in the camera's optical frame (x right, y down,
         # z forward): a level camera looking forward gives yaw_rate = -gyro.y.
+        # Upside-down mount (CAMERA_ROLL180): the optical y axis points the
+        # other way in the world, so the sign flips with it.
+        if CAMERA_ROLL180:
+            gyro_axis = gyro_axis[1:] if gyro_axis.startswith("-") else "-" + gyro_axis
         self.gyro_axis = gyro_axis
         self.use_gyro_prior = use_gyro_prior
         self.world_frame, self.base_frame, self.lidar_frame = world_frame, base_frame, lidar_frame
@@ -401,6 +409,8 @@ class LidarOdometry(Module):
         z, us, vs = z[ok], us[ok], vs[ok]
         xo = (us - cx) * z / fx          # optical x (right)
         yo = (vs - cy) * z / fy          # optical y (down)
+        if CAMERA_ROLL180:               # mounted upside down: right is left, down is up
+            xo, yo = -xo, -yo
         # optical -> base (camera level, looking forward), then camera offset
         # optical (x right, y down, z forward) -> base (x forward, y left, z up),
         # camera pitched down by CAMERA_PITCH_RAD: forward axis = (cos, 0, -sin),

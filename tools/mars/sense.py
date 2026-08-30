@@ -17,7 +17,7 @@ import numpy as np, cv2
 from dimos.core.transport_factory import make_transport
 from dimos.msgs.sensor_msgs.Image import Image
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
-from vector_dimos.lidar_odometry import CAMERA_XYZ_BASE
+from vector_dimos.lidar_odometry import CAMERA_PITCH_RAD, CAMERA_ROLL180, CAMERA_XYZ_BASE
 
 tag = sys.argv[1] if len(sys.argv) > 1 else time.strftime("%H%M%S")
 wait_s = float(sys.argv[2]) if len(sys.argv) > 2 else 3.0
@@ -40,11 +40,11 @@ ev.wait(wait_s)
 if "color_image" in last:
     cv2.imwrite(f"/home/metrox/mars/{tag}.png", last["color_image"].to_opencv())
 cam = {"L": BLIND, "C": BLIND, "R": BLIND}; valid_pct = 0.0
-# --- camera: full 3D check. Every 4th depth pixel -> point in the ROVER frame
-# (mount = CAMERA_XYZ_BASE, taken level here: the 1.1 deg down of
-# CAMERA_PITCH_RAD is ~6 cm of height at 3 m; optical x right, y down, z
-# forward). Floor removed by geometry (z < floor_z), everything else up to the
-# mast top counts, whatever its height - every height, not a selected band.
+# --- camera: full 3D check. Every 4th depth pixel -> point in the ROVER frame,
+# the SAME optical->base math as lidar_odometry.handle_depth (roll-180 flip,
+# CAMERA_PITCH_RAD - at 5.2 deg the old "taken level" shortcut misplaced the
+# floor by 27 cm at 3 m). Floor removed by geometry (z < floor_z), everything
+# else up to the old mast top counts, whatever its height.
 CAM_X, CAM_H = CAMERA_XYZ_BASE[0], CAMERA_XYZ_BASE[2]; FLOOR_Z, TOP_Z = 0.04, 0.90; HALF_W = 0.33   # rover 54x46 cm, highest point
 if "depth_image" in last:
     K = list(last["camera_info"].K) if "camera_info" in last else [386.6, 0, 320.6, 0, 386.0, 245.0, 0, 0, 1]   # measured 2026-08-23
@@ -54,7 +54,11 @@ if "depth_image" in last:
     z = d[vs, us].astype(np.float32) / 1000.0; ok = (z > 0.15) & (z < 6.0)
     valid_pct = 100 * ok[:, us.shape[1]//3:2*us.shape[1]//3].mean()
     z, us_, vs_ = z[ok], us[ok], vs[ok]
-    X = z + CAM_X; Y = -(us_ - cx) * z / fx; Z = CAM_H - (vs_ - cy) * z / fy
+    xo = (us_ - cx) * z / fx; yo = (vs_ - cy) * z / fy
+    if CAMERA_ROLL180:
+        xo, yo = -xo, -yo
+    cp_, sp_ = np.cos(CAMERA_PITCH_RAD), np.sin(CAMERA_PITCH_RAD)
+    X = z * cp_ - yo * sp_ + CAM_X; Y = -xo; Z = CAM_H - z * sp_ - yo * cp_
     floor_z = 0.02 + 0.03 * np.clip(X - 1.0, 0.0, None)   # 2 cm near, growing with range (depth noise)
     obst = (Z > floor_z) & (Z < TOP_Z) & (X > 0.2)
     X, Y = X[obst], Y[obst]

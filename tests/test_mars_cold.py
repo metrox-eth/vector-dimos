@@ -11,7 +11,7 @@ streams (no rover, no bus). Groups:
      and the whole grid was dots - the tool accused the one stage that was fine.
   B. stage 1, 20 revolutions x 25 hits on one cell -> '#' (>= 10 per rev). The
      old view read 99 // 20 = '4'.
-  C. the guard's mount IS lidar_odometry.CAMERA_XYZ_BASE (rear mast: -0.20 m,
+  C. the guard's mount IS lidar_odometry.CAMERA_XYZ_BASE (front-face mount,
      0.56 m up), not the dead front-bumper copy (+0.30 m, 0.80 m up).
   D. a depth wall read at 2.00 m from the camera -> the guard prints C = 1.80 m
      and ahead = 1.80 m in the ROVER frame. The copy printed 2.30 m: half a
@@ -140,10 +140,18 @@ check("20 revolutions, 25 hits/rev -> '#' (>= 10), not the clamped '4'",
 
 # --- C + D. the guard's camera mount ------------------------------------------
 # Depth field: 5.00 m everywhere (so the frame is valid), a 2.00 m patch of 8
-# sampled pixels straight ahead = a wall/leg at 2.00 m FROM THE CAMERA.
-depth = np.full((480, 640), 5000, dtype=np.uint16)
-depth[296:312, 320:328] = 2000
+# sampled pixels straight ahead = a wall/leg at 2.00 m FROM THE CAMERA. The
+# patch rows are DERIVED from the mount constants so it lands mid obstacle
+# band (0.25 m high) whatever the camera's height and pitch of the day.
+import math as _m
+from vector_dimos.lidar_odometry import CAMERA_PITCH_RAD as _P, CAMERA_ROLL180 as _R
 K = [386.6, 0, 320.6, 0, 386.0, 245.0, 0, 0, 1]
+_z = 2.0
+_yo = (CAMERA_XYZ_BASE[2] - _z * _m.sin(_P) - 0.25) / _m.cos(_P)   # optical-down offset for a 0.25 m-high point
+if _R: _yo = -_yo
+_v = int(K[5] + _yo * K[4] / _z)
+depth = np.full((480, 640), 5000, dtype=np.uint16)
+depth[_v - 8:_v + 8, 320:328] = 2000
 mod, out = load("sense.py",
                 {"depth_image": Frame(depth), "camera_info": Info(K),
                  "pointcloud": Cloud([[2.5, 0.0, 0.0]])},
@@ -154,10 +162,15 @@ check("mount height = CAMERA_XYZ_BASE[2]",
       mod.CAM_H == CAMERA_XYZ_BASE[2], f"{mod.CAM_H} vs {CAMERA_XYZ_BASE[2]}")
 line = next((ln for ln in out.splitlines() if ln.startswith("guard ")), "")
 fields = dict(kv.split("=") for kv in line.replace("guard ", "").split() if "=" in kv)
-check("depth read 2.00 m -> guard C = 1.80 m in the rover frame",
-      fields.get("C") == "1.80", f"got C={fields.get('C')} in {line!r}")
-check("... so ahead = 1.80 m (the lidar sees 2.50 m)",
-      fields.get("ahead") == "1.80", f"got ahead={fields.get('ahead')} in {line!r}")
+import math as _math
+from vector_dimos.lidar_odometry import CAMERA_PITCH_RAD as _PITCH
+_expC = 2.00 * _math.cos(_PITCH) + CAMERA_XYZ_BASE[0]   # the wall on the optical axis, through the real transform
+_gotC = float(fields.get("C", "9"))
+check(f"depth read 2.00 m -> guard C ~ {_expC:.2f} m in the rover frame (+-6 cm: 3rd-nearest pixel, not the axis)",
+      abs(_gotC - _expC) <= 0.06, f"got C={fields.get('C')} in {line!r}")
+_gotA = float(fields.get("ahead", "9"))
+check(f"... so ahead ~ {_expC:.2f} m (the lidar sees 2.50 m)",
+      abs(_gotA - min(_expC + 0.06, 2.50)) <= 0.12 and _gotA < 2.50, f"got ahead={fields.get('ahead')} in {line!r}")
 
 print(f"{OK} OK, {KO} KO")
 print("TEST PASSED" if KO == 0 else "TEST FAILED")
