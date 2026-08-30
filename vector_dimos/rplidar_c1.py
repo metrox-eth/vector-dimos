@@ -71,8 +71,11 @@ LIDAR_YAW_OFFSET_DEG = 2.75
 # flip turned the whole lidar layer 180 deg from reality: camera obstacles read
 # 38.8 cm off (best fit +181.25), sonar patches 65.6 cm off (10.8 cm once
 # rotated 180), while the 23/08 pre-rebuild control sits at 5.2 cm with no flip.
-# Keep only the 2.75 velcro term. Confirm at the next drive: one forward metre
-# must move the lidar pose forward. Recalibrate with tools/mars if velcro moves.
+# Keep only the 2.75 mounting term. STALE-COMMENT WARNING (metrox 30/08): the
+# velcro era is long gone - every mount is industrial-grade and rigid now; the
+# only vibration source is the mecanum ROLLERS (12 per wheel, 27 kg rover),
+# which shake the whole body in common mode and do NOT shift the extrinsics.
+# Recalibrate with tools/mars only after a physical remount.
 
 
 def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
