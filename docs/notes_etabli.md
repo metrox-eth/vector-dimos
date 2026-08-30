@@ -196,3 +196,17 @@
   un câble arraché = arrêt (défaillance sûre). Si le comportement observé
   vient d'un câblage NO sur l'entrée e-stop du ZLAC, un câble coupé =
   PAS d'arrêt d'urgence. À vérifier avant le prochain vol armé.
+
+## Ombres unilatérales sur la depth (observation metrox, 22h15 — à creuser plus tard)
+
+- Observation (caméra en position basse, tête en bas) : côté gauche des objets
+  = zones bien définies ; côté droit = toujours une ombre noire, d'autant plus
+  grosse que l'objet est gros/proche (dos de chaise = ombre énorme).
+- Explication candidate (textbook stéréo) : occlusion — la profondeur naît de
+  l'appariement des 2 yeux écartés de 9,5 cm ; au bord d'un objet, une bande
+  de fond n'est vue que par UN œil → pas de mesure → vide unilatéral,
+  proportionnel à la proximité. Bénin pour la carte (pas de mesure = rien
+  d'écrit, pas de fantôme) ; le côté observé (droite) colle avec un montage
+  tête en bas. À confirmer à la frame de contrôle après montage définitif.
+- Le flux vidéo de manip vit maintenant en service systemd `realsense-live`
+  (port 8089, Restart=always) — plus de dépendance aux sessions ssh.
