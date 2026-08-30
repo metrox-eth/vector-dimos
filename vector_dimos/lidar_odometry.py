@@ -421,8 +421,17 @@ class LidarOdometry(Module):
         # pose at the frame's capture time (the depth handler runs 50-200 ms late;
         # at 17 deg/s that smeared the camera layer by several degrees per frame)
         fts = float(getattr(msg, "ts", 0.0) or 0.0)
-        if abs(self._yaw_rate) > math.radians(8.0) or self._searching:
-            return                         # turning or relocalizing: the pose is not trusted
+        # The 8 deg/s yaw gate is GONE (metrox doctrine, on record since 25/08
+        # rule 20 and 27/08 verbatim: the camera records ALWAYS, SLAM's job is
+        # to anchor its data on the lidar frame at capture time - never to
+        # blind the obstacle detector). Measured 30/08: the gate muted the
+        # camera 40-49 % of every flight (normal maneuvering is 12-17 deg/s)
+        # - the blink, the holes, the sofa. Anchoring is verified live:
+        # depth frames carry global_time wall-clock stamps (-19 ms skew) and
+        # _pose_at interpolates at capture time. Only relocalization still
+        # gates: while searching there is no frame to anchor to.
+        if self._searching:
+            return
         pose = self._pose_at(fts) if fts > 0 else self.pose2d
         x, y, yaw = pose
         c, s_ = math.cos(yaw), math.sin(yaw)
