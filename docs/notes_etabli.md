@@ -66,6 +66,10 @@
   chacune. L'IMU est innocentée À L'ARRÊT sous MAXN. Matrice d'état :
   arrêt 25 W = trous (max 10,3 s) ; arrêt MAXN = zéro trou ×2 ; vol 25 W
   intérieur = 9 trous ; vol MAXN avec passage plein soleil = 42 trous
-  (confondu par le soleil sur l'IR). **Case manquante : un vol MAXN en
-  intérieur, IMU ON** — propre = MAXN a guéri les trous et l'IMU est
-  innocente ; troué = refaire le même vol avec VECTOR_CAM_IMU=0.
+  (~~confondu par le soleil~~ — metrox 19h53 : le soleil était COUCHÉ à
+  19h10, théorie solaire morte). Lecture corrigée : les trous suivent la
+  CHARGE, pas la lumière — arrêt 25 W = déjà limite → trous ; arrêt MAXN =
+  marge → propre ×2 ; VOL = pics de charge (planeur+carte+mouvement) → trous
+  même sous MAXN. Prochains discriminants : un vol intérieur MAXN avec
+  VECTOR_CAM_IMU=0 (l'IMU en vol reste suspecte), et/ou prioriser le worker
+  caméra pendant les pics.
