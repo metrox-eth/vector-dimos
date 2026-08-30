@@ -35,3 +35,22 @@
   post-homme-mort qui se superpose aux nouvelles commandes.
 - Le bon moment : « c'est comme si je jouais avec une voiture télécommandée de
   27 kg » — la téléop marche, elle est amusante.
+
+## 30/08/2026 soir — le clignotement caméra DATÉ et suspecté
+
+- **Metrox avait raison depuis le début** : le clignotement RealSense est né
+  pendant les 3 jours de rebuild. Claude-mem + git ont daté le changement :
+  **24/08, commit 964a0a5 — VectorCamera fait passer l'IMU 200 Hz par le MÊME
+  pipeline que la profondeur** (le 2e pipeline dimOS plantait sur le build
+  RSUSB). Profondeur + motion entrelacées sur un pipeline RSUSB = recette
+  connue des gels librealsense de plusieurs secondes.
+- Le fix anti-flicker du 27/08 (cache 0,5 s, dd1cbb3) est toujours en place
+  mais ne couvre que le battement 10 vs 7,5 Hz — pas les VRAIS trous mesurés :
+  9 trous >2 s (max 10,3 s) au run 17h35, 42 trous (max 19 s) au run 19h05.
+  Le lidar, lui, est parfait dans les deux (zéro trou).
+- **Test à une variable, prêt à coder (~5 lignes)** : env pour sauter
+  `_start_imu` → un vol → si la caméra devient continue, coupable signé.
+  ⚠ Coût du test : sans cette IMU, plus de « prior gyro » pour kiss-icp ni
+  d'ImuSlipDetector → pose dégradée PENDANT ce vol (diagnostic, pas remède).
+- Remèdes candidats si signé : baisser la cadence IMU (`config.imu_hz`, bouton
+  existant), pipeline/thread séparé, ou sortir du build RSUSB (kernel UVC).
