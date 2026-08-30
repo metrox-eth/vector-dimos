@@ -24,6 +24,13 @@ logger = setup_logger()
 
 
 class VectorCamera(RealSenseCamera):
+    # The camera gets its OWN worker, like the lidar, the pad and the wheel
+    # odometry already do. Found 2026-08-30: it shared its process with the
+    # websocket vis server (worker at 54 % CPU), and under flight load spikes
+    # the floor layer starved for 2-19 s while the sensor itself dropped ZERO
+    # frames - the arm-era lesson (never sensors and consumers on one
+    # controller), relearned (metrox: "on refait les memes erreurs").
+    dedicated_worker = True
     _motion_sensor = None
 
     def _start_imu(self) -> None:
