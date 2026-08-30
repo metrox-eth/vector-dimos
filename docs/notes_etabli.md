@@ -92,3 +92,26 @@
   sont-ils dans le nuage fusionné /lidar ? OUI → le portier costmap les refuse
   (deux points de vue) ; NON → le crop dans lidar_odometry (bande z /
   OBSTACLE_MAX). Une réponse binaire, un fichier.
+
+## 30/08/2026 20h37 — les objets des chocs nommés par l'opérateur + son test d'architecture
+
+- **Choc 1 = pied de table ~25 mm** (à vue de nez). Plus fin qu'une cellule de
+  carte (5 cm) — la classe exacte que la règle des deux points de vue peine à
+  écrire. Le replay du choc 1 doit répondre : les points du pied sont-ils dans
+  le nuage fusionné ? refusés par le portier ?
+- **Choc 2 = LE SOFA — « aucune excuse »** : lidar le capte, la RealSense doit
+  le capter, la carte AVAIT 13 cellules occupées… et le planeur est entré.
+  Même à l'époque du sonar actif il se prenait le sofa. Famille conversion
+  carte→action, la plus grave.
+- **Un choc « contre mon pied »** : metrox l'a arrêté au pied (il lui arrivait
+  dessus) — le réflexe bump-stop « marche assez bien ». Et des chocs NON
+  comptés : il croit s'être fait rentrer dedans avant la cuisine — vérifier si
+  l'enregistrement s'arrête avant la fin réelle du run.
+- **Sa synthèse** : « tous nos capteurs fonctionnent mais ils ne sont jamais
+  convertis en action ». Le rover navigue (au lidar, pense-t-il) ; le lidar 2D
+  devrait CALER la RealSense, pas fabriquer le cadre d'obstacles.
+- **Son test à monter** : navigation SANS le lidar comme source d'obstacles —
+  lidar = ancrage SLAM seulement, la RealSense (+ son IMU) navigue seule,
+  « comme à la période de Sam ». C'est le work-item (a) de sa doctrine du
+  27/08 (ORDRES.md), resté inexécuté depuis — l'interrupteur était censé être
+  câblé « au prochain vol ».
