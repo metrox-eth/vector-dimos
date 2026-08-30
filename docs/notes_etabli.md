@@ -145,3 +145,7 @@
   **Quatre boutons, une ligne chacun, un vol chacun** : OCCUPIED_AT 2→1 pour
   les impacts caméra ; NEW_VIEWPOINT 0.10→0.05 ; PUBLISH_EVERY 5→1-2 en
   autonomie ; rampe de décélération ZLAC (l'inertie).
+- **Chantier téléop (session dédiée)** : la téléop use l'opérateur avec les
+  défauts notés (dead band manquante, collision de commandes au ré-engagement,
+  inertie 1,5 m). Faire une PASSE complète et comparer à l'ère Sam : a-t-on
+  dérivé, ou y a-t-il simplement à améliorer.
