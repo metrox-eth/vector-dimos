@@ -72,8 +72,13 @@ RESOLUTION_M = 0.05
 GRID_SPAN_M = 24.0           # world-fixed square, centred on the start pose
 HIT_CAP = 10                 # ceiling: no cell gets more certain than this
 FREE_FLOOR = -3              # floor: no cell gets more "free" than this
-OCCUPIED_AT = 2              # two hits from two places = an obstacle
-NEW_VIEWPOINT_M = 0.10       # a hit counts only if the rover moved this much since the cell's last hit
+# VECTOR_FAST_BLOCK=1 (metrox 30/08, the sofa requalified: the map WRITES the
+# obstacle but the rover receives it too late - blocking latency, not blindness).
+# The trial trio shortens the chain; the two-viewpoint doctrine stays the
+# DEFAULT (and stays bench-guarded) - the flag exists to be judged in flight.
+_FAST_BLOCK = os.environ.get("VECTOR_FAST_BLOCK", "0").strip().lower() in ("1", "true", "on", "yes")
+OCCUPIED_AT = 1 if _FAST_BLOCK else 2              # two hits from two places = an obstacle (1 in fast-block trial)
+NEW_VIEWPOINT_M = 0.05 if _FAST_BLOCK else 0.10    # a hit counts only if the rover moved this much since the cell's last hit
 LOW_HIT_PROTECT_S = 3.0      # after a camera obstacle hit, that cell's LOW layer ignores floor samples this long
 LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M)
 LIDAR_Z_TOL_M = 1e-6         # and EXACTLY means exactly: the tag survives the float32 round trip to 5 nm, while the camera's own points span 0.37 m (audit 28/08 - see lidar_returns)
@@ -83,7 +88,7 @@ LIDAR_WRITES_OBSTACLES = os.environ.get("VECTOR_LIDAR_TO_MAP", "1").strip().lowe
                                 # map (SLAM), not obstacle detection - flip to False
                                 # once the camera proves its widened coverage in flight; the lidar
                                 # then only anchors kiss-icp and the camera is THE detector
-PUBLISH_EVERY = 5            # ~2 Hz in PILOTED mode: in teleop the planner sleeps and this 2D map reads the sensors live - the only consumer fed by this rate is THE VIEWER, which drowned at 5 Hz (latency 9 -> 30 s). Full rates come back for autonomy TOGETHER with moving the bridge off-board. Earlier note: 10 Hz (2026-08-27) drowned the CONSUMERS: 230 KB
+PUBLISH_EVERY = 2 if _FAST_BLOCK else 5            # ~2 Hz in PILOTED mode: in teleop the planner sleeps and this 2D map reads the sensors live - the only consumer fed by this rate is THE VIEWER, which drowned at 5 Hz (latency 9 -> 30 s). Full rates come back for autonomy TOGETHER with moving the bridge off-board. Earlier note: 10 Hz (2026-08-27) drowned the CONSUMERS: 230 KB
                              # per grid x 10 Hz = 2.3 MB/s to decode for every subscriber, and
                              # the recorder wrote the map 5x to SD - load 5.7 -> 11 in
                              # 5 min (measurably more CPU burned than before). The map QUALITY

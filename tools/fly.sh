@@ -167,7 +167,7 @@ LAUNCH_MARK=$(ssh $ROVER 'date +%s')
 # the default dlopen reserve (~1.6 KB) cannot hold - a 4 MiB reserve gives it
 # room (256 KB was not enough inside loaded workers) (measured 2026-08-27 20:00: without it, "cannot allocate memory in static
 # TLS block").
-ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-0} ODOM_GUARDS=${ODOM_GUARDS:-0} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} EXPLORER_V2=${EXPLORER_V2:-1} VECTOR_LIDAR_TO_MAP=${VECTOR_LIDAR_TO_MAP:-1} VECTOR_CAM_IMU=${VECTOR_CAM_IMU:-1} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
+ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-0} ODOM_GUARDS=${ODOM_GUARDS:-0} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} EXPLORER_V2=${EXPLORER_V2:-1} VECTOR_LIDAR_TO_MAP=${VECTOR_LIDAR_TO_MAP:-1} VECTOR_CAM_IMU=${VECTOR_CAM_IMU:-1} VECTOR_FAST_BLOCK=${VECTOR_FAST_BLOCK:-0} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
 sleep 12
 # the run dir must POSTDATE this launch: on 2026-08-26 a failed launch over a live
 # stack passed the lidar check against the PREVIOUS run's log (false IN FLIGHT)
