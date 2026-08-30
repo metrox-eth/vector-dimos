@@ -37,7 +37,11 @@ pilotage sur une stack d'exploration encore vivante.
   franc — mesuré 30/08). Le patinage n'arrive qu'avec les hésitations du
   pilotage autonome (stop-start dans la pente) : limite de style de conduite,
   pas de mécanique.
-- Le pilotage n'écrit PAS la carte persistante : la fenêtre d'écriture est
-  fermée sans `explore_cmd` (commit bef2238) — un rapatriement ne grave rien.
+- Le pilotage ÉCRIT la carte : l'ouvre-secours 5 cm (gardé par bef2238 pour
+  les conduites sans ordre) ouvre la fenêtre dès les premiers centimètres —
+  vu à l'écran le 30/08 pendant le rapatriement. Sans gravité sur carte
+  fraîche (elle meurt avec la stack) ; question de conception OUVERTE pour un
+  vol PERSISTENT_MAP=1 : écrire en manette (cartographie manuelle) ou geler
+  (doctrine « la carte n'écrit que pendant la mission ») — metrox tranchera.
 - Ne jamais brancher/tester la manette pendant qu'une chaîne est ARMÉE
   (incident rover 27/08 : jamais de neuf dans une chaîne armée).

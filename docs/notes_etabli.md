@@ -17,3 +17,6 @@
   fraîcheur du panneau déclenchent sur des ralentissements passagers (odométrie
   à 130 ms/tour sous charge) et sur le silence par-design de la manette
   (homme-mort relâché = zéro commande). → Chantier vigie : seuils par mode.
+- **Le pilotage manette écrit la carte** (ouvre-secours 5 cm de bef2238) :
+  vu à l'écran pendant le rapatriement. Question de conception ouverte pour
+  PERSISTENT_MAP=1 : cartographie manuelle voulue, ou gel hors mission ?
