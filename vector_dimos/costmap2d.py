@@ -532,6 +532,7 @@ class VectorCostMap(Module):
     reloc_frame: In[PoseStamped]    # lidar_odometry's verdict: which frame this run lives in, and when to freeze
     explore_done: In[Bool]          # explorer2 reached "no reachable frontier left": the mission is over
     stop_explore_cmd: In[Bool]      # the same end, ASKED for (explore_ctl.py stop, the speed watchdog, the deck)
+    explore_cmd: In[Bool]           # the mission ORDER: opens the write window (the doctrine's "~1 s before departure")
     global_costmap: Out[OccupancyGrid]
 
     def __init__(self, world_frame: str = "world", **kwargs: Any) -> None:
@@ -668,6 +669,23 @@ class VectorCostMap(Module):
         crossed the process boundary - it costs one subscription."""
         if bool(getattr(msg, "data", False)):
             self._end_of_mission("exploration stopped")
+
+    async def handle_explore_cmd(self, msg: Bool) -> None:
+        """The mission ORDER opens the write window - not the first 5 cm.
+
+        The 28/08 displacement-only gate deadlocks a virgin-map flight: no
+        written cell -> no free/unknown frontier -> no goal -> no motion -> the
+        5 cm never happen (found 2026-08-30, first PERSISTENT_MAP=0 flight of
+        this gate; cold benches never drive the full loop so they missed it).
+        The doctrine itself said "nothing before ~1 s before the rover
+        physically departs" - explore_cmd IS that moment. The 5 cm departure
+        check stays as the opener for flights driven without an explore order.
+        A finished mission stays finished: `_mission_over` wins."""
+        if not bool(getattr(msg, "data", False)) or self._mission_over:
+            return
+        if self._mission_frozen:
+            self._mission_frozen = False
+            logger.info("costmap: explore_cmd received - map writing OPEN for the mission")
 
     async def handle_reloc_frame(self, msg: PoseStamped) -> None:
         """lidar_odometry publishes its frame state on every revolution:

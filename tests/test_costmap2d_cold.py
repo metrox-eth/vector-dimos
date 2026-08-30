@@ -643,6 +643,43 @@ def test_the_mission_signals_cross_the_process_boundary() -> None:
           "exactly where explore_ctl.py publishes")
 
 
+def test_explore_order_opens_the_map_before_any_motion() -> None:
+    """Found 2026-08-30, first PERSISTENT_MAP=0 flight of the 28/08 write gate:
+    displacement-only opening deadlocks a virgin map (no cell -> no frontier ->
+    no goal -> no motion -> never 5 cm). The mission ORDER (explore_cmd) is the
+    doctrine's "~1 s before departure" and must open the window by itself.
+
+    Known input -> known output: parked revolutions -> 0 cells; explore_cmd ->
+    the SAME parked revolutions write the room's wall at 2.5 m; a finished
+    mission stays finished even if a new order arrives."""
+    m = VectorCostMap()
+    m._frame = "fresh"
+    ang = np.radians(np.arange(0, 360, 2.0))
+    room = np.stack([2.5 * np.cos(ang), 2.5 * np.sin(ang)], 1)
+    for _ in range(5):
+        asyncio.run(m.handle_odom(_odom(0.0, 0.0)))
+        asyncio.run(m.handle_lidar(_cloud(_lidar_cloud(room))))
+    assert int(m._grid.seen.sum()) == 0, "still frozen before the order"
+
+    asyncio.run(m.handle_explore_cmd(Bool(data=True)))
+    assert not m._mission_frozen, "the explore ORDER opens the map, no motion needed"
+    for _ in range(3):
+        asyncio.run(m.handle_odom(_odom(0.0, 0.0)))
+        asyncio.run(m.handle_lidar(_cloud(_lidar_cloud(room))))
+    assert int(m._grid.seen.sum()) > 0, "the parked revolutions now land in the map"
+    # One viewpoint never makes a wall (two-viewpoint doctrine) - what the
+    # deadlock fix NEEDS is free floor along the rays: that is what gives the
+    # explorer its first free/unknown frontier before one wheel turn.
+    assert m._grid.value_at(1.25, 0.0) == 0, "the ray to the wall carved free floor from the start pose"
+
+    asyncio.run(m.handle_explore_done(Bool(data=True)))
+    assert m._mission_over
+    asyncio.run(m.handle_explore_cmd(Bool(data=True)))
+    assert m._mission_frozen, "a new order after the end must NEVER reopen the map"
+    print("  parked: 0 cells; explore_cmd: wall at 2.5 m mapped before one wheel turn; "
+          "after explore_done a new order reopens nothing")
+
+
 def test_revolution_cost() -> None:
     import time
     g = fresh()
@@ -673,6 +710,7 @@ if __name__ == "__main__":
               test_camera_point_at_the_lidar_height_stays_a_camera_point,
               test_camera_rays_start_at_the_camera_not_the_base,
               test_the_map_writes_only_during_the_mission,
+              test_explore_order_opens_the_map_before_any_motion,
               test_the_two_freezes_compose,
               test_the_mission_signals_cross_the_process_boundary,
               test_revolution_cost):
