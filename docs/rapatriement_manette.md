@@ -33,8 +33,10 @@ pilotage sur une stack d'exploration encore vivante.
 
 ## Pièges connus
 
-- La rampe de 10 cm est un ALLER SIMPLE en autonome (~3 cm de franchissement) ;
-  à la manette avec élan c'est l'opérateur qui juge.
+- La rampe de 10 cm SE MONTE très bien à la manette (caoutchouc, pilotage
+  franc — mesuré 30/08). Le patinage n'arrive qu'avec les hésitations du
+  pilotage autonome (stop-start dans la pente) : limite de style de conduite,
+  pas de mécanique.
 - Le pilotage n'écrit PAS la carte persistante : la fenêtre d'écriture est
   fermée sans `explore_cmd` (commit bef2238) — un rapatriement ne grave rien.
 - Ne jamais brancher/tester la manette pendant qu'une chaîne est ARMÉE
