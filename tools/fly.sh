@@ -47,8 +47,29 @@ if [ "${FLY_TEST:-0}" = "1" ]; then . "${FLY_TEST_STUBS:?FLY_TEST=1 needs FLY_TE
 # and, on the interactive path, e-stopped its wheels - and only THEN refused to
 # fly. Flight 1 kept driving, blind, and nothing restored it (2026-08-28 audit).
 echo "== 0/7 no dimOS stack already flying =="
-ssh $ROVER "pgrep -f \"[b]in/dimos\" >/dev/null" \
-  && { echo "A DIMOS STACK IS ALREADY RUNNING - stop it first (estop, then dimos stop)"; exit 1; }
+# The refusal protects a LIVE flight - a dimos process WITH a registered run.
+# A dimos process WITHOUT one is a ZOMBIE (metrox 2026-08-30 "inclus les
+# nettoyages au flycheck": a half-born gate-3 daemon killed mid-boot kept the
+# motor port and made every e-stop INCOMPLETE; two fly.sh raced for one log).
+# Zombies are swept here; a registered run still refuses, exactly as before.
+for GHOST in $(pgrep -f "[t]ools/fly.sh"); do
+  [ "$GHOST" = "$$" ] || [ "$GHOST" = "$PPID" ] \
+    || { echo "ghost fly.sh (pid $GHOST) from an older invocation - killed"; kill "$GHOST" 2>/dev/null; }
+done
+if ssh $ROVER "pgrep -f \"[b]in/dimos\" >/dev/null"; then
+  # Safe by default: ONLY the explicit "No running DimOS instance" answer makes
+  # a zombie. A live run, a garbled answer or a dead ssh all REFUSE, untouched
+  # (the cold bench kills any version that guesses the other way).
+  if ! ssh $ROVER "~/vector-dimos/.venv/bin/dimos status 2>/dev/null" | grep -q "No running DimOS instance"; then
+    echo "A DIMOS STACK IS ALREADY RUNNING - stop it first (estop, then dimos stop)"; exit 1
+  fi
+  echo "zombie dimos process (no registered run) - sweeping: estop, kill, estop"
+  ssh $ROVER 'cd ~/vector-dimos && .venv/bin/python tests/estop_rs485.py >/dev/null 2>&1;
+    for p in $(pgrep -f "[b]in/dimos"); do kill -9 "$p" 2>/dev/null; done; sleep 2;
+    .venv/bin/python tests/estop_rs485.py 2>&1 | tail -1'
+  ssh $ROVER "pgrep -f \"[b]in/dimos\" >/dev/null" \
+    && { echo "the zombie survived kill -9 - no flight, look at it by hand"; exit 1; }
+fi
 
 echo "== SYNC code rig -> rover =="
 # The rover has NO git clone - this rsync IS the deployment (found 2026-08-27:
