@@ -61,3 +61,11 @@
   Bouton probable : rampe de décel plus courte ou frein actif au lâcher.
   À côté : verdict positif du pilote — très puissant, franchit tout, bumpers
   rassurants ; « un petit peu massif donc un petit peu dangereux ».
+- **A/B IMU immobile (19h36-19h50, MAXN)** : manche A (IMU ON) et manche B
+  (IMU OFF) toutes deux PARFAITES — zéro trou >2 s, max 0,6 s sur ~6 min
+  chacune. L'IMU est innocentée À L'ARRÊT sous MAXN. Matrice d'état :
+  arrêt 25 W = trous (max 10,3 s) ; arrêt MAXN = zéro trou ×2 ; vol 25 W
+  intérieur = 9 trous ; vol MAXN avec passage plein soleil = 42 trous
+  (confondu par le soleil sur l'IR). **Case manquante : un vol MAXN en
+  intérieur, IMU ON** — propre = MAXN a guéri les trous et l'IMU est
+  innocente ; troué = refaire le même vol avec VECTOR_CAM_IMU=0.
