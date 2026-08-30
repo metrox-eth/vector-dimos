@@ -4,13 +4,17 @@ Offline benchmarks of dimOS frontier exploration on recorded maps. All runs use 
 real upstream selector files, unmodified; every volume pre-declares its hypotheses
 before running and re-derives its headline counts from raw goal coordinates.
 
-Two pictures first. Same start, same upstream config, faithful loop timing; orange = a cross-map crossing:
+The finished piece first: **the forced quartet** — the maintainer's literal test
+(spawn at the exact geometric centre of the building, 4 m lidar, faithful loop
+timing) on the dataset's own two-pass global map, every arm forced to explore to
+completion. All four reach ~97 % coverage with 0 to 2 cross-map crossings:
 
-![stock vs signed momentum, hk_park](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/fidelity/hero_before_after.png)
+![the forced quartet](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/lesh_demo/lesh_centre_ply_bigoffice_ply_4m.png)
 
-And exploration from the middle of a floor does finish it, once the selector's info-gain self-stop is out of the way (that self-stop is a separate, open observation):
+The animated runs (common clock, 1 frame = 9 simulated seconds) are in
+[lesh_demo/](lesh_demo/), one GIF per arm:
 
-![full floor conquest, hk_entrance](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/fidelity/hero_full_floor.png)
+![stock, complete stop](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/lesh_demo/lesh_ply_stock_complete.gif)
 
 | volume | question | answer |
 |---|---|---|
