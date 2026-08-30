@@ -184,3 +184,15 @@
   0x2000=1000 ms à l'enable, commit a5711f3 du 22/08). Vérification câblage
   bouton en main, domaine metrox. Possible dérive pendant le rebuild des
   3 jours (bus HAT → dongle USB-RS485, 3ca55a4).
+
+## E-stop : il fait L'INVERSE (metrox, bouton en main, 21h35)
+
+- Fait observé : bouton APPUYÉ = torque tenu (robot indéplaçable) ; bouton
+  RELÂCHÉ (position normale, armée) = torque libéré. Résolution du mystère
+  de 21h07 : l'e-stop physique n'est PAS un coupe-circuit — il pilote l'état
+  du drive, et à l'envers du modèle mental.
+- ⚠ Question de sécurité à trancher au câblage (domaine metrox) : un e-stop
+  de sécurité se câble NC (normalement fermé) — appuyer OUVRE le circuit,
+  un câble arraché = arrêt (défaillance sûre). Si le comportement observé
+  vient d'un câblage NO sur l'entrée e-stop du ZLAC, un câble coupé =
+  PAS d'arrêt d'urgence. À vérifier avant le prochain vol armé.
