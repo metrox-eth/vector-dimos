@@ -77,7 +77,9 @@ NEW_VIEWPOINT_M = 0.10       # a hit counts only if the rover moved this much si
 LOW_HIT_PROTECT_S = 3.0      # after a camera obstacle hit, that cell's LOW layer ignores floor samples this long
 LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M)
 LIDAR_Z_TOL_M = 1e-6         # and EXACTLY means exactly: the tag survives the float32 round trip to 5 nm, while the camera's own points span 0.37 m (audit 28/08 - see lidar_returns)
-LIDAR_WRITES_OBSTACLES = True   # doctrine switch: the lidar's job is anchoring the
+LIDAR_WRITES_OBSTACLES = os.environ.get("VECTOR_LIDAR_TO_MAP", "1").strip().lower() not in ("0", "false", "off", "no")
+                                # doctrine switch (env VECTOR_LIDAR_TO_MAP, crosses fly.sh's ssh
+                                # boundary since f1450ef): the lidar's job is anchoring the
                                 # map (SLAM), not obstacle detection - flip to False
                                 # once the camera proves its widened coverage in flight; the lidar
                                 # then only anchors kiss-icp and the camera is THE detector
