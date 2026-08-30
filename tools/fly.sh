@@ -181,7 +181,12 @@ echo "== 4/7 the map on the operator's screen (GATE) =="
 # TCP connection to this run's rerun port is.
 pkill -f dimos-viewer 2>/dev/null
 sleep 1
-DISPLAY="${DISPLAY:-:1}" nohup "$VIEWER" "rerun+http://192.168.0.56:9877/proxy" >/tmp/dimos_viewer.log 2>&1 &
+# systemd-run --user: the viewer must NOT inherit the caller's niceness. Born
+# from the user manager it runs at nice 0 (2026-08-30: every nohup-launched
+# viewer inherited nice +12 from the operator shell and rendered at 118 % of
+# one core, 18-37 s behind reality - the map lag). Transient auto-named unit,
+# --collect cleans it up; viewer output goes to the user journal.
+systemd-run --user --collect --setenv=DISPLAY="${DISPLAY:-:1}" "$VIEWER" "rerun+http://192.168.0.56:9877/proxy"
 sleep 8
 # Nobody should have to grab, move and resize the map window on every run: it
 # opens small and on the wrong screen. Park it fullscreen on the LEFT monitor

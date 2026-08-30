@@ -95,6 +95,7 @@ rsync()   { _flyrec "rsync $*"; [ "$FLY_TEST_SYNC_HIT" = "1" ] && echo ">f.st...
 curl()    { _flyrec "curl $*"; printf '%s' '{"sensors":{"software":{"monitoring":{"alive":true}}}}'; return 0; }
 pkill()   { _flyrec "pkill $*"; return 0; }
 nohup()   { _flyrec "nohup $*"; return 0; }
+systemd-run() { _flyrec "systemd-run $*"; return 0; }
 xdotool() { _flyrec "xdotool $*"; return 1; }
 ss()      { _flyrec "ss $*"; return 1; }
 sleep()   { return 0; }

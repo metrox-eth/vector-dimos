@@ -14,6 +14,8 @@ are inherited unchanged.
 
 from __future__ import annotations
 
+import os
+
 from dimos.core.core import rpc
 from dimos.hardware.sensors.camera.realsense.camera import RealSenseCamera
 from dimos.utils.logging_config import setup_logger
@@ -26,6 +28,16 @@ class VectorCamera(RealSenseCamera):
 
     def _start_imu(self) -> None:
         import pyrealsense2 as rs
+
+        # VECTOR_CAM_IMU=0: diagnostic switch, 30/08. The blink was born with
+        # this very stream (24/08, 964a0a5: motion at 200 Hz interleaved with
+        # depth on the ONE RSUSB pipeline) - the A/B that proves or clears it
+        # is a stack with vs without the IMU, camera_floor gaps compared.
+        # Cost while off: no gyro prior for kiss-icp, no ImuSlipDetector.
+        if os.environ.get("VECTOR_CAM_IMU", "1").strip().lower() in ("0", "false", "off", "no"):
+            logger.warning("VECTOR_CAM_IMU=0: IMU stream NOT started (diagnostic run - "
+                           "no gyro prior, no slip detector)")
+            return
 
         if self._profile is None:
             raise RuntimeError("main pipeline must be started before the IMU")
