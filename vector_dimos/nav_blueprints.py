@@ -409,6 +409,22 @@ RERUN_CONFIG = {
         "camera_floor": None,
         "world/pointcloud": None,
         "pointcloud": None,
+        # The RealSense IR pair was NEVER suppressed: two 640x480 frames
+        # nobody watches, shipping raw to the viewer - the bulk of the
+        # 1438 KB/s measured at the rig with the rover PARKED (30/08, the
+        # display-lag hunt; metrox: "if I can't trust what I see, I can't
+        # inform you" - the display is the measurement instrument).
+        "world/infrared_left": None,
+        "world/infrared_right": None,
+        "infrared_left": None,
+        "infrared_right": None,
+    },
+    # Source-side throttle (dropped BEFORE encoding) for what remains. The
+    # operator's own spec, 30/08: "une image par seconde me suffit".
+    "max_hz": {
+        "world/lidar": 2.0,
+        "world/global_costmap": 1.0,
+        "world/tf": 10.0,
     },
 }
 
