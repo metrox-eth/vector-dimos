@@ -16,16 +16,25 @@ The animated runs (common clock, 1 frame = 9 simulated seconds) are in
 
 ![stock, complete stop](https://raw.githubusercontent.com/metrox-eth/vector-dimos/main/benchmarks/pr2830/lesh_demo/lesh_ply_stock_complete.gif)
 
-| volume | question | answer |
-|---|---|---|
-| this file, below | does PR #2830's scoring reproduce its claims? | dispersion yes, travel on large maps only |
-| [midstart/](midstart/) | middle-of-space starts, low lidar range (maintainer's setup) | swings appear under stock; #2830 does not reduce them |
-| [fix/](fix/) | why does each swing happen, and does a finish-your-branch policy help? | diagnosis A/B/C; fixed radius helps one floor |
-| [fleet/](fleet/) | does that policy generalize? 6 new floors from public dimOS datasets | no; the radius was a one-floor artefact |
-| [cand2/](cand2/) | signed direction term and lazy TSP tour; upstream 15 s timeout | direction term strong where measurable; timeout dominates |
-| [go2/](go2/) | everything re-judged with the Go2's own body and measured speed | the swing is real in Go2 conditions; remedy passes on 2 maps |
-| [resid/](resid/) | are the remaining crossings fixable or locally forced? | fixable class goes to zero under the remedy; residual is locally forced under R=6 m (see correction_sensibilite.md: the split is radius-dependent) |
-| [fidelity/](fidelity/) | external audit found the harness froze the robot during selection and ran above the 0.55 m/s planner cap; does anything survive a faithful loop? | the swing survives strengthened (the frozen harness under-counted); the remedy verdict is unchanged; 47.5 % of path is walked during selection computes |
+The volumes are chronological, and the story matters as much as any single result:
+each volume's verdict was honest at the time and was then revised by a better
+instrument. **Every volume before `lesh_demo` ran on worlds built by raw lidar
+accumulation** (transients baked in forever) — the final volume showed that this
+choice of world, not the selectors, produced most of the ping-pong being measured.
+Read the per-row verdicts as history, not as current claims; the final verdict
+below supersedes them.
+
+| # | volume | world | question | verdict at the time (superseded where struck) |
+|---|---|---|---|---|
+| 1 | this file, below | accumulated | does PR #2830's scoring reproduce its claims? | dispersion yes, travel on large maps only |
+| 2 | [midstart/](midstart/) | accumulated | middle spawns, low lidar (maintainer's setup) | swings appear under stock; #2830 does not reduce them |
+| 3 | [fix/](fix/) | accumulated | why does each swing happen; does finish-your-branch help? | diagnosis A/B/C; fixed radius helps one floor |
+| 4 | [fleet/](fleet/) | accumulated (6 new floors) | does that policy generalize? | no; the radius was a one-floor artefact |
+| 5 | [cand2/](cand2/) | accumulated | signed direction term, lazy TSP, upstream 15 s timeout | direction term strong where measurable; timeout dominates |
+| 6 | [go2/](go2/) | accumulated | re-judged with the Go2's own body and measured speed | ~~the swing is real in Go2 conditions~~ (later shown world-dependent) |
+| 7 | [resid/](resid/) | accumulated | remaining crossings: fixable or locally forced? | ~~fixable class goes to zero under the remedy~~ (radius-dependent split; see correction_sensibilite.md) |
+| 8 | [fidelity/](fidelity/) | accumulated | external audit: does anything survive a faithful loop? | swing survives on that world; 47.5 % of path walked during selection computes |
+| 9 | [lesh_demo/](lesh_demo/) | **official two-pass map** | the maintainer's literal test, all arms forced to completion | **~97 % everywhere, 0-2 crossings, no champion — the world was the variable** |
 
 Raw run JSONs are versioned in each volume (fidelity/raw, resid, go2) and the extracted occupancy maps in [maps/](maps/), so every table can be recomputed from this repo alone.
 
