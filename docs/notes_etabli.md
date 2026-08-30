@@ -54,3 +54,10 @@
   d'ImuSlipDetector → pose dégradée PENDANT ce vol (diagnostic, pas remède).
 - Remèdes candidats si signé : baisser la cadence IMU (`config.imu_hz`, bouton
   existant), pipeline/thread séparé, ou sortir du build RSUSB (kernel UVC).
+- **Inertie téléop excessive** (rapatriement 19h25) : stick lâché → le rover
+  glisse encore ~1,5 m. Pas le cas à l'époque de la pile ROS de Sam. Suspects :
+  la manette n'envoie que 0,5 s de zéros puis silence (BRAKE_S), et la rampe de
+  décélération ZLAC (`accel_ms` de l'adaptateur) adoucit l'arrêt → roue libre.
+  Bouton probable : rampe de décel plus courte ou frein actif au lâcher.
+  À côté : verdict positif du pilote — très puissant, franchit tout, bumpers
+  rassurants ; « un petit peu massif donc un petit peu dangereux ».
