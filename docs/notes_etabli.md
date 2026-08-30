@@ -161,8 +161,13 @@
   devant = 0 occupée / 70 libres ; après 3 min le nez dessus, carte finale =
   3 cellules. PAS un problème de délai — un TROU DE PERCEPTION courte portée :
   approche en pivot sur place (15 cm dans les 10 dernières s), la chaise est
-  entrée dans la zone aveugle de profondeur (D455 mini ~40-60 cm) sans avoir
-  été peinte de loin ; pieds bas et fins sous le pare-chocs ET sous la bande
+  entrée dans la zone aveugle de profondeur sans avoir
+  été peinte de loin — CORRECTION 21h25 (grille Intel) : à 640×480 la zone
+  aveugle n'est que ~25-30 cm (MinZ = focale×baseline/126, linéaire en
+  résolution) → le suspect n°1 remonte : la conversion bande-de-sol qui
+  élague les pieds fins, pas la zone aveugle seule. Le disparity shift
+  rapporte peu ici (shift 10 : mini 27 cm mais max ~3,7 m ; shift 50 :
+  max ~0,7 m — il mangerait le « beaucoup plus loin » du vol 20h48) ; pieds bas et fins sous le pare-chocs ET sous la bande
   de sol convertie en obstacles.
 - **Fast-block : verdict REPORTÉ** — jamais rencontré d'obstacle peint à
   bloquer. Pas d'explosion de fantômes (5,9 m² d'obstacles carte finale).
