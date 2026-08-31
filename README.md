@@ -109,7 +109,8 @@ subgraph group_runtime["dimOS runtime"]
   node_coordinator["dimOS coordinators<br/>lifecycle and command channels"]
   node_gamepad["Gamepad teleop<br/>input publisher<br/>[gamepad.py]"]
   node_lidar["RPLIDAR C1<br/>PointCloud2 source<br/>[rplidar_c1.py]"]
-  node_sensors["ESP sensors<br/>sensor integration<br/>[esp_sensors.py]"]
+  node_camera["D455F depth camera<br/>obstacle painter + IMU<br/>[camera.py]"]
+  node_sensors["ESP sensors<br/>sonar, bumpers, switches<br/>[esp_sensors.py]"]
   node_zenoh["Shared zenoh mesh<br/>distributed transport"]
   node_reloc_rig["Remote relocation rig<br/>reference-map workload<br/>[rig_runner.py]"]
 end
@@ -147,9 +148,11 @@ node_kinematics -->|"wheel velocities"| node_motor_drivers
 node_motor_drivers -->|"MODBUS RTU"| node_rs485
 node_rs485 -->|"drives and reads feedback"| node_rover
 node_lidar -->|"planar scans"| node_lidar_odom
-node_sensors -->|"gyro prior"| node_lidar_odom
+node_camera -->|"depth points + gyro prior"| node_lidar_odom
+node_sensors -->|"sonar and contact events"| node_autonomy
 node_lidar_odom -->|"pose"| node_costmap
-node_lidar -->|"obstacle evidence"| node_costmap
+node_lidar_odom -->|"camera obstacles + bare floor"| node_costmap
+node_lidar -->|"obstacle evidence (two-layer mode)"| node_costmap
 node_persistent_map -->|"keep-out overlay"| node_costmap
 node_persistent_map -->|"saved 2D map"| node_relocalize2d
 node_lidar -->|"startup/move scans"| node_relocalize2d
@@ -169,6 +172,7 @@ click node_motor_drivers "https://github.com/metrox-eth/vector-dimos/blob/main/v
 click node_gamepad "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/gamepad.py"
 click node_lidar "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/rplidar_c1.py"
 click node_sensors "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/esp_sensors.py"
+click node_camera "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/camera.py"
 click node_lidar_odom "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/lidar_odometry.py"
 click node_costmap "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/costmap2d.py"
 click node_persistent_map "https://github.com/metrox-eth/vector-dimos/blob/main/vector_dimos/persistent_map.py"
@@ -185,7 +189,7 @@ classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
 classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
 classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
 classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
-class node_entrypoints,node_blueprints,node_rig_blueprints,node_coordinator,node_gamepad,node_lidar,node_sensors,node_zenoh,node_reloc_rig toneBlue
+class node_entrypoints,node_blueprints,node_rig_blueprints,node_coordinator,node_gamepad,node_lidar,node_camera,node_sensors,node_zenoh,node_reloc_rig toneBlue
 class node_base_adapter,node_kinematics,node_motor_drivers,node_rs485,node_rover toneAmber
 class node_nav_blueprints,node_lidar_odom,node_costmap,node_persistent_map,node_relocalize2d,node_autonomy toneMint
 class node_flight_ops,node_zone_service toneRose
