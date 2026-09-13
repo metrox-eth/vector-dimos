@@ -9,9 +9,21 @@ Mapping (standard dual-stick):
     left stick Y  -> vx (forward)     left stick X  -> vy (strafe)
     right stick X -> wz (rotation)    R2 held       -> boost
 
-Publishes ONLY while the deadman is held, plus a 0.5 s brake of zeros right
-after it is released - then silence (see BRAKE_S). A pad lying at rest owns
-nothing, so the same stack can explore on its own while the pad is plugged in.
+Publishes ONLY while the deadman is held, plus a brake of zeros right after it
+is released - 0.5 s by default, up to 1.0 s with VECTOR_BRAKE_S - then silence
+(see BRAKE_S and resolve_brake_s). A pad lying at rest owns nothing, so the
+same stack can explore on its own while the pad is plugged in. Pressing the
+deadman again ends that brake window on the spot (BRAKE_CANCEL_ON_DEADMAN),
+but only on a tick that is trusted and about to publish - see the worker.
+
+WHICH BLUEPRINT (checked 2026-09-13, it is not the same wiring):
+    dimos run vector-dimos.gamepad   -> tele_cmd_vel is REMAPPED to cmd_vel:
+                                        direct drive, no nav, no MovementManager
+    GAMEPAD=1 ... tools/fly.sh       -> `vector-dimos.explore` with this module
+                                        ADDED and NOT remapped: the Twist goes
+                                        tele_cmd_vel -> MovementManager -> cmd_vel
+The second one is what the workshop trials run, so every "the pad is the
+commander" shortcut is false there.
 
 Runs headless: the Jetson has no display, so SDL is pinned to its dummy
 video/audio drivers below. The pad is hot-pluggable - the module waits for
@@ -108,6 +120,128 @@ BRAKE_S = 0.5             # how long the zeros keep flowing after the deadman is
 # command running.
 
 
+# ── 2026-09-13: metrox's two complaints from the 30/08 piloted lap ──────────
+# (docs/notes_etabli.md, his words) :
+#   "transitions de commandes pas propres : relacher un stick puis le remettre
+#    vite -> lag / collision de commandes"
+#   "inertie teleop excessive : stick lache -> le rover glisse encore ~1,5 m"
+# One constant per button. Restoring the 2026-09-12 flight is one line each:
+# BRAKE_CANCEL_ON_DEADMAN = False, and brake_s left alone (0.5 s).
+
+BRAKE_CANCEL_ON_DEADMAN = True
+# A new deadman press CANCELS whatever is left of the brake window, on its
+# RISING EDGE (brake_until = 0.0). From that instant the brake path cannot emit
+# one more zero, however long the window was.
+#
+# MEASURED on the cold bench 2026-09-13, BEFORE this change, at 50 Hz with
+# BRAKE_S = 0.5 s and the deadman re-pressed 0.200 s after the release: the
+# module already published the stick command from the first tick after the
+# press (+0.213 s -> 0.012 m/s, one slew step) and no zero after it. So this
+# does NOT change the default flight, and it is NOT the cure for the felt lag
+# (that one is the slew restarting from rest: 0.6 m/s2 = 0.75 s to the ceiling).
+# What it buys is the right to LENGTHEN the zero window (brake_s below) without
+# a stale zero from the release ever chasing a fresh command down the bus -
+# which is precisely what the anti-inertia button wants to do.
+# False = the 12/09 behaviour exactly: the window always runs to its end.
+
+# The length of that window is now a knob, not a literal. 0.5 s is the value
+# flown since 28/08 (see BRAKE_S); the anti-inertia trial raises it towards
+# 1.0 s so the drives keep being TOLD to stop for longer instead of falling
+# silent and free-wheeling. dimOS builds this module from a blueprint with no
+# arguments of ours, so the environment is the operator's only lever:
+#     VECTOR_BRAKE_S=1.0 tools/fly.sh GAMEPAD=1 REPOSITIONNE=1
+BRAKE_S_ENV = "VECTOR_BRAKE_S"
+BRAKE_S_MAX = 1.0
+# Why the ceiling is 1.0 and not more - the cost, in seconds, not a story.
+# dimOS's MovementManager treats ANY tele_cmd_vel message, zeros included, as
+# "a human is driving": _on_teleop cancels the nav goal on EVERY message and
+# _on_nav refuses to forward nav_cmd_vel until tele_cooldown_sec = 1.0 s has
+# passed since the LAST teleop message (movement_manager.py, re-read
+# 2026-09-13). So every release mutes autonomy for brake_s + 1.0 s: 1.5 s
+# today, 2.0 s at this ceiling. That number IS the justification.
+# TWO CLAIMS THAT USED TO STAND HERE AND WERE FALSE (adversarial review,
+# 2026-09-13) - written down so nobody rebuilds on them:
+#  1. "above the ceiling a pad at rest would mute exploration FOR GOOD". No:
+#     whatever brake_s is, the zeros STOP at brake_s (see the worker loop) and
+#     autonomy comes back 1.0 s later. "For good" was the pre-28/08 module,
+#     which published 50 Hz of zeros for ever. The ceiling is prudence about
+#     the 2 s above, not a cliff.
+#  2. "in the GAMEPAD=1 blueprint the gamepad IS the commander (direct drive
+#     to cmd_vel, no nav), so the cost there is zero". That describes
+#     `vector-dimos.gamepad` (blueprints.py remaps tele_cmd_vel -> cmd_vel).
+#     tools/fly.sh runs `vector-dimos.explore`, where GAMEPAD=1 only ADDS this
+#     module with NO remapping (nav_blueprints.py): the pad publishes on
+#     tele_cmd_vel and MovementManager IS in the path. The cost on the flight
+#     metrox actually runs is 2.0 s, not zero.
+
+BRAKE_UNTIL_STOPPED = False
+# ASKED FOR on 2026-09-13, and NOT implemented on purpose - here is why, so
+# nobody re-opens it blind. The idea: keep publishing zeros until the wheels
+# actually read below BRAKE_STOP_RPM, capped at BRAKE_STOP_MAX_S, then silence.
+# It needs wheel-speed feedback INSIDE this module, and this module has none:
+# GamepadTeleop declares exactly one stream, `tele_cmd_vel: Out[Twist]`, and it
+# runs in its own forkserver worker. The RPM feedback is read by
+# VectorBaseAdapter (adapter.read_velocities) in the COORDINATOR's process,
+# and nothing publishes it anywhere this module could subscribe to. Wiring it
+# would mean: a new Out on the coordinator, a new In here, a blueprint
+# remapping, and a new failure mode (feedback stops arriving -> the brake never
+# ends -> the pad mutes autonomy for ever) - i.e. new machinery inside an armed
+# chain, which is the one thing the 27/08 incident says not to do.
+# THE FALLBACK IS brake_s ABOVE: a longer window of zeros, no new plumbing, one
+# environment variable. Setting this flag True changes nothing but a warning.
+BRAKE_STOP_RPM = 5.0        # kept as the spec of the day we do wire feedback
+BRAKE_STOP_MAX_S = 2.0      # ...and its safety cap, so silence always comes
+
+
+def resolve_brake_s(brake_s: float | None = None,
+                    env: dict | None = None) -> float:
+    """How long zeros keep flowing after the deadman is released, in seconds.
+
+    Pure, cold-testable. Precedence: explicit argument > VECTOR_BRAKE_S >
+    BRAKE_S (0.5 s, the 28/08 value). Out-of-range values are CLAMPED to
+    [0.0, BRAKE_S_MAX] and logged; unparseable text falls back to BRAKE_S,
+    loudly - a mistyped knob gives yesterday's flight, never a random one.
+    """
+    raw: float | None = None if brake_s is None else float(brake_s)
+    if raw is None:
+        text = (os.environ if env is None else env).get(BRAKE_S_ENV, "")
+        text = text.strip() if isinstance(text, str) else ""
+        if text:
+            try:
+                raw = float(text)
+            except ValueError:
+                logger.warning("%s=%r is not a number - brake window stays at "
+                               "%.2f s", BRAKE_S_ENV, text, BRAKE_S)
+                raw = None
+    if raw is None:
+        return BRAKE_S
+    value = max(0.0, min(BRAKE_S_MAX, raw))
+    if value != raw:
+        logger.warning("brake window %.2f s is outside [0.0, %.2f] s - clamped "
+                       "to %.2f s (above the ceiling a released pad mutes "
+                       "dimOS autonomy for good; see BRAKE_S_MAX)",
+                       raw, BRAKE_S_MAX, value)
+    return value
+
+
+def brake_window_after_press(brake_until: float, deadman: bool,
+                             prev_deadman: bool) -> float:
+    """The brake deadline this tick keeps - pure, cold-testable.
+
+    RISING edge of the deadman (released -> held) cancels the window by
+    returning 0.0, which is always in the past: the brake path can no longer
+    publish. Anything else returns the window untouched - in particular a
+    deadman simply HELD, because every driving tick re-arms the window itself
+    and that one must live its full brake_s after the next release.
+
+    With BRAKE_CANCEL_ON_DEADMAN = False this is the identity function, i.e.
+    exactly the 2026-09-12 flight.
+    """
+    if BRAKE_CANCEL_ON_DEADMAN and deadman and not prev_deadman:
+        return 0.0
+    return brake_until
+
+
 def slew(prev: float, target: float, dt: float) -> float:
     """Rate-limit a linear command - pure, cold-testable."""
     step = SLEW_LINEAR_MS2 * dt
@@ -173,7 +307,8 @@ class GamepadTeleop(Module):
                  deadzone: float = DEFAULT_DEADZONE,
                  rate_hz: float = DEFAULT_RATE_HZ,
                  boost_multiplier: float = DEFAULT_BOOST,
-                 joystick_index: int = 0, **kwargs: Any) -> None:
+                 joystick_index: int = 0, brake_s: float | None = None,
+                 **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.cfg = TeleopConfig(linear_speed=linear_speed,
                                 angular_speed=angular_speed,
@@ -181,6 +316,10 @@ class GamepadTeleop(Module):
                                 boost_multiplier=boost_multiplier)
         self.rate_hz = rate_hz
         self.joystick_index = joystick_index
+        # 2026-09-13: None -> BRAKE_S (0.5 s), or VECTOR_BRAKE_S. Resolved HERE,
+        # at construction, so the value is fixed and logged once for a flight -
+        # not re-read per tick.
+        self.brake_s = resolve_brake_s(brake_s)
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -241,7 +380,18 @@ class GamepadTeleop(Module):
         trusted = False            # neutral-first trust gate (13h42 runaway)
         prev_vx = prev_vy = 0.0    # slew-limiter state
         brake_until = 0.0          # publish zeros until this instant, then shut up
+        prev_deadman = False       # to see the RISING edge of the deadman (2026-09-13)
         waiting_logged = False
+        if BRAKE_UNTIL_STOPPED:
+            # Declared, never wired - see the constant. Say so at every start
+            # rather than let an operator believe in a brake that is not there.
+            logger.warning("BRAKE_UNTIL_STOPPED=True is INERT: this module has "
+                           "no wheel-speed feedback (see the constant). The "
+                           "brake window stays at %.2f s - raise it with %s.",
+                           self.brake_s, BRAKE_S_ENV)
+        logger.info("gamepad brake window: %.2f s of zeros after the deadman is "
+                    "released, then silence (cancel-on-press: %s)",
+                    self.brake_s, BRAKE_CANCEL_ON_DEADMAN)
         try:
             while not self._stop_event.is_set():
                 if pad is None:
@@ -267,6 +417,17 @@ class GamepadTeleop(Module):
                 except pygame.error as exc:
                     pad = None
                     trusted = False
+                    prev_deadman = False          # a pad that is gone holds nothing
+                    # ... and it holds no RAMP either (2026-09-13, adversarial
+                    # bench). prev_vx/prev_vy were reset on the deadman RELEASE
+                    # path only, so a pad that vanished for one read while
+                    # driving at the ceiling came back with 0.45 m/s of slew
+                    # state: the first trusted tick, STICKS AT NEUTRAL, published
+                    # +0.438 m/s and the rover left on its own for ~0.75 s -
+                    # the exact 28/08 replay the release path was written to
+                    # kill. The trust gate does not catch it: neutral axes
+                    # satisfy the gate, and the danger is inside this module.
+                    prev_vx = prev_vy = 0.0
                     self._publish(0.0, 0.0, 0.0)  # one zero Twist, then wait
                     logger.warning("Gamepad lost (%s) - back to waiting", exc)
                     continue
@@ -282,6 +443,30 @@ class GamepadTeleop(Module):
                             self._publish(0.0, 0.0, 0.0)
                         time.sleep(period)
                         continue
+                # BRAKE CANCEL (2026-09-13, metrox 30/08 "collision de
+                # commandes"): the RISING edge of the deadman ends the brake
+                # window there and then, so not one zero left over from the
+                # release can still go out behind the commands of the new
+                # press. Rising edge, not "held": a window re-armed by a tick
+                # that DROVE (below) must keep its own life.
+                # Set BRAKE_CANCEL_ON_DEADMAN = False to fly the 12/09 way.
+                #
+                # ORDER MATTERS, and it was WRONG for a few hours on 2026-09-13
+                # (caught by an adversarial cold bench, fixed the same day):
+                # these two lines used to sit ABOVE the trust gate. On any pad
+                # that has not yet earned trust - i.e. after EVERY reconnection,
+                # and after every one-tick read glitch, which is exactly when
+                # the rover is rolling with nobody commanding it - a deadman
+                # press cancelled the brake window while the untrusted path
+                # could publish NOTHING to replace it. Measured on that bench:
+                # a single missed read at 0.45 m/s took the zeros published
+                # after the dropout from 25 (to 0.486 s) down to 1 (0.011 s).
+                # BRAKE_S exists to REPEAT the stop order on a latest-only bus;
+                # the cancel may therefore only run on a tick that is itself
+                # about to publish a command - i.e. here, below the gate.
+                brake_until = brake_window_after_press(brake_until, deadman,
+                                                       prev_deadman)
+                prev_deadman = deadman
                 # DEADMAN: no held button, no motion - ever.
                 if not deadman:
                     # Releasing also resets the slew state: the ramp restarts
@@ -289,9 +474,10 @@ class GamepadTeleop(Module):
                     # replay the last driven speed (28/08 audit: 0.44 m/s for
                     # ~0.75 s, sticks at rest).
                     prev_vx = prev_vy = 0.0
-                    # BRAKE THEN SILENCE (see BRAKE_S): zeros for 0.5 s after the
-                    # last command, then not one message until the deadman is
-                    # held again - a released pad must not mute autonomy.
+                    # BRAKE THEN SILENCE (see BRAKE_S / self.brake_s): zeros for
+                    # brake_s after the last command, then not one message until
+                    # the deadman is held again - a released pad must not mute
+                    # autonomy.
                     if time.monotonic() < brake_until:
                         self._publish(0.0, 0.0, 0.0)
                     time.sleep(period)
@@ -304,7 +490,7 @@ class GamepadTeleop(Module):
                 # instant, the mix could transiently exceed the rim ceiling
                 vx, vy, wz = clamp_twist(vx, vy, wz)
                 self._publish(vx, vy, wz)
-                brake_until = time.monotonic() + BRAKE_S
+                brake_until = time.monotonic() + self.brake_s
                 time.sleep(period)
         finally:
             try:

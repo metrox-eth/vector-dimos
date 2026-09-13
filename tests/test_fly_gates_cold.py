@@ -371,6 +371,39 @@ check("and the stack gets it (the switch finally does something)",
 check("preflight.py's pad gate reads that very variable",
       'os.environ.get("GAMEPAD", "0") == "1"' in (ROOT / "tools" / "preflight.py").read_text())
 
+# The two teleop knobs of 2026-09-13 (VECTOR_DECEL_MS, VECTOR_BRAKE_S). Added
+# here on 2026-09-13 after an adversarial review pointed out the obvious: the
+# ONLY justification for touching fly.sh was "a variable that is not on the ssh
+# line dies at the rig" (the 27/08 13:38 bug) - and no bench covered it. This
+# one gives the same 91 OK with or without the two variables, so it proved
+# nothing about them. It does now. Without this, a knob silently lost on the
+# ssh line turns trial 2 and trial 3 into trial 1 and metrox concludes "the
+# ramp changes nothing" from a flight that never carried the ramp.
+stack_of = lambda log: ran(log, "dimos --rerun-open")
+rc, out, log = fly(GAMEPAD=1, VECTOR_DECEL_MS=150, VECTOR_BRAKE_S=1.0)
+stack = stack_of(log)
+check("the stack launch exists", len(stack) == 1, f"{len(stack)} lines")
+check("VECTOR_DECEL_MS=150 crosses the ssh into the stack (trial 2)",
+      any("VECTOR_DECEL_MS=150" in ln for ln in stack),
+      stack[0][-140:] if stack else "none")
+check("VECTOR_BRAKE_S=1.0 crosses the ssh into the stack (trial 3)",
+      any("VECTOR_BRAKE_S=1.0" in ln for ln in stack))
+rc, out, log = fly(VECTOR_DECEL_MS=150)
+check("one knob alone travels alone: DECEL=150 set, BRAKE empty",
+      any("VECTOR_DECEL_MS=150 VECTOR_BRAKE_S= " in ln for ln in stack_of(log)),
+      stack_of(log)[0][-140:] if stack_of(log) else "none")
+rc, out, log = fly()
+check("default flight: BOTH knobs cross EMPTY = the 12/09 behaviour "
+      "(400 ms decel, 0.5 s brake window)",
+      any("VECTOR_DECEL_MS= VECTOR_BRAKE_S= " in ln for ln in stack_of(log)),
+      stack_of(log)[0][-140:] if stack_of(log) else "none")
+# and the other end of THAT wire: the names the code reads must be the names
+# this script exports (a rename on either side kills the knob silently)
+check("adapter.py reads the very name fly.sh sends",
+      'DECEL_MS_ENV = "VECTOR_DECEL_MS"' in (ROOT / "vector_dimos" / "adapter.py").read_text())
+check("gamepad.py reads the very name fly.sh sends",
+      'BRAKE_S_ENV = "VECTOR_BRAKE_S"' in (ROOT / "vector_dimos" / "gamepad.py").read_text())
+
 print("H. the scripts parse")
 for f in (FLY, ARM, STUB_FILE):
     check(f"bash -n {f.name}", subprocess.run(["bash", "-n", str(f)]).returncode == 0)

@@ -163,11 +163,38 @@ LAUNCH_MARK=$(ssh $ROVER 'date +%s')
 # the map (measured 27/08 16h52, and written in lidar_odometry.py's own
 # comment). Fly with ODOM_GUARDS=1 to get the B arm of the A/B back - one
 # variable at a time, same course.
+# VECTOR_DECEL_MS / VECTOR_BRAKE_S (2026-09-13): the two knobs for metrox's
+# 30/08 verdict ("transitions pas propres", "inertie excessive"). They MUST be
+# listed here or they die at the rig, exactly like STOCK_NAV and GAMEPAD did on
+# 2026-08-27 13:38 - ssh forwards nothing on its own (and tests/test_fly_gates_cold.py
+# section K now proves this very line carries them). UNSET is the default and
+# means "as before": empty -> the adapter keeps decel = accel (400 ms) and the
+# gamepad keeps its 0.5 s brake window. One at a time:
+#     VECTOR_DECEL_MS=150 GAMEPAD=1 REPOSITIONNE=1 tools/fly.sh
+#     VECTOR_BRAKE_S=1.0  GAMEPAD=1 REPOSITIONNE=1 tools/fly.sh
+# TWO HONEST WARNINGS (adversarial review 2026-09-13), because a wrong verdict
+# is worse than no trial:
+#  1. VECTOR_DECEL_MS is NOT a "teleop knob". It is a DRIVE register (0x2082/
+#     0x2083), written once per arming by adapter._prepare, and nothing
+#     downstream distinguishes a command from the pad from one from the
+#     planner. In the same flight it also hardens the autonomous stops:
+#     recovering_planner escapes, the sonar brake, an emergency stop. "It bites
+#     harder" may be the planner talking, not the pad.
+#  2. GAMEPAD=1 here does NOT give direct drive. This script launches
+#     `vector-dimos.explore`, where GAMEPAD=1 only ADDS the module with no
+#     remapping: the pad goes tele_cmd_vel -> MovementManager -> cmd_vel. Any
+#     teleop message, zeros included, cancels the nav goal and mutes nav_cmd_vel
+#     for tele_cooldown_sec = 1.0 s after the LAST one. So each release mutes
+#     autonomy for brake_s + 1.0 s (1.5 s today, 2.0 s with VECTOR_BRAKE_S=1.0).
+#     Default is DRY=1 (exploration NEVER started), so nothing drives on its own
+#     during a piloted trial - but with DRY=0/EXPLORE=1 the planner CAN take the
+#     bus back ~1 s after the sticks are let go, and that reads exactly like
+#     "the rover kept going". Read the run log before blaming the ramp.
 # GLIBC_TUNABLES: the in-house open3d-CUDA wheel carries a 41 KB TLS block that
 # the default dlopen reserve (~1.6 KB) cannot hold - a 4 MiB reserve gives it
 # room (256 KB was not enough inside loaded workers) (measured 2026-08-27 20:00: without it, "cannot allocate memory in static
 # TLS block").
-ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-0} ODOM_GUARDS=${ODOM_GUARDS:-0} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} EXPLORER_V2=${EXPLORER_V2:-1} VECTOR_LIDAR_TO_MAP=${VECTOR_LIDAR_TO_MAP:-1} VECTOR_CAM_IMU=${VECTOR_CAM_IMU:-1} VECTOR_FAST_BLOCK=${VECTOR_FAST_BLOCK:-0} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
+ssh $ROVER "cd ~/vector-dimos && GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304 TRANSPORT=$TRANSPORT STOCK_NAV=${STOCK_NAV:-0} GAMEPAD=${GAMEPAD:-0} PERSISTENT_MAP=${PERSISTENT_MAP:-0} ODOM_GUARDS=${ODOM_GUARDS:-0} RECORD_CLOUDS=${RECORD_CLOUDS:-1} RELOC_MAP=${RELOC_MAP:-} EXPLORER_V2=${EXPLORER_V2:-1} VECTOR_LIDAR_TO_MAP=${VECTOR_LIDAR_TO_MAP:-1} VECTOR_CAM_IMU=${VECTOR_CAM_IMU:-1} VECTOR_FAST_BLOCK=${VECTOR_FAST_BLOCK:-0} VECTOR_DECEL_MS=${VECTOR_DECEL_MS:-} VECTOR_BRAKE_S=${VECTOR_BRAKE_S:-} ~/vector-dimos/.venv/bin/dimos --rerun-open none --rerun-host 0.0.0.0 --nerf-speed 0.4 run vector-dimos.explore --local-relay --daemon > /tmp/dimos_launch.log 2>&1 < /dev/null"
 sleep 12
 # the run dir must POSTDATE this launch: on 2026-08-26 a failed launch over a live
 # stack passed the lidar check against the PREVIOUS run's log (false IN FLIGHT)
