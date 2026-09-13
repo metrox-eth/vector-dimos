@@ -381,6 +381,271 @@ check(wait_for(lambda: close(brake_pub[-1].linear.x, gp.CLAMP_LINEAR_MS), 3.0),
       f"... and ramps back to the {gp.CLAMP_LINEAR_MS} m/s ceiling (stick still forward)")
 brake_module.stop()
 
+
+# --- H. 2026-09-13: the two buttons for metrox's 30/08 piloted verdict -----
+# His words (docs/notes_etabli.md, 30/08):
+#   "transitions de commandes pas propres : relacher un stick puis le remettre
+#    vite -> lag / collision de commandes"
+#   "inertie teleop excessive : stick lache -> le rover glisse encore ~1,5 m"
+print("\nH. brake cancel on deadman + the brake window knob (2026-09-13)")
+
+# H1. the decision itself, pure. A window 0.3 s in the future, and the three
+# states a tick can be in.
+WINDOW = time.monotonic() + 0.3
+check(gp.BRAKE_CANCEL_ON_DEADMAN is True,
+      "BRAKE_CANCEL_ON_DEADMAN ships True (False = the 12/09 flight, one line)")
+check(gp.brake_window_after_press(WINDOW, True, False) == 0.0,
+      "RISING edge (released -> held) -> window cancelled to 0.0, i.e. the past: "
+      "the brake path cannot publish one more zero behind the new command")
+check(gp.brake_window_after_press(WINDOW, True, True) == WINDOW,
+      "deadman simply HELD -> window untouched (each driving tick re-arms its "
+      "own, and that one must live its full brake_s after the NEXT release)")
+check(gp.brake_window_after_press(WINDOW, False, True) == WINDOW,
+      "the release itself -> window untouched (the brake has to happen)")
+check(gp.brake_window_after_press(WINDOW, False, False) == WINDOW,
+      "pad at rest -> window untouched")
+
+# H2. the flag OFF = the behaviour of before, exactly: identity function.
+gp.BRAKE_CANCEL_ON_DEADMAN = False
+try:
+    check(gp.brake_window_after_press(WINDOW, True, False) == WINDOW,
+          "BRAKE_CANCEL_ON_DEADMAN=False -> the rising edge changes NOTHING "
+          "(12/09 behaviour: the window always runs to its end)")
+    check(all(gp.brake_window_after_press(WINDOW, d, p) == WINDOW
+              for d in (True, False) for p in (True, False)),
+          "... and neither does any other combination: pure identity")
+finally:
+    gp.BRAKE_CANCEL_ON_DEADMAN = True
+
+# H3. the knob on the window length, in SECONDS. Known value in, known out.
+check(gp.resolve_brake_s() == gp.BRAKE_S == 0.5,
+      f"no argument, no env -> {gp.BRAKE_S} s, the value flown since 28/08")
+check(gp.resolve_brake_s(1.0) == 1.0, "brake_s=1.0 -> 1.00 s")
+check(gp.resolve_brake_s(None, {"VECTOR_BRAKE_S": "1.0"}) == 1.0,
+      "VECTOR_BRAKE_S=1.0 -> 1.00 s (the operator's lever: dimOS builds this "
+      "module from a blueprint with none of our arguments)")
+check(gp.resolve_brake_s(0.8, {"VECTOR_BRAKE_S": "0.2"}) == 0.8,
+      "an explicit argument beats the environment (0.8 s wins over 0.2 s)")
+check(gp.resolve_brake_s(None, {"VECTOR_BRAKE_S": "3.0"}) == gp.BRAKE_S_MAX == 1.0,
+      f"3.0 s clamped to {gp.BRAKE_S_MAX} s - above dimOS's tele_cooldown_sec a "
+      f"pad at rest mutes autonomy for good again (the 28/08 audit)")
+check(gp.resolve_brake_s(None, {"VECTOR_BRAKE_S": "-1"}) == 0.0,
+      "a negative window clamped to 0.0 s (= no brake at all, but never a "
+      "window in the past)")
+check(gp.resolve_brake_s(None, {"VECTOR_BRAKE_S": "pouet"}) == gp.BRAKE_S,
+      f"a mistyped VECTOR_BRAKE_S gives YESTERDAY'S window ({gp.BRAKE_S} s), "
+      f"never a random one")
+check(GamepadTeleop(rate_hz=50.0).brake_s == gp.BRAKE_S,
+      f"a module built with no argument carries {gp.BRAKE_S} s")
+check(GamepadTeleop(rate_hz=50.0, brake_s=1.0).brake_s == 1.0,
+      "a module built with brake_s=1.0 carries 1.00 s")
+check(gp.BRAKE_UNTIL_STOPPED is False,
+      "BRAKE_UNTIL_STOPPED ships False - and INERT: GamepadTeleop has no "
+      "wheel-speed feedback (one Out[Twist], its own worker process), so the "
+      "fallback is the window knob above, not a speed threshold")
+
+
+def run_release_repress(module, watch_s, repress_after_s=None):
+    """Drive a module to the ceiling, release the deadman, optionally press it
+    again `repress_after_s` later, and watch for `watch_s` from the release.
+
+    Returns [(dt seconds since the release, vx m/s)] - the zero Twist that
+    Module.stop() publishes on shutdown is EXCLUDED, it belongs to the
+    teardown, not to the brake.
+    """
+    js.pad = FakePad("Fake H", [0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+    log = []
+    module.tele_cmd_vel.subscribe(lambda t: log.append((time.monotonic(), t.linear.x)))
+    module.start()
+    time.sleep(0.4)                                   # trust earned at neutral
+    js.pad.buttons[gp.DEADMAN_BUTTON] = 1
+    js.pad.axes = [0.0, -1.0, 0.0, 0.0, 0.0, -1.0]    # full forward
+    wait_for(lambda: bool(log) and close(log[-1][1], gp.CLAMP_LINEAR_MS), 3.0)
+    js.pad.buttons[gp.DEADMAN_BUTTON] = 0             # RELEASE at the ceiling
+    t_rel = time.monotonic()
+    if repress_after_s is not None:
+        time.sleep(repress_after_s)
+        js.pad.buttons[gp.DEADMAN_BUTTON] = 1         # RE-PRESS
+        time.sleep(max(0.0, watch_s - repress_after_s))
+    else:
+        time.sleep(watch_s)
+    seen = len(log)                                   # cut BEFORE the shutdown zero
+    module.stop()
+    return [(t - t_rel, vx) for t, vx in log[:seen] if t > t_rel]
+
+
+# H4. THE ordered case, at the real 50 Hz: released at speed, deadman pressed
+# again at t = 0.200 s -> at t = 0.250 s the published command is the STICK'S,
+# not a zero. (Physical units: vx in m/s; at 0.250 s the slew has had ~3 ticks
+# at 0.6 m/s2 / 50 Hz = 0.012 m/s each, so vx is small but NOT zero.)
+after = run_release_repress(GamepadTeleop(rate_hz=50.0), 0.45, repress_after_s=0.200)
+at_250 = [(dt, vx) for dt, vx in after if 0.235 <= dt <= 0.275]
+check(bool(at_250), f"a message exists around t = 0.250 s ({len(at_250)} of them)")
+check(all(vx > 0.0 for _, vx in at_250),
+      f"re-press at 0.200 s -> at 0.250 s the published command is the STICK'S, "
+      f"not zero: {[f'{dt:.3f}s {vx:+.3f}m/s' for dt, vx in at_250]}")
+# The invariant that matters on the bus: once the command flows again, NOTHING
+# zero comes behind it. (Not "no zero after t=0.200": a tick reads the button at
+# its start and publishes up to one period later, so a zero decided at 0.198 s
+# can legitimately land at 0.218 s. That one is ahead of the command, not
+# behind it, and no software can un-decide it.)
+first_cmd = next((i for i, (dt, vx) in enumerate(after) if not close(vx, 0.0)), None)
+check(first_cmd is not None, "the command flow restarts after the press")
+behind = [(dt, vx) for dt, vx in after[first_cmd + 1:] if close(vx, 0.0)]
+check(not behind,
+      f"... and NOT ONE zero comes BEHIND the restarted command "
+      f"(first command at {after[first_cmd][0]:.3f} s; {len(behind)} zeros after it)")
+brake_zeros = [dt for dt, vx in after if dt <= 0.200 and close(vx, 0.0)]
+check(bool(brake_zeros) and max(brake_zeros) <= 0.205,
+      f"the brake did run during the window: {len(brake_zeros)} zeros between "
+      f"the release and the press")
+
+# H5. no re-press at all: zeros for brake_s, then TOTAL silence. Physical
+# units: 0.5 s x 50 Hz = 25 messages maximum, then nothing for 0.6 s.
+lone = run_release_repress(GamepadTeleop(rate_hz=50.0), 0.9)
+zeros = [dt for dt, vx in lone if close(vx, 0.0)]
+check(bool(zeros) and all(close(vx, 0.0) for _, vx in lone),
+      f"deadman released and never pressed again -> every message after it is a "
+      f"zero Twist ({len(lone)} of them)")
+check(max(zeros) <= gp.BRAKE_S + 0.05,
+      f"... the last one lands at {max(zeros):.3f} s <= BRAKE_S "
+      f"({gp.BRAKE_S} s), not later")
+check(len(zeros) <= int(gp.BRAKE_S * 50) + 2,
+      f"... i.e. at most {int(gp.BRAKE_S * 50) + 2} messages at 50 Hz: got {len(zeros)}")
+late = [dt for dt in zeros if dt > gp.BRAKE_S + 0.05]
+check(not late, f"then SILENCE: nothing published past {gp.BRAKE_S + 0.05:.2f} s "
+                f"({len(late)} stragglers)")
+
+# H6. the anti-inertia fallback, measured in seconds: brake_s = 1.0 s keeps the
+# drives being TOLD to stop for twice as long before the module goes quiet.
+# This is the button for "le rover glisse encore ~1,5 m", NOT the cancel above.
+long_brake = run_release_repress(GamepadTeleop(rate_hz=50.0, brake_s=1.0), 1.4)
+long_zeros = [dt for dt, vx in long_brake if close(vx, 0.0)]
+check(bool(long_zeros) and 0.80 <= max(long_zeros) <= 1.05,
+      f"brake_s=1.0 -> the zeros run to {max(long_zeros):.3f} s (0.80-1.05 s "
+      f"window), twice the default 0.5 s")
+check(len(long_zeros) > len(zeros),
+      f"... and there are more of them than at 0.5 s ({len(long_zeros)} vs "
+      f"{len(zeros)} at 50 Hz)")
+
+# H7. the flag OFF, same scenario: the module behaves as it did on 12/09. This
+# is the honest half of the report - MEASURED 2026-09-13 before any change:
+# the module ALREADY published the stick command from the first tick after the
+# press, so the cancel does not move the default flight. What it buys is the
+# right to run H6's longer window with no stale zero behind a fresh command.
+gp.BRAKE_CANCEL_ON_DEADMAN = False
+try:
+    before_flag = run_release_repress(GamepadTeleop(rate_hz=50.0), 0.45,
+                                      repress_after_s=0.200)
+    at_250_off = [(dt, vx) for dt, vx in before_flag if 0.235 <= dt <= 0.275]
+    check(bool(at_250_off) and all(vx > 0.0 for _, vx in at_250_off),
+          f"BRAKE_CANCEL_ON_DEADMAN=False -> SAME result at 0.250 s "
+          f"({[f'{vx:+.3f}m/s' for _, vx in at_250_off]}): the flag does not "
+          f"change the default flight, it protects the longer window")
+finally:
+    gp.BRAKE_CANCEL_ON_DEADMAN = True
+
+# H8. THE REGRESSION CAUGHT ON 2026-09-13 BY AN ADVERSARIAL BENCH, and the
+# reason the brake-cancel lines now live BELOW the trust gate.
+# A single missed joystick read - the pad is physically still there, one poll
+# lies - while the pilot is rolling at the ceiling with the deadman held. The
+# module drops the pad, re-acquires it, and has to re-earn trust at neutral;
+# with the sticks still pushed it never does, so the ONLY thing it may still
+# publish is the brake: zeros, until brake_until, then silence. That repetition
+# is the whole point of BRAKE_S on a latest-only bus (LCM/zenoh).
+# With the cancel running ABOVE the gate (the shape shipped for a few hours on
+# 13/09), the held deadman looked like a rising edge on the first tick after
+# the re-acquisition, cancelled the window, and the untrusted path had nothing
+# to publish in its place: 25 zeros over 0.486 s became 1 zero at 0.011 s.
+def drop_one_read(then_axes=None):
+    """Make exactly ONE joystick poll fail - a single missed read, pad still
+    plugged in. If `then_axes` is given, the sticks take that value at the very
+    instant of the glitch (deterministic: no tick can slew in between)."""
+    real_count = js.get_count
+    fired = {"n": 0}
+
+    def once():
+        if fired["n"] == 0:
+            fired["n"] = 1
+            if then_axes is not None:
+                js.pad.axes = list(then_axes)
+            return 0          # "joystick disappeared" for this tick only
+        return real_count()
+
+    js.get_count = once
+    return fired
+
+
+def run_dropout(module, watch_s, then_axes=None):
+    """Drive to the ceiling with the deadman HELD, glitch one read, watch.
+
+    Returns [(dt seconds since the glitch, vx m/s)], the shutdown zero excluded.
+    """
+    js.pad = FakePad("Fake H8", [0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+    log = []
+    module.tele_cmd_vel.subscribe(lambda t: log.append((time.monotonic(), t.linear.x)))
+    module.start()
+    time.sleep(0.4)                                   # trust earned at neutral
+    js.pad.buttons[gp.DEADMAN_BUTTON] = 1
+    js.pad.axes = [0.0, -1.0, 0.0, 0.0, 0.0, -1.0]    # full forward
+    wait_for(lambda: bool(log) and close(log[-1][1], gp.CLAMP_LINEAR_MS), 3.0)
+    drop_one_read(then_axes)                          # ONE missed read
+    t_glitch = time.monotonic()
+    try:
+        time.sleep(watch_s)
+        seen = len(log)                               # cut BEFORE the shutdown zero
+    finally:
+        module.stop()
+        try:
+            del js.get_count                          # back to the real fake
+        except AttributeError:
+            pass
+    return [(t - t_glitch, vx) for t, vx in log[:seen] if t > t_glitch]
+
+
+drop = run_dropout(GamepadTeleop(rate_hz=50.0), 0.9)     # sticks stay pushed
+drop_zeros = [dt for dt, vx in drop if close(vx, 0.0)]
+check(all(close(vx, 0.0) for _, vx in drop),
+      f"one missed read at the 0.45 m/s ceiling -> NOTHING but zeros comes out "
+      f"(the pad has to re-earn trust at neutral): {len(drop)} messages")
+check(len(drop_zeros) >= 15,
+      f"... and the stop order is REPEATED, not said once: {len(drop_zeros)} "
+      f"zero Twists at 50 Hz (1 when the cancel ran above the trust gate)")
+check(bool(drop_zeros) and 0.40 <= max(drop_zeros) <= gp.BRAKE_S + 0.08,
+      f"... the last of them lands at {max(drop_zeros):.3f} s, i.e. the full "
+      f"BRAKE_S window ({gp.BRAKE_S} s) and not 0.011 s")
+check(not [dt for dt in drop_zeros if dt > gp.BRAKE_S + 0.08],
+      "... then SILENCE, as before: the window still ends on its own")
+
+# H9. THE PRE-EXISTING HOLE THE SAME BENCH FOUND (not introduced on 13/09,
+# fixed on 13/09): the slew state used to survive a pad loss. Same single
+# missed read, but the sticks come back at NEUTRAL - so trust IS re-earned at
+# once and the module drives again. Known input -> known output, in m/s:
+# prev_vx must be 0, so the command is 0.000 m/s. Before the fix the ramp still
+# held 0.45 m/s and the first published command was +0.438 m/s with nobody
+# touching the sticks - the exact 28/08 replay (0.44 m/s for ~0.75 s).
+NEUTRAL = [0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
+drop_n = run_dropout(GamepadTeleop(rate_hz=50.0), 0.9, then_axes=NEUTRAL)
+peak = max((abs(vx) for _, vx in drop_n), default=0.0)
+check(bool(drop_n), f"the module publishes again after the glitch ({len(drop_n)} messages)")
+check(close(peak, 0.0),
+      f"missed read at the ceiling + sticks at NEUTRAL -> peak |vx| = "
+      f"{peak:.3f} m/s (0.438 m/s before the fix; the ramp dies with the pad)")
+
+# H10. the operator's ONLY lever on a flight, end to end: the ENVIRONMENT of
+# the process -> the module dimOS builds from a blueprint with none of our
+# kwargs (nav_blueprints.py: GamepadTeleop.blueprint()). Same roundtrip the
+# adapter bench does for VECTOR_DECEL_MS; it was missing on this side.
+os.environ["VECTOR_BRAKE_S"] = "1.0"
+try:
+    check(GamepadTeleop(rate_hz=50.0).brake_s == 1.0,
+          "VECTOR_BRAKE_S=1.0 in the real environment -> a module built with no "
+          "argument at all carries a 1.00 s window (trial 3's only lever)")
+finally:
+    del os.environ["VECTOR_BRAKE_S"]
+check(GamepadTeleop(rate_hz=50.0).brake_s == gp.BRAKE_S,
+      f"... and with the variable gone again: back to {gp.BRAKE_S} s, the 12/09 flight")
+
 gp.logger = real_logger
 del sys.modules["pygame"]
 

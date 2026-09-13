@@ -1,11 +1,14 @@
 """Cold bench: full adapter on a mocked MODBUS bus. Known in -> known out."""
 import math
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from vector_dimos.adapter import VectorBaseAdapter, FRONT_ID, BACK_ID
+from vector_dimos.adapter import (BACK_ID, DECEL_MS_FLOOR, DECEL_MS_MAX,
+                                  FRONT_ID, VectorBaseAdapter,
+                                  resolve_decel_ms)
 from vector_dimos.kinematics import MecanumGeometry, inverse, rads_to_rpm
 from vector_dimos.mock import MockModbusClient
 from vector_dimos.zlac8015d import (COMM_OFFLINE_TIME, CONTROL_REG, ENABLE,
@@ -39,6 +42,84 @@ ramps = {(u, addr, tuple(vals)) for (u, addr, vals) in bus.writes
 check(ramps == {(FRONT_ID, L_ACL_TIME, (400, 400)), (FRONT_ID, L_DCL_TIME, (400, 400)),
                 (BACK_ID, L_ACL_TIME, (400, 400)), (BACK_ID, L_DCL_TIME, (400, 400))},
       f"accel/decel ramp 400 ms written to both drives: {sorted(ramps)}")
+
+# ── 2026-09-13: the DECELERATION ramp is its own number now ────────────────
+# metrox 30/08: "inertie teleop excessive : stick lache -> le rover glisse
+# encore ~1,5 m". The drives have had separate registers all along (ZLAC8015D
+# RS485 manual v1.04: 0x2080/0x2081 accel L/R, 0x2082/0x2083 decel L/R, U16,
+# 0-32767 ms); the adapter was writing the same value to all four.
+# The check just above is the one that matters most here: DEFAULT UNCHANGED,
+# 400/400 on both drives, nobody's flight moves unless they ask.
+print("\n  the deceleration ramp (0x2082-0x2083), new 2026-09-13")
+
+# resolve_decel_ms: pure, known value in -> known value out, in milliseconds.
+check(resolve_decel_ms(400) == 400,
+      "no argument, no env -> decel = accel = 400 ms (the 12/09 behaviour)")
+check(resolve_decel_ms(400, 150) == 150,
+      "decel_ms=150 -> 150 ms (the value proposed for the workshop trial)")
+check(resolve_decel_ms(400, None, {"VECTOR_DECEL_MS": "150"}) == 150,
+      "VECTOR_DECEL_MS=150 -> 150 ms (the operator's only lever in a flight: "
+      "dimOS builds this adapter from its registry with none of our kwargs)")
+check(resolve_decel_ms(400, 150, {"VECTOR_DECEL_MS": "900"}) == 150,
+      "an explicit argument beats the environment (150 wins over 900)")
+check(resolve_decel_ms(400, None, {"VECTOR_DECEL_MS": "  "}) == 400,
+      "an empty VECTOR_DECEL_MS is not an answer -> decel = accel = 400 ms")
+check(resolve_decel_ms(400, None, {"VECTOR_DECEL_MS": "pouet"}) == 400,
+      "a mistyped VECTOR_DECEL_MS gives YESTERDAY'S ramp (400 ms), never a "
+      "random one")
+# The low bound is a safety bound on 25 kg, not a style: a ramp under
+# DECEL_MS_FLOOR ms can slide the rollers or pitch the chassis forward
+# (0.45 m/s stopped in 0.100 s = 4.5 m/s2, against a pitch-over estimate of
+# ~6.7 m/s2). Out of range is CLAMPED, never obeyed.
+check(resolve_decel_ms(400, 10) == DECEL_MS_FLOOR,
+      f"10 ms is refused and clamped to the {DECEL_MS_FLOOR} ms floor "
+      f"(25 kg: sliding/pitching)")
+check(resolve_decel_ms(400, 0) == DECEL_MS_FLOOR,
+      f"0 ms (= 'stop instantly') clamped to {DECEL_MS_FLOOR} ms too")
+check(resolve_decel_ms(400, 99999) == DECEL_MS_MAX,
+      f"99999 ms clamped to the U16 range of the manual ({DECEL_MS_MAX} ms)")
+check((DECEL_MS_FLOOR, DECEL_MS_MAX) == (100, 32767),
+      f"bounds are the documented ones: floor {DECEL_MS_FLOOR} ms (safety), "
+      f"ceiling {DECEL_MS_MAX} ms (ZLAC8015D manual, U16 0-32767)")
+
+# ...and the number actually reaches the right registers, on the mock bus.
+# accel 400 -> 0x2080/0x2081, decel 150 -> 0x2082/0x2083, on BOTH drives.
+bus2 = MockModbusClient()
+a2 = VectorBaseAdapter(dof=3, client=bus2, geometry=G, decel_ms=150)
+check((a2.accel_ms, a2.decel_ms) == (400, 150),
+      f"adapter built with decel_ms=150 -> accel {a2.accel_ms} ms, "
+      f"decel {a2.decel_ms} ms")
+check(a2.connect() and a2.write_enable(True), "enable sequence with a split ramp")
+split = {(u, addr, tuple(vals)) for (u, addr, vals) in bus2.writes
+         if addr in (L_ACL_TIME, L_DCL_TIME)}
+check(split == {(FRONT_ID, L_ACL_TIME, (400, 400)), (FRONT_ID, L_DCL_TIME, (150, 150)),
+                (BACK_ID, L_ACL_TIME, (400, 400)), (BACK_ID, L_DCL_TIME, (150, 150))},
+      f"400 ms into 0x2080/0x2081 and 150 ms into 0x2082/0x2083, both drives: "
+      f"{sorted(split)}")
+a2.disconnect()
+
+# the same through the environment - what metrox will actually type
+os.environ["VECTOR_DECEL_MS"] = "150"
+try:
+    bus3 = MockModbusClient()
+    a3 = VectorBaseAdapter(dof=3, client=bus3, geometry=G)
+    check(a3.connect() and a3.write_enable(True), "enable sequence with VECTOR_DECEL_MS=150")
+    env_ramps = {(u, addr, tuple(vals)) for (u, addr, vals) in bus3.writes
+                 if addr in (L_ACL_TIME, L_DCL_TIME)}
+    check(env_ramps == split,
+          f"VECTOR_DECEL_MS=150 writes exactly the same registers as the "
+          f"argument: {sorted(env_ramps)}")
+    a3.disconnect()
+finally:
+    del os.environ["VECTOR_DECEL_MS"]
+
+# and with nothing set, the ramp is symmetrical again - the knob is OFF by
+# default, which is the property that lets metrox fly one change at a time.
+bus4 = MockModbusClient()
+a4 = VectorBaseAdapter(dof=3, client=bus4, geometry=G)
+check((a4.accel_ms, a4.decel_ms) == (400, 400),
+      f"no argument, no env -> {a4.accel_ms}/{a4.decel_ms} ms, symmetrical as before")
+a4.disconnect()
 # ...the drive-side watchdog (0x2000) is armed at 1000 ms on both drives
 # (measured on blocks: wheels at rest < 1.9 s after a SIGKILLed runtime)...
 wd = {(u, tuple(vals)) for (u, addr, vals) in bus.writes if addr == COMM_OFFLINE_TIME}

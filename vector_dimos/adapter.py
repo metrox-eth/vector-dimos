@@ -128,6 +128,68 @@ FEEDBACK_MOVING_RPM = 0.5    # |feedback| below this reads as "not turning"
 # tick loop talks to the bus far more often than this, so it never trips.
 COMM_OFFLINE_MS = 1000
 
+# ── the DECELERATION ramp (0x2082-0x2083), split off from the acceleration
+#    ramp on 2026-09-13 ───────────────────────────────────────────────────────
+# metrox, notes d'etabli 30/08 (piloted lap): "inertie teleop excessive : stick
+# lache -> le rover glisse encore ~1,5 m". Until today `_prepare` wrote the SAME
+# value to both ramps - set_accel_ms(accel_ms, accel_ms) - so the stop was as
+# soft as the start (400 ms both ways).
+#
+# The drives have SEPARATE registers for the two. ZLAC8015D RS485 Communication
+# Instruction v1.04, checked 2026-09-13 against the manual itself:
+#     0x2080 / 0x2081  Acceleration time (Left / Right)  U16 RW, range 0-32767 ms, factory default 500
+#     0x2082 / 0x2083  Deceleration time (Left / Right)  U16 RW, range 0-32767 ms, factory default 500
+# The manual gives the RANGE but never says what speed the time is referenced to
+# (0 -> commanded target, or 0 -> full scale 3000 RPM). Unknown = not assumed:
+# this is one of the things metrox's bench run is there to tell us, which is why
+# the value below is a knob and not a new default.
+#
+# DEFAULT = None -> decel_ms takes the value of accel_ms. NOTHING changes for
+# anyone who does not ask. Two ways to ask:
+#     VectorBaseAdapter(..., decel_ms=150)         (code, benches)
+#     VECTOR_DECEL_MS=150 tools/fly.sh ...         (a flight: dimOS builds this
+#         adapter from its own registry and passes none of our kwargs, so the
+#         environment is the ONLY lever an operator has)
+DECEL_MS_ENV = "VECTOR_DECEL_MS"
+DECEL_MS_MAX = 32767      # the manual's U16 range; nothing above this reaches a drive
+# LOW BOUND, and why it exists: a shorter ramp on 25 kg does not just stop
+# sooner, it can make the rollers slide or pitch the chassis onto its nose.
+#
+# READ THIS BEFORE TRUSTING THE ARITHMETIC (rewritten 2026-09-13 after an
+# adversarial review; the first version of this comment oversold itself).
+# The register is a TIME, and the manual never says what speed that time is
+# referenced to. The two readings give numbers 60x apart:
+#   READING A - the time is the stop time FROM THE COMMANDED SPEED. Top
+#     commanded rim speed is the teleop envelope, 0.45 m/s
+#     (gamepad.WHEEL_ENVELOPE_MS):
+#         400 ms (today) -> 1.1 m/s2      150 ms -> 3.0 m/s2      100 ms -> 4.5 m/s2
+#   READING B - the time is 0 -> FULL SCALE (zlac8015d.MAX_RPM = 3000 RPM,
+#     i.e. 26.7 m/s at the rim with MecanumGeometry.wheel_radius_m = 0.085):
+#         400 ms (today) -> 66.8 m/s2     150 ms -> 178 m/s2      100 ms -> 267 m/s2
+# The floor below is calibrated on READING A, which is the FAVOURABLE one, NOT
+# "the strictest": under reading B the floor bounds nothing at all, and the real
+# limit is tyre grip and tip-over, not this register.
+# What keeps that from being frightening today: under reading B the rover is
+# ALREADY commanded 66.8 m/s2 at 400 ms and it neither slides nor pitches - one
+# more argument for the standing suspect n.1, that the drives are not honouring
+# this ramp at all on release (free-wheel under the 0x2000 watchdog) and that
+# the 1.5 m of coast is not a ramp problem. metrox's bench run is what tells us
+# which reading is real; until it has, nothing goes below 150 ms.
+# The tip-over threshold itself, under reading A: g * (half wheelbase / CG
+# height) = 9.81 * 0.15 / ~0.22 = ~6.7 m/s2. BOTH of those numbers are soft.
+#   - CG height 0.22 m is ESTIMATED (battery low, mast gone since 30/08), never
+#     measured - and it is the one that moves the threshold.
+#   - the half wheelbase is contradicted inside this very repo: kinematics.py
+#     says half_wheelbase 0.15 / half_track 0.185 ("tape-measured 30 cm / 37 cm"),
+#     while gamepad.MECANUM_LEVER_M says "half wheelbase 0.27 + half track 0.23
+#     (54x46 cm chassis)". Two chassis, one robot. A tape measure settles it,
+#     and until then 6.7 m/s2 is an order of magnitude, not a result.
+# So: 100 ms is where the clamp bites, it is NOT a proven safe value, and the
+# operating instruction is the paragraph above - do not go below 150 ms before
+# the reference is settled by measurement. A lower value is REFUSED (clamped)
+# and logged, never obeyed.
+DECEL_MS_FLOOR = 100
+
 # Sonar proximity brake (vector_dimos.esp_sensors publishes `sonar_range` in
 # metres; blueprints.VectorControlCoordinator forwards it to note_sonar_range).
 SONAR_STOP_M = 0.30          # under this, no forward motion at all
@@ -225,6 +287,44 @@ def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in _TRUTHY
 
 
+def resolve_decel_ms(accel_ms: int, decel_ms: int | None = None,
+                     env: dict | None = None) -> int:
+    """Deceleration ramp in ms for 0x2082/0x2083 - pure, cold-testable.
+
+    Precedence: explicit argument > VECTOR_DECEL_MS > accel_ms (the 12/09
+    behaviour, ramp symmetrical). Out-of-range values are CLAMPED to
+    [DECEL_MS_FLOOR, DECEL_MS_MAX] and logged - a typo in an environment
+    variable must not reach a drive as a number nobody meant. Unparseable
+    text falls back to accel_ms, loudly: an operator who mistyped the knob
+    gets yesterday's ramp, never a random one.
+
+    New 2026-09-13, for metrox's "inertie teleop excessive" (notes 30/08).
+    """
+    raw: float | None = None if decel_ms is None else float(decel_ms)
+    if raw is None:
+        text = (os.environ if env is None else env).get(DECEL_MS_ENV, "")
+        text = text.strip() if isinstance(text, str) else ""
+        if text:
+            try:
+                raw = float(text)
+            except ValueError:
+                _log().warning(
+                    f"{DECEL_MS_ENV}={text!r} is not a number - deceleration "
+                    f"ramp stays at the acceleration ramp ({accel_ms} ms)")
+                raw = None
+    if raw is None:
+        return int(accel_ms)
+    value = int(round(raw))
+    clamped = max(DECEL_MS_FLOOR, min(DECEL_MS_MAX, value))
+    if clamped != value:
+        _log().warning(
+            f"deceleration ramp {value} ms is outside "
+            f"[{DECEL_MS_FLOOR}, {DECEL_MS_MAX}] ms - clamped to {clamped} ms "
+            f"(25 kg: a ramp shorter than {DECEL_MS_FLOOR} ms can slide the "
+            f"rollers or pitch the chassis; see DECEL_MS_FLOOR)")
+    return clamped
+
+
 class VectorBaseAdapter:
     """TwistBaseAdapter implementation for VECTOR (2x ZLAC8015D, RS485).
 
@@ -239,10 +339,16 @@ class VectorBaseAdapter:
         timeout_s: pymodbus response timeout on the bus we own. It is the
             per-transaction cost of a silent drive - see the module
             docstring before lowering it.
-        accel_ms: acceleration = deceleration ramp written to both drives
+        accel_ms: ACCELERATION ramp (0x2080/0x2081) written to both drives
             at enable time. 400 ms is the value the first robot code
             converged on in the field (500 -> 1000 -> 400 over its commit
             history; no reason recorded).
+        decel_ms: DECELERATION ramp (0x2082/0x2083). None (the default) means
+            "same as accel_ms", which is exactly what this adapter did before
+            2026-09-13 - so the default flight is untouched. Set it, or export
+            VECTOR_DECEL_MS, to stop harder than you start (metrox 30/08:
+            "inertie teleop excessive"). See resolve_decel_ms and
+            DECEL_MS_FLOOR for the bounds and why they exist.
         comm_offline_ms: the drives' own watchdog (0x2000), written at
             enable time; 0 turns it off. See COMM_OFFLINE_MS for what was
             measured. It is the only thing that stops the wheels when the
@@ -252,7 +358,8 @@ class VectorBaseAdapter:
     def __init__(self, dof: int = 3, address: str | None = None,
                  hardware_id: str = "base", client=None,
                  geometry: MecanumGeometry | None = None,
-                 accel_ms: int = 400, timeout_s: float = SERIAL_TIMEOUT_S,
+                 accel_ms: int = 400, decel_ms: int | None = None,
+                 timeout_s: float = SERIAL_TIMEOUT_S,
                  comm_offline_ms: int = COMM_OFFLINE_MS,
                  **_: object) -> None:
         if dof != 3:
@@ -263,6 +370,8 @@ class VectorBaseAdapter:
         self._owns_client = client is None
         self._geometry = geometry or MecanumGeometry()
         self._accel_ms = accel_ms
+        # None -> accel_ms: the pre-2026-09-13 symmetrical ramp, unchanged.
+        self._decel_ms = resolve_decel_ms(accel_ms, decel_ms)
         self._comm_offline_ms = comm_offline_ms
         self._connected = False
         self._enabled = False
@@ -297,6 +406,19 @@ class VectorBaseAdapter:
     def client(self):
         """The MODBUS client actually in use (mock bus included)."""
         return self._client
+
+    @property
+    def accel_ms(self) -> int:
+        """Acceleration ramp written to 0x2080/0x2081 at enable time (ms)."""
+        return self._accel_ms
+
+    @property
+    def decel_ms(self) -> int:
+        """Deceleration ramp written to 0x2082/0x2083 at enable time (ms).
+
+        Equal to accel_ms unless decel_ms/VECTOR_DECEL_MS asked otherwise.
+        """
+        return self._decel_ms
 
     @property
     def mock_bus(self) -> bool:
@@ -852,7 +974,10 @@ class VectorBaseAdapter:
         failed = []
         if not self._took(controller.set_mode_velocity):
             failed.append("velocity mode (0x200D)")
-        if not self._took(lambda: controller.set_accel_ms(self._accel_ms, self._accel_ms)):
+        # 2026-09-13: accel and DECEL are two different numbers now. Same one
+        # call, same two register pairs - only the second argument moved.
+        if not self._took(lambda: controller.set_accel_ms(self._accel_ms,
+                                                          self._decel_ms)):
             failed.append("accel/decel ramp (0x2080-0x2083)")
         if not self._took(lambda: controller.set_comm_offline_ms(self._comm_offline_ms)):
             failed.append("comm-offline watchdog (0x2000)")
