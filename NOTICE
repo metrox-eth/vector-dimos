@@ -1,0 +1,8 @@
+vector-dimos
+Copyright 2026 Laurent Genoud (Show Robotics), Hua Hin, Thailand.
+
+Licensed under the Apache License, Version 2.0.
+
+This project is an external blueprint for dimOS (https://github.com/dimensionalOS/dimos).
+Portions are derived from dimOS, Copyright 2025 Dimensional Inc., also licensed under
+the Apache License, Version 2.0.
