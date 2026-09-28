@@ -225,6 +225,7 @@ Everything below runs without the robot, on a mocked MODBUS bus:
 ```console
 $ python tests/test_kinematics.py          # inverse/forward mecanum, roundtrip identity
 $ python tests/test_adapter_cold.py        # known twist -> known per-wheel RPM (real wheel
+$ python tests/test_moss_adapter_cold.py   # MOSS tracked base on the fake ESP32 firmware (docs/moss_base.md)
                                            # topology and signs), odometry roundtrip
 $ python tests/test_adapter_bus_faults.py  # silent drive refused, dying bus never raises,
                                            # odometry freezes instead of dead-reckoning,

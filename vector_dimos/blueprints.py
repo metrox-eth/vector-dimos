@@ -54,6 +54,12 @@ try:
         "vector", "vector_dimos.adapter:VectorBaseAdapter")
 except Exception:  # already registered (e.g. re-import): keep the first one
     pass
+# MOSS (tracked, ESP32-S3 bench firmware over USB-UART) - same escape hatch.
+try:
+    twist_base_adapter_registry.register_path(
+        "moss", "vector_dimos.moss_adapter:MossBaseAdapter")
+except Exception:  # already registered (e.g. re-import): keep the first one
+    pass
 
 # Velocity commands must never queue up (stale twists drove the rover 2x too
 # far on 2026-08-22): clamp the LCM queue of command channels to one message.
@@ -137,10 +143,22 @@ def _vector_base(hw_id: str = "base",
     )
 
 
-def _coordinator_blueprint():
-    """Coordinator driving one VECTOR base at velocity."""
+def _moss_base(hw_id: str = "base",
+               address: str | None = None) -> HardwareComponent:
+    """MOSS tracked base (differential; vy ignored) - ESP32-S3 over USB-UART."""
+    return HardwareComponent(
+        hardware_id=hw_id,
+        hardware_type=HardwareType.BASE,
+        joints=make_twist_base_joints(hw_id),
+        adapter_type="moss",
+        address=address,   # serial port; adapter default: MOSS_PORT or /dev/ttyUSB0
+    )
+
+
+def _coordinator_blueprint(base=None):
+    """Coordinator driving one base at velocity (VECTOR by default)."""
     return VectorControlCoordinator.blueprint(
-        hardware=[_vector_base()],
+        hardware=[base or _vector_base()],
         tasks=[
             TaskConfig(name="vel_base", type="velocity",
                        joint_names=_base_joints, priority=10),
@@ -167,6 +185,26 @@ def _gamepad_blueprint():
 
 
 gamepad_blueprint = _gamepad_blueprint()
+
+
+# ── MOSS: the same coordinator and gamepad, the tracked base underneath ──
+moss_base_blueprint = _coordinator_blueprint(_moss_base()).remappings(
+    [(VectorControlCoordinator, "twist_command", "cmd_vel")])
+
+
+def _moss_gamepad_blueprint():
+    from vector_dimos.gamepad import GamepadTeleop
+
+    return autoconnect(
+        _coordinator_blueprint(_moss_base()),
+        GamepadTeleop.blueprint(),
+    ).remappings([
+        (VectorControlCoordinator, "twist_command", "cmd_vel"),
+        (GamepadTeleop, "tele_cmd_vel", "cmd_vel"),
+    ])
+
+
+moss_gamepad_blueprint = _moss_gamepad_blueprint()
 
 
 def _rplidar_blueprint():
