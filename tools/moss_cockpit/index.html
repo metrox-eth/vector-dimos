@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>MOSS cockpit</title>
+<link rel="icon" href="/static/assets/mark-mint.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/tokens.css">
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }   /* the page hides rows with the attribute; no rule may win over it */
+  html, body { margin: 0; }
+  body {
+    background: var(--moss-studio);
+    color: var(--moss-white);
+    font-family: var(--moss-font);
+    font-weight: var(--moss-w-body);
+    font-size: var(--ui-fs-body);
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+  .num, .tab { font-variant-numeric: tabular-nums; }
+  h1, h2, h3, p { margin: 0; }
+  button, input { font: inherit; color: inherit; }
+
+  /* The studio: flat blue plus three thin arcs cut by the frame (kit v0.6). */
+  #studio { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+
+  .kicker { font-weight: var(--moss-w-kicker); font-size: var(--ui-fs-kicker); letter-spacing: var(--moss-track-kicker);
+            color: var(--moss-mint); font-kerning: none; line-height: 1.2; }
+  .title { font-weight: var(--moss-w-title); font-size: var(--ui-fs-title); line-height: 1.15; }
+  .dim { color: var(--ui-dim); }
+  .small { font-size: var(--ui-fs-small); }
+
+  /* ---- page frame ---- */
+  #app { position: relative; z-index: 1; display: grid; grid-template-rows: auto 1fr;
+         height: 100vh; height: 100dvh; padding: 0 var(--moss-margin); }
+  header { display: flex; align-items: center; gap: 40px; padding: 38px 0 22px; min-height: 96px; }
+  .lockup { display: flex; align-items: flex-start; gap: 13px; text-decoration: none; flex: none; }
+  .lockup .mark { width: 32.75px; height: auto; display: block; }
+  .lockup .wm { height: 30.8px; width: auto; display: block; margin-top: -.7px; }
+  .runline { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .runline .row { display: flex; align-items: baseline; gap: 18px; min-width: 0; }
+  #run-name { font-size: var(--ui-fs-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; font-size: var(--ui-fs-kicker);
+          letter-spacing: var(--moss-track-kicker); white-space: nowrap; }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .chip.on { color: var(--moss-mint); }
+  .chip.on::before { animation: breathe 2.4s var(--moss-ease) infinite; }
+  .chip.idle { color: var(--ui-unknown); }
+  .chip.off { color: var(--moss-salmon); }
+  .chip.off::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+  @keyframes breathe { 50% { opacity: .35; } }
+
+  main { display: grid; grid-template-columns: minmax(250px, 3fr) minmax(0, 6fr) minmax(290px, 3fr);
+         column-gap: 36px; min-height: 0; padding-bottom: 28px; }
+  .col { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--moss-hairline) transparent;
+         padding-right: 4px; }
+  .col::-webkit-scrollbar { width: 6px; }
+  .col::-webkit-scrollbar-thumb { background: var(--moss-hairline); }
+  #col-map { display: flex; flex-direction: column; overflow: hidden; padding-right: 0; }
+
+  /* ---- a module: no box. A 70.5 px accent on a hairline, a kicker, a title. ---- */
+  .mod { padding: 0 0 26px; }
+  .mod-head { position: relative; border-top: 1px solid var(--moss-hairline); padding-top: 13px; margin-bottom: 14px; }
+  .mod-head::before { content: ""; position: absolute; left: 0; top: -1px; width: var(--moss-accent-len);
+                      height: var(--moss-accent-w); background: var(--moss-mint); }
+  .mod-head.alt::before { background: var(--moss-salmon); }
+  .mod-head .title { margin-top: 5px; }
+  .mod-head .aside { position: absolute; right: 0; top: 11px; }
+
+  /* ---- buttons: hairline, mint fill for primary, 0-4 px radius ---- */
+  .btn { appearance: none; background: transparent; border: 1px solid var(--ui-control-line); border-radius: 2px;
+         padding: 8px 13px; font-weight: 600; font-size: 14px; line-height: 1.2; cursor: pointer;
+         transition: background var(--moss-fade-in) var(--moss-ease), color var(--moss-fade-in) var(--moss-ease); }
+  .btn:hover:not(:disabled) { background: rgba(234, 240, 239, .08); }
+  .btn.primary { background: var(--moss-mint); border-color: var(--moss-mint); color: var(--moss-navy); }
+  .btn.primary:hover:not(:disabled) { background: #8ffad5; }
+  .btn:disabled { opacity: .38; cursor: default; }
+  .btn.primary:disabled { background: transparent; color: var(--moss-white); border-color: var(--ui-control-line); }
+  .btn.link { border: 0; padding: 2px 0; font-size: var(--ui-fs-small); color: var(--moss-mint); background: none;
+              border-bottom: 1px solid currentColor; border-radius: 0; }
+  .btn.link:hover:not(:disabled) { background: none; color: var(--moss-white); }
+  :focus-visible { outline: 2px solid var(--moss-mint); outline-offset: 2px; }
+  .btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btnrow .btn { flex: 1 1 auto; }
+
+  /* ---- status marks (UI-only mapping documented in tokens.css) ---- */
+  .v { display: inline-block; min-width: 28px; font-weight: 600; font-size: 11.5px; letter-spacing: .1em;
+       text-align: center; padding: 2px 0; line-height: 1.25; }
+  .v.ok { color: var(--ui-ok); }
+  .v.ko { background: var(--ui-fail-bg); color: var(--ui-fail-fg); border-radius: 4px; }
+  .v.na { color: var(--ui-unknown); }
+  .attn { color: var(--ui-attention); }
+
+  /* ---- flight check ---- */
+  #pf-list { list-style: none; margin: 0; padding: 0; }
+  #pf-list li { display: grid; grid-template-columns: 34px 1fr; column-gap: 8px; padding: 6px 0;
+                border-bottom: 1px solid rgba(106, 135, 151, .45); }
+  #pf-list li:last-child { border-bottom: 0; }
+  #pf-list .lb { font-size: 14px; }
+  #pf-list .dt { grid-column: 2; font-size: 12.5px; color: var(--ui-dim); overflow-wrap: anywhere; }
+  #pf-list .sec { display: block; padding: 12px 0 2px; border: 0; }
+  #pf-list .sec .kicker { font-size: 11.5px; color: var(--ui-dim); }
+  #pf-empty p { margin-bottom: 12px; }
+  #pf-list.brief li.pass, #pf-list.brief li.sec { display: none; }
+  #pf-list .passline { display: block; grid-template-columns: none; font-size: 12.5px; color: var(--ui-dim); padding: 8px 0 0; border: 0; }
+  #pf-list:not(.brief) .passline { display: none; }
+  .pf-links { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; }
+
+  /* ---- base ---- */
+  .big { font-size: var(--ui-fs-big); font-weight: 600; line-height: 1; letter-spacing: -.01em; }
+  .big .unit { font-size: 18px; font-weight: 500; margin-left: 3px; letter-spacing: 0; }
+  .batt { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .meter { position: relative; height: 1px; background: var(--moss-rule); margin: 12px 0 14px; }
+  .meter > i { position: absolute; left: 0; top: -1px; height: var(--moss-progress-w); background: var(--moss-mint);
+               width: 0; transition: width var(--moss-fade-in) var(--moss-ease); }
+  .meter.attn > i { background: var(--moss-salmon); }
+  .kv { display: grid; grid-template-columns: auto 1fr; column-gap: 14px; row-gap: 5px; font-size: 14px; }
+  .kv dt { color: var(--ui-dim); }
+  .kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .tracks { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; margin: 4px 0 16px; }
+  .track { display: flex; align-items: center; gap: 10px; }
+  .track.r { flex-direction: row-reverse; }
+  .track .lbl { text-align: center; font-variant-numeric: tabular-nums; }
+  .track .lbl b { display: block; font-size: 22px; font-weight: 600; }
+  .track .lbl span { font-size: 11.5px; letter-spacing: .1em; color: var(--ui-dim); font-weight: 600; }
+  .tbar { position: relative; width: 8px; height: 72px; background: rgba(234, 240, 239, .10); }
+  .tbar::after { content: ""; position: absolute; left: -5px; right: -5px; top: 50%; height: 1px; background: var(--moss-hairline); }
+  .tbar > i { position: absolute; left: 0; right: 0; background: var(--moss-mint); height: 0; bottom: 50%;
+              transition: height 200ms var(--moss-ease), bottom 200ms var(--moss-ease); }
+  .tbar > i.rev { background: var(--moss-white); }
+  .tracks .mid { text-align: center; }
+  .tracks .mid .kicker { font-size: 11.5px; }
+
+  /* ---- map pane ---- */
+  #map-wrap { position: relative; flex: 1 1 auto; min-height: 320px; overflow: hidden; }
+  #map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #map.grabbing { cursor: grabbing; }
+  #map-tools { position: absolute; top: 12px; right: 0; display: flex; gap: 8px; align-items: center; z-index: 2; }
+  #map-tools .btn { background: rgba(61, 87, 106, .7); backdrop-filter: blur(2px); }
+  #hud { position: absolute; top: 14px; left: 0; z-index: 2; font-size: 12.5px; color: var(--ui-dim);
+         font-variant-numeric: tabular-nums; pointer-events: none; }
+  #map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+               pointer-events: none; text-align: center; }
+  #map-empty[hidden] { display: none; }
+  #goal-chip { position: absolute; z-index: 3; display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 12px;
+               background: var(--moss-navy); border-left: var(--moss-vrule-w) solid var(--moss-salmon);
+               font-size: 14px; white-space: nowrap; box-shadow: 0 6px 24px rgba(8, 15, 26, .45); }
+  #goal-chip[hidden] { display: none; }
+  #goal-chip .btn { padding: 5px 10px; font-size: 13px; }
+  #goal-chip .btn.go { background: var(--moss-salmon); border-color: var(--moss-salmon); color: var(--moss-navy); }
+
+  /* lower-third caption on the map pane (kit v0.6 caption, recomposed for a pane) */
+  .lower { position: absolute; left: 0; right: 0; bottom: 0; height: 34%; min-height: 128px; background: var(--moss-fade);
+           pointer-events: none; z-index: 1; }
+  .lower-in { position: absolute; left: 0; right: 0; bottom: 22px; display: grid; grid-template-columns: auto auto 1fr;
+              column-gap: 16px; align-items: start; padding-left: 0; }
+  .lower .vrule { width: var(--moss-vrule-w); align-self: stretch; background: var(--moss-mint); margin-left: 0; }
+  .lower .numeral { font-size: clamp(34px, 3.1vw, var(--moss-fs-numeral)); font-weight: 600; color: var(--moss-mint);
+                    line-height: .92; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .lower .ttl { font-size: clamp(22px, 2.05vw, 34px); font-weight: 600; line-height: 1.12; margin-top: 6px; }
+  .lower .sub { font-size: var(--ui-fs-small); color: var(--ui-dim); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .brule { position: relative; height: 1px; background: var(--moss-rule); margin-top: 0; flex: none; }
+  .brule > i { position: absolute; left: 0; bottom: 0; height: var(--moss-progress-w); width: 0; background: var(--moss-mint);
+               transition: width 900ms linear; }
+  .brule-cap { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; font-size: 12.5px;
+               color: var(--ui-dim); font-variant-numeric: tabular-nums; flex: none; }
+
+  /* ---- camera ---- */
+  .cam { position: relative; aspect-ratio: 4 / 3; background: rgba(8, 15, 26, .35); overflow: hidden; }
+  .cam img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+  .cam .ph { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 14px 16px;
+             background: var(--moss-fade); }
+  .cam .ph[hidden] { display: none; }
+
+  /* ---- controls ---- */
+  .ctl-group { padding: 4px 0 14px; }
+  .ctl-group + .ctl-group { border-top: 1px solid rgba(106, 135, 151, .45); padding-top: 14px; }
+  .ctl-group .kicker { font-size: 11.5px; color: var(--ui-dim); margin-bottom: 8px; display: block; }
+  .ctl-note { font-size: 12.5px; color: var(--ui-dim); margin-top: 7px; }
+  .field { display: flex; gap: 8px; }
+  .field input { flex: 1 1 auto; min-width: 0; background: transparent; border: 0; border-bottom: 1px solid var(--ui-control-line);
+                 padding: 7px 0; font-size: 14px; font-weight: 500; border-radius: 0; }
+  .field input:focus-visible { outline: none; border-bottom-color: var(--moss-mint); }
+  #say { min-height: 1.4em; font-size: 13px; margin: -4px 0 10px; }
+  #say.err { color: var(--ui-attention); }
+  #say.ok { color: var(--moss-mint); }
+  #launch-tail { margin: 8px 0 0; padding: 0; list-style: none; font-size: 12px; color: var(--ui-dim);
+                 font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .confirm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; padding: 8px 0 8px 12px;
+             border-left: var(--moss-vrule-w) solid var(--moss-salmon); font-size: 13.5px; }
+  .confirm[hidden] { display: none; }
+
+  .stop { display: block; width: 100%; appearance: none; border: 0; border-radius: 8px; cursor: pointer;
+          background: var(--moss-salmon); color: var(--moss-navy); font-weight: 700; font-size: 30px;
+          letter-spacing: .14em; padding: 18px 0 17px; line-height: 1; }
+  .stop:hover { background: #ffa894; }
+  .stop:active { transform: translateY(1px); }
+  .stop-cap { font-size: 12.5px; color: var(--ui-dim); margin-top: 8px; }
+  .stop.fail { background: var(--moss-navy); color: var(--moss-salmon); box-shadow: inset 0 0 0 2px var(--moss-salmon); }
+  /* a STOP always in view, whatever the width and the scroll of the columns */
+  #stop-fab { position: fixed; right: 16px; bottom: 16px; z-index: 6; width: auto;
+              padding: 15px 22px 14px; font-size: 18px; border-radius: 15px; box-shadow: 0 6px 24px rgba(8, 15, 26, .5); }
+  #col-right { padding-bottom: 72px; }   /* the end of the column scrolls clear of the floating STOP */
+
+  /* ---- log ---- */
+  #log { list-style: none; margin: 0; padding: 0; font-size: 12px; line-height: 1.45; font-variant-numeric: tabular-nums; }
+  #log li { display: grid; grid-template-columns: 58px 1fr; column-gap: 8px; padding: 2px 0; }
+  #log .t { color: var(--ui-unknown); }
+  #log .e { overflow-wrap: anywhere; }
+  #log .warn .e { color: var(--ui-attention); }
+  #log .lg { color: var(--ui-unknown); }
+
+  .bus { display: grid; grid-template-columns: 1fr auto auto; column-gap: 12px; row-gap: 3px; font-size: 13px;
+         font-variant-numeric: tabular-nums; }
+  .bus .n { color: var(--ui-dim); }
+  .bus .r { text-align: right; }
+
+  /* offline: keep the last values, dimmed */
+  body.offline [data-live] { opacity: .45; transition: opacity var(--moss-fade-out) var(--moss-ease); }
+  .stale { opacity: .5; }
+
+  /* ---- phone and narrow windows: one column, map first ---- */
+  @media (max-width: 1099px) {
+    #app { display: block; height: auto; padding: 0 16px; }
+    header { padding: 24px 0 18px; gap: 18px; flex-wrap: wrap; min-height: 0; }
+    .lockup .mark { width: 26px; }
+    .lockup .wm { height: 24.5px; }
+    .lockup { gap: 10px; }
+    .runline { flex-basis: 100%; }
+    #run-name { white-space: normal; overflow-wrap: anywhere; }
+    main { display: flex; flex-direction: column; padding-bottom: 96px; }
+    .col { overflow: visible; padding-right: 0; display: contents; }
+    #col-map { display: flex; order: 1; height: 72vh; min-height: 420px; margin-bottom: 28px; }
+    #mod-camera { order: 2; }
+    #mod-controls { order: 3; }
+    #mod-flight { order: 4; }
+    #mod-base { order: 5; }
+    #mod-system { order: 6; }
+    #mod-log { order: 7; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg id="studio" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+  <g fill="none" stroke-linecap="butt">
+    <path d="M 1166.67 -160.59 A 217 217 0 0 1 733.63 -171.93" stroke="#6CF8C7" stroke-width="7"/>
+    <path d="M -256.16 783.84 A 206 206 0 1 1 -7.50 1107.90" stroke="#FF947E" stroke-width="7"/>
+    <path d="M 2020.50 862.00 A 129.5 129.5 0 0 1 2009.21 603.49" stroke="#6CF8C7" stroke-width="6"/>
+  </g>
+</svg>
+
+<div id="app">
+  <header>
+    <a class="lockup" href="/" aria-label="MOSS cockpit">
+      <img class="mark" src="/static/assets/mark-mint.svg" alt="">
+      <img class="wm" src="/static/assets/wordmark-white.svg" alt="MOSS">
+    </a>
+    <div class="runline">
+      <span class="kicker">MOSS / COCKPIT</span>
+      <div class="row">
+        <span id="run-name" class="num" data-live>no stack</span>
+        <span id="chip" class="chip idle" role="status" aria-live="polite">IDLE</span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- column 1: flight check, base, system -->
+    <div class="col" id="col-left">
+      <section class="mod" id="mod-flight" aria-labelledby="pf-title">
+        <div class="mod-head">
+          <p class="kicker">FLIGHT CHECK</p>
+          <h2 class="title" id="pf-title">No flight check yet.</h2>
+          <p class="small dim" id="pf-when"></p>
+        </div>
+        <div id="pf-empty">
+          <p class="dim small">The check reads the ports, the firmware, the battery, the lidar and the cameras. It never moves the robot.</p>
+          <button class="btn primary" id="b-check" type="button">Run flight check</button>
+        </div>
+        <ul id="pf-list" hidden></ul>
+        <p id="pf-again" class="pf-links" hidden>
+          <button class="btn link" id="b-pf-all" type="button" aria-expanded="false">Show passing checks</button>
+          <button class="btn link" id="b-check2" type="button">Run the check again</button>
+        </p>
+      </section>
+
+      <section class="mod" id="mod-base" aria-labelledby="base-title" data-live>
+        <div class="mod-head">
+          <p class="kicker">BASE</p>
+          <h2 class="title" id="base-title">No telemetry.</h2>
+        </div>
+        <div class="batt">
+          <div class="big num"><span id="b-volt">--</span><span class="unit">V</span></div>
+          <div class="big num" style="font-size:28px"><span id="b-pct">--</span><span class="unit">%</span></div>
+        </div>
+        <div class="meter" id="b-meter"><i></i></div>
+        <div class="tracks" aria-label="Track outputs">
+          <div class="track l"><div class="tbar"><i id="t-l"></i></div><div class="lbl"><b id="t-lv" class="num">0</b><span>LEFT %</span></div></div>
+          <div class="mid"><p class="kicker">TRACKS</p><p class="small dim num" id="t-target">target 0 / 0</p></div>
+          <div class="track r"><div class="tbar"><i id="t-r"></i></div><div class="lbl"><b id="t-rv" class="num">0</b><span>RIGHT %</span></div></div>
+        </div>
+        <dl class="kv">
+          <dt>Mode</dt><dd id="b-mode">--</dd>
+          <dt>Ticks L / R</dt><dd id="b-ticks">--</dd>
+          <dt>Firmware</dt><dd id="b-fw">--</dd>
+          <dt>Telemetry age</dt><dd id="b-age">--</dd>
+        </dl>
+      </section>
+
+      <section class="mod" id="mod-system" aria-labelledby="sys-title" data-live>
+        <div class="mod-head alt">
+          <p class="kicker">SYSTEM</p>
+          <h2 class="title" id="sys-title">Jetson.</h2>
+        </div>
+        <dl class="kv" id="sys-kv">
+          <dt>CPU</dt><dd id="s-cpu">--</dd>
+          <dt>RAM</dt><dd id="s-ram">--</dd>
+          <dt>Temperature</dt><dd id="s-temp">--</dd>
+          <dt>Load, 1 min</dt><dd id="s-load">--</dd>
+          <dt>Uptime</dt><dd id="s-up">--</dd>
+        </dl>
+        <div class="meter" id="s-cpu-m" style="margin:14px 0 4px"><i></i></div>
+        <p class="small dim">CPU</p>
+        <div class="meter" id="s-ram-m" style="margin:10px 0 4px"><i></i></div>
+        <p class="small dim">RAM</p>
+        <dl class="kv" id="s-disks" style="margin-top:14px"></dl>
+        <p class="kicker" style="margin:20px 0 8px;font-size:11.5px;color:var(--ui-dim)">BUS</p>
+        <div class="bus" id="bus"></div>
+      </section>
+    </div>
+
+    <!-- column 2: the map -->
+    <div class="col" id="col-map">
+      <div class="mod-head" style="flex:none">
+        <p class="kicker">MAP</p>
+        <h2 class="title" id="map-title">Waiting for a map.</h2>
+      </div>
+      <div id="map-wrap" data-live>
+        <canvas id="map" aria-label="Map. Drag to pan, wheel or pinch to zoom, tap to send a goal when navigation runs."></canvas>
+        <div id="hud"><span id="hud-xy">x -- m  y -- m</span></div>
+        <div id="map-tools"><button class="btn" id="b-fit" type="button">Fit</button></div>
+        <div id="map-empty"><p class="dim" id="map-empty-why">No map yet. Launch a stack to build one.</p></div>
+        <div id="goal-chip" hidden role="dialog" aria-label="Confirm goal">
+          <span id="goal-text" class="num">Send goal?</span>
+          <button class="btn go" id="b-goal-yes" type="button">Send</button>
+          <button class="btn" id="b-goal-no" type="button">Cancel</button>
+        </div>
+        <div class="lower">
+          <div class="lower-in">
+            <div class="vrule"></div>
+            <div class="numeral" id="cap-num">00</div>
+            <div>
+              <p class="kicker" id="cap-kicker">RUN / NONE</p>
+              <p class="ttl" id="cap-title" aria-live="polite">No stack running.</p>
+              <p class="sub" id="cap-sub"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="brule" aria-hidden="true"><i id="cap-progress"></i></div>
+      <div class="brule-cap"><span id="cap-left">no episode</span><span id="cap-right"></span></div>
+    </div>
+
+    <!-- column 3: camera, controls, log -->
+    <div class="col" id="col-right">
+      <section class="mod" id="mod-camera" aria-labelledby="cam-title">
+        <div class="mod-head">
+          <p class="kicker">CAMERA</p>
+          <h2 class="title" id="cam-title">Nose camera.</h2>
+          <div class="aside"><button class="btn link" id="b-cam" type="button">Pause video</button></div>
+        </div>
+        <div class="cam" data-live>
+          <img id="cam-img" alt="Live camera">
+          <div class="ph" id="cam-ph"><p class="kicker">NO FRAMES</p><p class="small dim" id="cam-why">The camera topic is silent.</p></div>
+        </div>
+      </section>
+
+      <section class="mod" id="mod-controls" aria-labelledby="ctl-title">
+        <div class="mod-head">
+          <p class="kicker">CONTROLS</p>
+          <h2 class="title" id="ctl-title">Nothing moves by itself.</h2>
+        </div>
+        <p id="say" role="status" aria-live="polite"></p>
+
+        <div class="ctl-group">
+          <span class="kicker">STACK</span>
+          <div class="btnrow">
+            <button class="btn" id="b-map" type="button">Launch map</button>
+            <button class="btn" id="b-explore" type="button">Launch explore</button>
+            <button class="btn" id="b-stack-stop" type="button">Stop stack</button>
+          </div>
+          <ul id="launch-tail"></ul>
+        </div>
+
+        <div class="ctl-group">
+          <span class="kicker">EXPLORATION</span>
+          <div class="btnrow">
+            <button class="btn primary" id="b-ex-start" type="button">Start exploration</button>
+            <button class="btn" id="b-ex-stop" type="button">Stop exploration</button>
+          </div>
+          <div class="confirm" id="ex-confirm" hidden>
+            <span>The rover will drive on its own.</span>
+            <button class="btn primary" id="b-ex-yes" type="button">Start</button>
+            <button class="btn" id="b-ex-no" type="button">Cancel</button>
+          </div>
+          <p class="ctl-note" id="ex-note">Needs the explore stack.</p>
+        </div>
+
+        <div class="ctl-group">
+          <span class="kicker">RECORD EPISODE</span>
+          <div class="field">
+            <input id="ep-name" type="text" autocomplete="off" spellcheck="false" aria-label="Episode name" value="ep1">
+            <button class="btn" id="b-ep" type="button">Start</button>
+          </div>
+          <p class="ctl-note num" id="rec-note">The run records to its database while the stack is up.</p>
+        </div>
+
+        <div class="ctl-group">
+          <button class="stop" id="b-stop" type="button">STOP</button>
+          <p class="stop-cap">Soft stop: exploration + navigation + zero twist; the firmware stops the tracks 300 ms after the last command. The hard stops are the firmware deadman and <span class="num">moss-fly.sh stop</span>.</p>
+        </div>
+      </section>
+
+      <section class="mod" id="mod-log" aria-labelledby="log-title">
+        <div class="mod-head alt">
+          <p class="kicker">LOG</p>
+          <h2 class="title" id="log-title">Stack log.</h2>
+        </div>
+        <ol id="log" data-live><li><span class="t"></span><span class="e dim">No stack, no log.</span></li></ol>
+      </section>
+    </div>
+  </main>
+</div>
+
+<button class="stop" id="stop-fab" type="button" aria-label="Soft stop">STOP</button>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
