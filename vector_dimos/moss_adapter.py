@@ -356,6 +356,9 @@ class MossBaseAdapter:
             try:
                 raw = ser.readline()
             except Exception as exc:
+                # the port closed under us (stack stopping): not an error
+                if self._stop_threads.is_set() or not getattr(ser, "is_open", True):
+                    return
                 _log().error(f"MOSS base: serial read failed: {exc!r}")
                 time.sleep(0.05)
                 continue
