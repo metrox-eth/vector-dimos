@@ -65,7 +65,7 @@ from dataclasses import dataclass
 
 BAUDRATE = 115200
 DEFAULT_PORT = os.environ.get("MOSS_PORT", "/dev/ttyUSB0")
-FIRMWARE_MAX_PCT = 25          # Control.h MAX_PERCENT: the firmware refuses more
+FIRMWARE_MAX_PCT = 100         # Control.h MAX_PERCENT: the firmware refuses more (25 until 10/10, the bench limit)
 FIRMWARE_COMMAND_TIMEOUT_S = 0.300   # Control.h COMMAND_TIMEOUT_MS
 FIRMWARE_ARM_TIMEOUT_S = 10.0        # Control.h ARM_TIMEOUT_MS
 KEEPALIVE_S = 0.100            # re-send period, 3x inside the firmware deadman
@@ -125,7 +125,7 @@ class MossGeometry:
     revolution' as open). Each field has an env override so a flight can be
     re-scaled without a code change."""
     track_m: float = 0.30          # PLACEHOLDER: sprocket centre to sprocket centre
-    mps_at_limit: float = 0.15     # PLACEHOLDER: floor speed at max_pct, measured
+    mps_at_limit: float = 0.45     # PLACEHOLDER: floor speed at 100 % (JGB37-520 178 rpm on a ~60 mm sprocket ~ 0.5 m/s), to measure
     max_pct: int = FIRMWARE_MAX_PCT
     ticks_per_m: float | None = None   # None = no encoder calibration yet
 
@@ -156,6 +156,15 @@ def twist_to_tracks(vx: float, wz: float, g: MossGeometry) -> tuple[int, int]:
         return max(-lim, min(lim, p))
 
     return pct(v_l), pct(v_r)
+
+
+def teleop_envelope(g: MossGeometry) -> dict:
+    """The gamepad's last gate (clamp_twist), sized to the tracks instead of
+    VECTOR's mecanum rim: linear <= full-stick speed, angular <= a spin at
+    the limit, and a mixed command scaled so that no track exceeds the limit
+    (track speed = |vx| + |wz| * track/2). Keys match gamepad.TwistEnvelope."""
+    lin, ang = teleop_speeds(g)
+    return {"linear": lin, "angular": ang, "lever": g.track_m / 2.0, "rim": lin}
 
 
 def teleop_speeds(g: MossGeometry) -> tuple[float, float]:
@@ -288,6 +297,12 @@ class MossBaseAdapter:
             self._keepalive = threading.Thread(target=self._keepalive_loop,
                                                name="moss-keepalive", daemon=True)
             self._keepalive.start()
+            ramp = os.environ.get("MOSS_RAMP_MS", "").strip()   # "10 5" = ms per % up / down
+            if ramp and not self._mock:
+                if self._send(f"ramp {ramp}"):
+                    _log().info(f"MOSS base: firmware ramp set to {ramp} ms per % (rise fall)")
+                else:
+                    _log().warning(f"MOSS base: 'ramp {ramp}' refused ({self._last_err}) - firmware default kept")
             _log().info(f"MOSS base: connected on {self._port}, firmware mode="
                         f"{self.firmware_mode} geometry={self._geometry}")
             return True

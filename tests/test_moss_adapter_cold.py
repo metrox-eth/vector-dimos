@@ -1,7 +1,7 @@
 """Cold bench: MossBaseAdapter on the fake MOSS firmware. Known in -> known out.
 
 No hardware, no dimOS import. The fake runs the firmware's own state machine
-(Control.h: arm / drive / stop, 300 ms drive deadman, 10 s arm expiry, +-25 %),
+(Control.h: arm / drive / stop, 300 ms drive deadman, 10 s arm expiry, +-100 % since 10/10),
 so what is proven here is the line protocol the Jetson will speak to the
 ESP32 over the USB-UART, and the adapter's deadman on top of it.
 
@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vector_dimos.moss_adapter import (FIRMWARE_MAX_PCT, KEEPALIVE_S, STALE_S,
                                        MossBaseAdapter, MossGeometry,
-                                       teleop_speeds, tracks_to_twist,
+                                       teleop_envelope, teleop_speeds, tracks_to_twist,
                                        twist_to_tracks)
 from vector_dimos.moss_mock import DRIVE, OFF, READY, FakeMossFirmware
 
@@ -41,6 +41,15 @@ check(abs(_ang - 1.0) < 1e-9, "full stick sideways -> 1.0 rad/s (= -25/+25 spin)
 check(twist_to_tracks(_lin, 0.0, MossGeometry(0.30, 0.15, 25)) == (25, 25), "and that twist IS 25/25")
 check(twist_to_tracks(0.0, _ang, MossGeometry(0.30, 0.15, 25)) == (-25, 25), "and that spin IS -25/+25")
 check(teleop_speeds(MossGeometry(track_m=0.0, mps_at_limit=0.15, max_pct=25)) == (0.15, 0.0), "track 0 -> no spin, no crash")
+env = teleop_envelope(MossGeometry(track_m=0.30, mps_at_limit=0.45, max_pct=100))
+check(env == {"linear": 0.45, "angular": 3.0, "lever": 0.15, "rim": 0.45}, f"envelope at 100 %: {env}")
+from vector_dimos.gamepad import TwistEnvelope, clamp_twist
+E = TwistEnvelope(**env); G100 = MossGeometry(0.30, 0.45, 100)
+check(twist_to_tracks(*clamp_twist(0.45, 0.0, 0.0, E)[::2], G100) == (100, 100), "full stick forward through the gamepad clamp -> 100/100")
+check(twist_to_tracks(*clamp_twist(0.0, 0.0, 3.0, E)[::2], G100) == (-100, 100), "full stick sideways through the clamp -> spin -100/+100")
+_m = clamp_twist(0.45, 0.0, 3.0, E)
+check(twist_to_tracks(_m[0], _m[2], G100) == (0, 100), f"forward + full turn -> scaled, no track over 100: {twist_to_tracks(_m[0], _m[2], G100)}")
+check(clamp_twist(9.0, 0.0, 0.0) == (0.45, 0.0, 0.0), "no envelope given -> VECTOR's default ceiling (unchanged)")
 
 
 # ── 1. pure mapping: twist -> track percent ─────────────────────────────
@@ -52,7 +61,7 @@ check(twist_to_tracks(-0.06, 0.0, G) == (-10, -10), "vx=-0.06 -> -10/-10 (revers
 check(twist_to_tracks(0.0, 1.0, G) == (-25, 25), "wz=+1 rad/s -> L=-25 R=+25 (spin left)")
 check(twist_to_tracks(0.30, 0.0, G) == (25, 25), "vx=0.30 (2x the limit) -> clamped 25/25")
 check(twist_to_tracks(0.001, 0.0, G) == (0, 0), "vx=0.001 rounds to 0 -> a stop")
-check(twist_to_tracks(0.15, 0.0, MossGeometry(max_pct=10)) == (10, 10),
+check(twist_to_tracks(0.15, 0.0, MossGeometry(mps_at_limit=0.15, max_pct=10)) == (10, 10),
       "max_pct=10 -> the same full-scale twist lands on 10/10")
 vx, vy, wz = tracks_to_twist(-0.15, 0.15, G)
 check(abs(vx) < 1e-9 and abs(wz - 1.0) < 1e-9 and vy == 0.0,
@@ -152,9 +161,9 @@ check(fw2.commands[-1] == "stop" and not b.is_connected(), "disconnect() sends '
 # ── 7. geometry from env: bounds and mistyped values ───────────────────
 print("7. MossGeometry.from_env")
 import os
-os.environ.update({"MOSS_MAX_PCT": "40", "MOSS_TICKS_PER_M": "pouet", "MOSS_TRACK_M": "0.28"})
+os.environ.update({"MOSS_MAX_PCT": "140", "MOSS_TICKS_PER_M": "pouet", "MOSS_TRACK_M": "0.28"})
 g = MossGeometry.from_env()
-check(g.max_pct == FIRMWARE_MAX_PCT, f"MOSS_MAX_PCT=40 clamped to the firmware's {FIRMWARE_MAX_PCT}")
+check(g.max_pct == FIRMWARE_MAX_PCT, f"MOSS_MAX_PCT=140 clamped to the firmware's {FIRMWARE_MAX_PCT}")
 check(g.ticks_per_m is None, "MOSS_TICKS_PER_M=pouet -> None (no odometry, not a random scale)")
 check(g.track_m == 0.28, "MOSS_TRACK_M=0.28 taken")
 for k in ("MOSS_MAX_PCT", "MOSS_TICKS_PER_M", "MOSS_TRACK_M"):

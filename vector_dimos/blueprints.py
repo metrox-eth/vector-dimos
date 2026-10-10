@@ -194,14 +194,17 @@ moss_base_blueprint = _coordinator_blueprint(_moss_base()).remappings(
 
 def _moss_gamepad_blueprint():
     from vector_dimos.gamepad import GamepadTeleop
-    from vector_dimos.moss_adapter import MossGeometry, teleop_speeds
+    from vector_dimos.moss_adapter import MossGeometry, teleop_envelope, teleop_speeds
 
-    # Stick scale = the base's envelope (MOSS_MPS_AT_LIMIT / MOSS_TRACK_M /
-    # MOSS_MAX_PCT), not VECTOR's 0.6 m/s: see teleop_speeds.
-    linear, angular = teleop_speeds(MossGeometry.from_env())
+    # Stick scale AND clamp ceilings = the base's envelope (MOSS_MPS_AT_LIMIT /
+    # MOSS_TRACK_M / MOSS_MAX_PCT), not VECTOR's 0.6 m/s and mecanum rim:
+    # see teleop_speeds / teleop_envelope.
+    g = MossGeometry.from_env()
+    linear, angular = teleop_speeds(g)
     return autoconnect(
         _coordinator_blueprint(_moss_base()),
-        GamepadTeleop.blueprint(linear_speed=linear, angular_speed=angular),
+        GamepadTeleop.blueprint(linear_speed=linear, angular_speed=angular,
+                                envelope=teleop_envelope(g)),
     ).remappings([
         (VectorControlCoordinator, "twist_command", "cmd_vel"),
         (GamepadTeleop, "tele_cmd_vel", "cmd_vel"),

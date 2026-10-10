@@ -77,6 +77,7 @@ class TeleopConfig:
     angular_speed: float = DEFAULT_ANGULAR_SPEED
     deadzone: float = DEFAULT_DEADZONE
     boost_multiplier: float = DEFAULT_BOOST
+    envelope: Any = None          # TwistEnvelope (defined below); None = VECTOR's
 
 
 def apply_deadzone(value: float, deadzone: float) -> float:
@@ -248,18 +249,33 @@ def slew(prev: float, target: float, dt: float) -> float:
     return max(prev - step, min(prev + step, target))
 
 
-def clamp_twist(vx: float, vy: float, wz: float) -> tuple[float, float, float]:
+@dataclass(frozen=True)
+class TwistEnvelope:
+    """The ceilings of clamp_twist. Defaults = VECTOR (the 27/08 runaway
+    numbers). MOSS passes its own (moss_adapter.teleop_envelope): a tracked
+    base has no mecanum rim, its envelope is |vx| + |wz| * track/2."""
+    linear: float = CLAMP_LINEAR_MS
+    angular: float = CLAMP_ANGULAR_RADS
+    lever: float = MECANUM_LEVER_M
+    rim: float = WHEEL_ENVELOPE_MS
+
+
+DEFAULT_ENVELOPE = TwistEnvelope()
+
+
+def clamp_twist(vx: float, vy: float, wz: float,
+                env: TwistEnvelope = DEFAULT_ENVELOPE) -> tuple[float, float, float]:
     """The last gate before the bus - pure, cold-testable. Per-axis clamps,
-    then the mecanum wheel envelope: translation and rotation ADD at the rim,
+    then the wheel envelope: translation and rotation ADD at the rim,
     so a mixed command is scaled down proportionally (the feel is preserved,
     the top speed is not exceeded)."""
-    lim = CLAMP_LINEAR_MS
+    lim = env.linear
     vx = max(-lim, min(lim, vx))
     vy = max(-lim, min(lim, vy))
-    wz = max(-CLAMP_ANGULAR_RADS, min(CLAMP_ANGULAR_RADS, wz))
-    rim = abs(vx) + abs(vy) + MECANUM_LEVER_M * abs(wz)
-    if rim > WHEEL_ENVELOPE_MS:
-        k = WHEEL_ENVELOPE_MS / rim
+    wz = max(-env.angular, min(env.angular, wz))
+    rim = abs(vx) + abs(vy) + env.lever * abs(wz)
+    if rim > env.rim:
+        k = env.rim / rim
         vx, vy, wz = vx * k, vy * k, wz * k
     return (vx, vy, wz)
 
@@ -292,7 +308,7 @@ def axes_to_twist(ax0: float, ax1: float, ax3: float, ax5: float,
     vx = -apply_deadzone(ax1, cfg.deadzone) * cfg.linear_speed * boost
     vy = -apply_deadzone(ax0, cfg.deadzone) * cfg.linear_speed * boost
     wz = -apply_deadzone(ax3, cfg.deadzone) * cfg.angular_speed
-    return clamp_twist(vx, vy, wz)
+    return clamp_twist(vx, vy, wz, cfg.envelope or DEFAULT_ENVELOPE)
 
 
 class GamepadTeleop(Module):
@@ -308,12 +324,19 @@ class GamepadTeleop(Module):
                  rate_hz: float = DEFAULT_RATE_HZ,
                  boost_multiplier: float = DEFAULT_BOOST,
                  joystick_index: int = 0, brake_s: float | None = None,
+                 envelope: Any = None,
                  **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        # envelope: a TwistEnvelope, or its dict (blueprints carry plain
+        # values), or None = VECTOR's ceilings. MOSS passes moss_adapter.teleop_envelope().
+        if isinstance(envelope, dict):
+            envelope = TwistEnvelope(**envelope)
+        self.envelope = envelope or DEFAULT_ENVELOPE
         self.cfg = TeleopConfig(linear_speed=linear_speed,
                                 angular_speed=angular_speed,
                                 deadzone=deadzone,
-                                boost_multiplier=boost_multiplier)
+                                boost_multiplier=boost_multiplier,
+                                envelope=self.envelope)
         self.rate_hz = rate_hz
         self.joystick_index = joystick_index
         # 2026-09-13: None -> BRAKE_S (0.5 s), or VECTOR_BRAKE_S. Resolved HERE,
@@ -488,7 +511,7 @@ class GamepadTeleop(Module):
                 prev_vx, prev_vy = vx, vy
                 # envelope AFTER the slew too: while vx decays and wz is
                 # instant, the mix could transiently exceed the rim ceiling
-                vx, vy, wz = clamp_twist(vx, vy, wz)
+                vx, vy, wz = clamp_twist(vx, vy, wz, self.envelope)
                 self._publish(vx, vy, wz)
                 brake_until = time.monotonic() + self.brake_s
                 time.sleep(period)
