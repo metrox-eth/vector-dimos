@@ -97,6 +97,7 @@ echo "== 4/5 stack =="
 : > "$LAUNCH_LOG"
 if [ "${MOCK:-0}" = "1" ]; then export MOSS_MOCK_BUS=1; else export MOSS_PORT="$PORT"; fi
 export MOSS_MAX_PCT="${MOSS_MAX_PCT:-100}"   # firmware limit 100 since 10/10; lower it here for a cautious lap
+export MOSS_RAMP_MS="${MOSS_RAMP_MS:-5 5}"       # firmware ramp, ms per % up/down (Laurent 10/10 "la sauce"; the pad slew still takes 0.75 s to full)
 nohup $DIMOS --rerun-open none run vector-dimos.moss-gamepad --daemon > "$LAUNCH_LOG" 2>&1 < /dev/null &
 OK_BASE=0; OK_PAD=0
 for i in $(seq 1 40); do

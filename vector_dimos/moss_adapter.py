@@ -211,6 +211,7 @@ class MossBaseAdapter:
         self._reply_cv = threading.Condition(self._lock)
         self._replies: list[str] = []
         self._telemetry: dict | None = None
+        self._tel_logged_t = 0.0
         self._telemetry_t: float | None = None
         self._connected = False
         self._enabled = False
@@ -499,6 +500,14 @@ class MossBaseAdapter:
                     continue
                 if self._target != (0, 0):
                     self._send(f"drive {self._target[0]} {self._target[1]}")
+                    # what the firmware actually applies, and the battery under
+                    # load (10/10, "on manque de puissance"): one line per 2 s
+                    tel = self._telemetry
+                    now = time.monotonic()
+                    if tel and now - self._tel_logged_t > 2.0:
+                        self._tel_logged_t = now
+                        _log().info(f"MOSS telemetry: out={tel.get('output_pct')} target={tel.get('target_pct')} "
+                                    f"bus={tel.get('bus_mV')} mV ticks={tel.get('ticks')} mode={tel.get('mode')}")
 
     def _log_cmd(self, twist, pct) -> None:
         if pct == self._last_logged:
