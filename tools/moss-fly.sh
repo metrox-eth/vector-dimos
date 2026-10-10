@@ -36,7 +36,7 @@ STACK_RE='[b]in/dimos( [^ ]+)* run( |$)'
 # The cockpit itself (an interpreter running it), not an editor, a viewer or a
 # shell line that only names the file.
 COCKPIT_RE='^[^ ]*python[0-9.]* ([^ ]*/)?[t]ools/moss_cockpit\.py( |$)'
-PROOF_S=60
+PROOF_S=${PROOF_S:-120}   # the lidar odometry (kiss-icp import) took over 60 s on a cold cache, 11/10
 EXPLORE_PROOF_S=15
 # FLY_TEST=1 swaps every command that reaches the stack, the clock or the
 # network for a recorder (tests/test_moss_fly_gates_cold.py). Nothing else sets it.
