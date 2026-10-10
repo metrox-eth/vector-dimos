@@ -68,6 +68,17 @@ after that, the open question is the right lidar/depth-camera mix in the
 obstacle layer. Also on the bench: the anchored-lap validation drive, and a
 JetPack 7.2 / CUDA 13 rebuild of the wheel.
 
+## MOSS on the same stack
+
+MOSS (metrox-eth/moss) is the small tracked litter-picking rover. It runs
+this package unchanged below the base: a tracked-base adapter over its QT Py
+motor board (`docs/moss_base.md`), the RPLidar C1 reader, the lidar odometry,
+the 2D costmap, the planner and the frontier explorer, selected by a robot
+profile (`vector_dimos/robot_profile.py`, `ROBOT_PROFILE=moss`; VECTOR stays
+the default). In front of it: a read-only flight check, a gated launcher and
+a web cockpit in the MOSS brand, served by the robot itself. Manual:
+`docs/moss_cockpit.md`.
+
 ## How it plugs in
 
 - `VectorBaseAdapter` implements the dimOS `TwistBaseAdapter` protocol (holonomic,
@@ -436,6 +447,10 @@ vector_dimos/
   wheel_odom.py      # optional standalone wheel Odometry stream (no blueprint deploys it)
   lcm_latest.py      # bounds velocity-command LCM queues to ONE pending message
   mock.py            # mock MODBUS client for the cold benches
+  moss_adapter.py    # MossBaseAdapter: dimOS TwistBaseAdapter over the MOSS firmware (two tracks)
+  moss_mock.py       # fake MOSS firmware for the cold benches and MOSS_MOCK_BUS=1 runs
+  moss_blueprints.py # moss-nav / moss-explore blueprints and the MOSS recorder
+  robot_profile.py   # per-robot geometry (lidar, body, footprint, clearances): vector | moss
 tools/
   fly.sh             # the gated launch sequence (piloted default; EXPLORE=1 arms autonomy)
   preflight.py       # hardware preflight: drives, lidar, camera, ESP, battery
@@ -447,6 +462,12 @@ tools/
   replay_decision.py # replay the decision map of a recorded run
   bench_run.py       # A/B bench over two recorded runs
   explore_ctl.py     # start/stop the exploration of a live stack
+  moss-teleop.sh     # MOSS, pad only: gates then the gamepad stack (runs on the robot)
+  moss-fly.sh        # MOSS: flight check, map / explore stacks, stop, log, cockpit (runs on the robot)
+  moss_preflight.py  # MOSS flight check: every organ probed read-only, one verdict each, --json
+  moss_cockpit.py    # MOSS cockpit server: bus tap -> map / scan / state / camera / commands on :8904
+  moss_cockpit/      # the cockpit page (vanilla, no CDN) with the MOSS fonts and marks
+  moss-cockpit.service   # systemd unit for the cockpit server
   explore_sim.py     # offline explorer comparison on a recorded map
   rig_runner.py      # run dimos on a second machine with a namespaced coordinator
   zenoh_rendezvous.py     # a pure introduction peer so both machines' sessions gossip
@@ -469,6 +490,8 @@ docs/
   hardware.md            # what VECTOR is made of
   localization.md        # the localization doctrine
   jetson_orin_nano.md    # dimOS bring-up notes for the Jetson (JetPack 6.2)
+  moss_base.md           # the MOSS base adapter and its calibration
+  moss_cockpit.md        # MOSS flight check, blueprints, launcher, recording, cockpit
 ```
 
 ## Credits
