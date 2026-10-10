@@ -158,23 +158,36 @@ def twist_to_tracks(vx: float, wz: float, g: MossGeometry) -> tuple[int, int]:
     return pct(v_l), pct(v_r)
 
 
+TURN_GAIN_DEFAULT = 2.0   # MOSS_TURN_GAIN: turn authority vs forward speed, see teleop_speeds
+
+
+def turn_gain() -> float:
+    return max(0.5, min(4.0, _env_float("MOSS_TURN_GAIN", TURN_GAIN_DEFAULT)))
+
+
 def teleop_envelope(g: MossGeometry) -> dict:
     """The gamepad's last gate (clamp_twist), sized to the tracks instead of
-    VECTOR's mecanum rim: linear <= full-stick speed, angular <= a spin at
-    the limit, and a mixed command scaled so that no track exceeds the limit
-    (track speed = |vx| + |wz| * track/2). Keys match gamepad.TwistEnvelope."""
+    VECTOR's mecanum rim. Per-axis ceilings = teleop_speeds; the rim is set
+    so that a mixed command is NEVER scaled down as a whole: the adapter
+    clamps each track on its own (twist_to_tracks), which is what gives the
+    tank feel below. Keys match gamepad.TwistEnvelope."""
     lin, ang = teleop_speeds(g)
-    return {"linear": lin, "angular": ang, "lever": g.track_m / 2.0, "rim": lin}
+    lever = g.track_m / 2.0
+    return {"linear": lin, "angular": ang, "lever": lever, "rim": lin + ang * lever}
 
 
 def teleop_speeds(g: MossGeometry) -> tuple[float, float]:
     """(linear m/s, angular rad/s) at FULL stick for the gamepad module, sized
-    to the base: full stick forward = g.max_pct on both tracks, full stick
-    sideways = a spin in place at g.max_pct (v = wz * track/2). VECTOR's
-    defaults (0.6 m/s, 1.2 rad/s) would saturate at 25 % from the deadzone
-    on, an on/off throttle; this keeps the stick proportional."""
+    to the base: full stick forward = g.max_pct on both tracks. Full stick
+    sideways = turn_gain() times the spin-in-place rate (v = wz * track/2):
+    with the default gain 2, at full forward the inner track STOPS at half
+    turn stick and REVERSES beyond it, full turn = a full pivot (Laurent,
+    10/10 15h49: "l'autre s'arrete, elle peut pas aller en marche arriere
+    au-dela d'un certain seuil ?"); gain 1 = the inner track only ever stops.
+    VECTOR's defaults (0.6 m/s, 1.2 rad/s) would saturate at 25 % from the
+    deadzone on, an on/off throttle; this keeps the stick proportional."""
     lin = float(g.mps_at_limit)
-    ang = 2.0 * lin / g.track_m if g.track_m > 0 else 0.0
+    ang = turn_gain() * 2.0 * lin / g.track_m if g.track_m > 0 else 0.0
     return lin, ang
 
 

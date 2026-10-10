@@ -8,6 +8,7 @@ ESP32 over the USB-UART, and the adapter's deadman on top of it.
 Usage: python3 tests/test_moss_adapter_cold.py   (exit 0 = green)
 """
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -34,21 +35,31 @@ def settle(s=0.06):
 
 
 # ── 0. gamepad scale: full stick = the base's limit, not VECTOR's 0.6 m/s ──
-print("0. teleop_speeds (track 0.30 m, 0.15 m/s at 25 %)")
-_lin, _ang = teleop_speeds(MossGeometry(track_m=0.30, mps_at_limit=0.15, max_pct=25))
-check(abs(_lin - 0.15) < 1e-9, "full stick forward -> 0.15 m/s (= 25/25)")
-check(abs(_ang - 1.0) < 1e-9, "full stick sideways -> 1.0 rad/s (= -25/+25 spin)")
-check(twist_to_tracks(_lin, 0.0, MossGeometry(0.30, 0.15, 25)) == (25, 25), "and that twist IS 25/25")
-check(twist_to_tracks(0.0, _ang, MossGeometry(0.30, 0.15, 25)) == (-25, 25), "and that spin IS -25/+25")
-check(teleop_speeds(MossGeometry(track_m=0.0, mps_at_limit=0.15, max_pct=25)) == (0.15, 0.0), "track 0 -> no spin, no crash")
-env = teleop_envelope(MossGeometry(track_m=0.30, mps_at_limit=0.45, max_pct=100))
-check(env == {"linear": 0.45, "angular": 3.0, "lever": 0.15, "rim": 0.45}, f"envelope at 100 %: {env}")
+print("0. teleop_speeds / teleop_envelope (track 0.30 m, 0.45 m/s at 100 %, turn gain 2)")
+os.environ.pop("MOSS_TURN_GAIN", None)
+G100 = MossGeometry(track_m=0.30, mps_at_limit=0.45, max_pct=100)
+_lin, _ang = teleop_speeds(G100)
+check(abs(_lin - 0.45) < 1e-9, "full stick forward -> 0.45 m/s (= 100/100)")
+check(abs(_ang - 6.0) < 1e-9, "full stick sideways -> 6.0 rad/s (gain 2 x the 3.0 rad/s spin)")
+check(twist_to_tracks(_lin, 0.0, G100) == (100, 100), "that twist IS 100/100")
+check(twist_to_tracks(0.0, _ang / 2, G100) == (-100, 100), "half turn stick alone = full spin -100/+100")
+check(teleop_speeds(MossGeometry(track_m=0.0, mps_at_limit=0.45, max_pct=100)) == (0.45, 0.0), "track 0 -> no spin, no crash")
+env = teleop_envelope(G100)
+check(all(abs(env[k] - v) < 1e-9 for k, v in {"linear": 0.45, "angular": 6.0, "lever": 0.15, "rim": 1.35}.items()), f"envelope: {env}")
 from vector_dimos.gamepad import TwistEnvelope, clamp_twist
-E = TwistEnvelope(**env); G100 = MossGeometry(0.30, 0.45, 100)
-check(twist_to_tracks(*clamp_twist(0.45, 0.0, 0.0, E)[::2], G100) == (100, 100), "full stick forward through the gamepad clamp -> 100/100")
-check(twist_to_tracks(*clamp_twist(0.0, 0.0, 3.0, E)[::2], G100) == (-100, 100), "full stick sideways through the clamp -> spin -100/+100")
-_m = clamp_twist(0.45, 0.0, 3.0, E)
-check(twist_to_tracks(_m[0], _m[2], G100) == (0, 100), f"forward + full turn -> scaled, no track over 100: {twist_to_tracks(_m[0], _m[2], G100)}")
+E = TwistEnvelope(**env)
+def tracks(vx, wz):
+    c = clamp_twist(vx, 0.0, wz, E); return twist_to_tracks(c[0], c[2], G100)
+check(tracks(0.45, 0.0) == (100, 100), "full forward through the gamepad clamp -> 100/100")
+check(tracks(0.0, 6.0) == (-100, 100), "full turn alone -> full spin -100/+100")
+check(tracks(0.45, 3.0) == (0, 100), "full forward + HALF turn -> inner track stops (0/100)")
+check(tracks(0.45, 6.0) == (-100, 100), "full forward + FULL turn -> inner track full reverse (-100/100): the tank pivot")
+check(tracks(0.45, 1.92) == (36, 100), f"full forward + turn just past the deadzone -> inner slows (36/100): {tracks(0.45, 1.92)}")
+os.environ["MOSS_TURN_GAIN"] = "1"
+_l1, _a1 = teleop_speeds(G100); E1 = TwistEnvelope(**teleop_envelope(G100))
+_c = clamp_twist(0.45, 0.0, _a1, E1)
+check(abs(_a1 - 3.0) < 1e-9 and twist_to_tracks(_c[0], _c[2], G100) == (0, 100), "MOSS_TURN_GAIN=1 -> full forward + full turn only stops the inner track (0/100)")
+os.environ.pop("MOSS_TURN_GAIN", None)
 check(clamp_twist(9.0, 0.0, 0.0) == (0.45, 0.0, 0.0), "no envelope given -> VECTOR's default ceiling (unchanged)")
 
 
