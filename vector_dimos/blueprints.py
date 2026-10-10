@@ -38,15 +38,25 @@ second one is not obvious:
 """
 from __future__ import annotations
 
+import asyncio
+import json
+import time
 from typing import Any, Callable
 
 from dimos.control.components import (HardwareComponent, HardwareType,
                                       make_twist_base_joints)
 from dimos.control.coordinator import ControlCoordinator, TaskConfig
+from dimos.core.core import rpc
 from dimos.core.coordination.blueprints import autoconnect
-from dimos.core.stream import In
+from dimos.core.stream import In, Out
 from dimos.hardware.drive_trains.registry import twist_base_adapter_registry
 from dimos.msgs.std_msgs.Float32 import Float32
+from dimos.msgs.std_msgs.String import String
+from dimos.utils.logging_config import setup_logger
+
+from vector_dimos.moss_adapter import telemetry_payload
+
+_logger = setup_logger()
 
 # Register the VECTOR adapter under its name (idempotent-guarded).
 try:
@@ -93,10 +103,20 @@ class VectorControlCoordinator(ControlCoordinator):
        land here and be handed over. The braking itself lives in
        adapter.brake_forward, at the point where a twist becomes wheel RPM;
 
-    plus one guard: twist_command is consumed latest-only (see below).
+    plus one guard: twist_command is consumed latest-only (see below),
+
+    and one window: `base_telemetry` republishes, every TELEMETRY_PERIOD_S,
+    the firmware telemetry of any adapter that keeps one (the MOSS adapter:
+    battery, mode, track outputs - see moss_adapter.telemetry_payload). The
+    cockpit reads the battery there, so nothing but this process ever opens
+    the motor board's port. VECTOR's adapter has no telemetry: nothing is
+    published.
     """
 
     sonar_range: In[Float32]
+    base_telemetry: Out[String]
+
+    TELEMETRY_PERIOD_S = 0.5
 
     # Run the control loop in its own process. Measured 2026-08-23: sharing a
     # worker (and its GIL) with the RealSense point cloud left a 1 s twist
@@ -111,6 +131,41 @@ class VectorControlCoordinator(ControlCoordinator):
             note = getattr(connected.adapter, "note_sonar_range", None)
             if callable(note):
                 note(distance)
+
+    @rpc
+    def start(self) -> None:
+        super().start()
+        if getattr(self, "_telemetry_running", False):
+            return
+        self._telemetry_running = True
+        self.spawn(self._telemetry_loop())
+
+    @rpc
+    def stop(self) -> None:
+        self._telemetry_running = False
+        super().stop()
+
+    async def _telemetry_loop(self) -> None:
+        """2 Hz: one String JSON per adapter that has telemetry. Never raises:
+        a bad line or a publish error is logged once per cause and the loop
+        goes on (it must not take the control process down with it)."""
+        last_error = None
+        while getattr(self, "_telemetry_running", False):
+            try:
+                with self._hardware_lock:
+                    connected = list(self._hardware.values())
+                now = time.time()
+                for hw in connected:
+                    payload = telemetry_payload(getattr(hw, "adapter", None), now)
+                    if payload is not None:
+                        self.base_telemetry.publish(String(data=json.dumps(payload)))
+                last_error = None
+            except Exception as exc:  # noqa: BLE001
+                cause = f"{type(exc).__name__}: {exc}"
+                if cause != last_error:
+                    _logger.warning(f"base_telemetry: {cause}")
+                    last_error = cause
+            await asyncio.sleep(self.TELEMETRY_PERIOD_S)
 
     def _make_stream_cb(self, stream: str) -> Callable[[Any], None]:
         """Consume twist_command latest-only, whatever the transport.
@@ -145,13 +200,13 @@ def _vector_base(hw_id: str = "base",
 
 def _moss_base(hw_id: str = "base",
                address: str | None = None) -> HardwareComponent:
-    """MOSS tracked base (differential; vy ignored) - ESP32-S3 over USB-UART."""
+    """MOSS tracked base (differential; vy ignored) - QT Py ESP32-S3 over USB CDC."""
     return HardwareComponent(
         hardware_id=hw_id,
         hardware_type=HardwareType.BASE,
         joints=make_twist_base_joints(hw_id),
         adapter_type="moss",
-        address=address,   # serial port; adapter default: MOSS_PORT or /dev/ttyUSB0
+        address=address,   # serial port; adapter default: MOSS_PORT, the QT Py by-id, or a sentinel that fails loudly
     )
 
 

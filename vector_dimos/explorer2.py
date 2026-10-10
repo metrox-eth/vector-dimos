@@ -1378,7 +1378,11 @@ if HAVE_DIMOS:  # pragma: no cover - needs the dimOS stack
         clearances ever drift apart, say so at start-up rather than discover it
         as 'no path' in the field."""
         try:
-            from vector_dimos.recovering_planner import LETHAL_CLEARANCE_M, PIVOT_CLEARANCE_M
+            # the planner's radii for the ACTIVE robot (robot_profile): on MOSS
+            # the blueprint passes MOSS clearances here, and comparing them with
+            # VECTOR's constants would warn on every start for nothing
+            from vector_dimos.recovering_planner import clearances
+            LETHAL_CLEARANCE_M, PIVOT_CLEARANCE_M = clearances()
         except Exception:  # noqa: BLE001 - a missing planner is not our failure
             return
         if abs(tuning.lethal_clearance_m - LETHAL_CLEARANCE_M) > 1e-9:

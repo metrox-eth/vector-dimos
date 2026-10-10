@@ -72,10 +72,14 @@ from dimos.utils.logging_config import setup_logger
 
 from vector_dimos import persistent_map
 from vector_dimos.relocalize2d import MapField, relocalize
+from vector_dimos.robot_profile import RobotProfile, current as _current_profile
 
 logger = setup_logger()
 
 PLANE_THICKNESS_M = 0.05
+# LIDAR_HEIGHT_M, CAMERA_XYZ_BASE and CAMERA_PITCH_RAD are VECTOR's reference
+# values: the tf and the depth projection read the active robot_profile at use
+# time (_profile(); ROBOT_PROFILE unset = VECTOR = these exact numbers).
 LIDAR_HEIGHT_M = 0.37          # lidar_link above base_link (measured; centred in width, 3 cm behind the length centre)
 # D455F remounted LOW on the front face (mast removed 30/08; blue-foam jig
 # 22h48 - PROVISIONAL, not screwed: recalibrate when it changes): 14 cm AHEAD
@@ -104,6 +108,14 @@ OBSTACLE_MAX_M = 3.0            # was 1.8 (marble reflections armed phantom cell
                                 # depth reflections past ~2 m armed phantom low cells (2872 cells, only
                                 # 29% lidar-corroborated, ring-walled the explorer - measured 25/08 21:35).
                                 # Floor misses keep the full DEPTH_MAX_M range: erasing stays cheap.
+
+
+def _profile() -> RobotProfile:
+    """The robot whose geometry the tf and the depth projection use, read at
+    call time so one code path serves VECTOR and MOSS (robot_profile)."""
+    return _current_profile()
+
+
 # --- relocalization: the map as a place the rover comes back to ----------
 # Every restart used to birth an amnesiac map with a fresh arbitrary origin.
 # When a persistent map exists, the first revolutions are matched against it
@@ -415,10 +427,13 @@ class LidarOdometry(Module):
         # optical (x right, y down, z forward) -> base (x forward, y left, z up),
         # camera pitched down by CAMERA_PITCH_RAD: forward axis = (cos, 0, -sin),
         # down axis = (-sin, 0, -cos)
-        cp, sp = math.cos(CAMERA_PITCH_RAD), math.sin(CAMERA_PITCH_RAD)
-        bx = z * cp - yo * sp + CAMERA_XYZ_BASE[0]
-        by = -xo + CAMERA_XYZ_BASE[1]
-        bz = -z * sp - yo * cp + CAMERA_XYZ_BASE[2]
+        prof = _profile()
+        pitch = math.radians(prof.camera_pitch_deg)      # VECTOR: == CAMERA_PITCH_RAD
+        cam = prof.camera_xyz_base_m                     # VECTOR: == CAMERA_XYZ_BASE
+        cp, sp = math.cos(pitch), math.sin(pitch)
+        bx = z * cp - yo * sp + cam[0]
+        by = -xo + cam[1]
+        bz = -z * sp - yo * cp + cam[2]
         # floor threshold grows with range (depth noise ~1-2 % of range): a 5 cm
         # chair base is an obstacle at 1 m, floor noise is not an obstacle at 3 m
         floor_z = 0.03 + 0.03 * np.clip(bx - 1.0, 0.0, None)
@@ -857,7 +872,8 @@ class LidarOdometry(Module):
         self.pose2d = (x, y, yaw)
         c, s = math.cos(yaw), math.sin(yaw)
         R2 = np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]])
-        world_pts = (pts @ R2.T) + np.array([x, y, LIDAR_HEIGHT_M])
+        lidar_h = _profile().lidar_height_m    # VECTOR: == LIDAR_HEIGHT_M; costmap2d tags lidar returns by this exact z
+        world_pts = (pts @ R2.T) + np.array([x, y, lidar_h])
         ts = time.time(); q = _yaw_quat(yaw)
         # the guards may only freeze the map when relocalization is on AND
         # something exists to relocalize against (see _reloc_ready)
@@ -909,7 +925,7 @@ class LidarOdometry(Module):
             self.lidar.publish(PointCloud2.from_numpy(world_pts.astype(np.float32), frame_id=self.world_frame, timestamp=ts))
         self.tf.publish(TFMessage(
             Transform(translation=Vector3(x, y, 0.0), rotation=q, frame_id=self.world_frame, child_frame_id=self.base_frame, ts=ts),
-            Transform(translation=Vector3(0.0, 0.0, LIDAR_HEIGHT_M), rotation=Quaternion(0, 0, 0, 1),
+            Transform(translation=Vector3(0.0, 0.0, lidar_h), rotation=Quaternion(0, 0, 0, 1),
                       frame_id=self.base_frame, child_frame_id=self.lidar_frame, ts=ts)))
         self._n += 1
         self._last_ms = (time.monotonic() - t0) * 1000.0

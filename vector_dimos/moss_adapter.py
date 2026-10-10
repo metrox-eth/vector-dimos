@@ -1,24 +1,28 @@
-"""MOSS tracked base for dimOS: a TwistBaseAdapter over the ESP32-S3 bench firmware.
+"""MOSS tracked base for dimOS: a TwistBaseAdapter over the QT Py motor firmware.
 
-MOSS (metrox-eth/moss) drives two geared DC motors through Cytron MD10C
-drivers from an ESP32-S3 running `firmware/MOSS_ESP32S3` (moss repo). The
-firmware speaks a line protocol on the USB-UART at 115200 baud:
+MOSS drives two geared DC motors through a Cytron MDD3A dual driver from an
+Adafruit QT Py ESP32-S3 running `firmware/MOSS_QTPY_MDD3A` (moss repo, fw
+"qtpy-mdd3a-v3"; an MDD10A build adds a "driver" key to the telemetry). The
+firmware speaks a line protocol on the QT Py's native USB CDC port (115200
+nominal; the host must hold DTR high to receive anything):
 
     arm                 -> "OK"      READY for 10 s, then it disarms itself
-    drive L R           -> "OK"      L, R in percent, -25..+25 (firmware limit)
+    drive L R           -> "OK"      L, R in percent, -100..+100 (firmware limit)
                                      must be REFRESHED within 300 ms or the
                                      firmware stops ("timeout") - a deadman
     stop                -> "OK"
+    ramp UP DOWN        -> "OK"      ms per 1 % rise / fall, 1..500 each (RAM only)
     status              -> one telemetry JSON line
     (unsolicited)          one telemetry JSON line every 200 ms:
-        {"ms":..,"mode":0-3,"reason":"..","target_pct":[l,r],"output_pct":[l,r],
-         "ticks":[l,r],"invalid_edges":[l,r],"ina_ok":..,"bus_mV":..,...}
+        {"ms":..,"fw":"qtpy-mdd3a-v3","mode":0-3,"reason":"..","target_pct":[l,r],
+         "output_pct":[l,r],"ramp_ms":[rise,fall],"ticks":[l,r],"invalid_edges":[l,r],
+         "ina_ok":..,"bus_mV":..,"shunt_uV":..,"current_mA":null}
     errors:                "ERR not_armed" | "ERR invalid_command" | "ERR stopped_busy"
 
 Modes: 0 OFF, 1 READY (armed, idle), 2 DRIVE, 3 TEST.
 
-What this adapter does with it (first MOSS teleop: the VECTOR stack on the
-Jetson drives the MOSS tracks, camera and depth choices come after):
+What this adapter does with it (the VECTOR stack on the Jetson drives the
+MOSS tracks):
 
 - write_enable(True)  = "arm"; write_enable(False) = "stop".
 - write_velocities([vx, vy, wz]) maps the body twist to left/right track
@@ -41,16 +45,24 @@ Jetson drives the MOSS tracks, camera and depth choices come after):
   tick deltas. Without it (today), read_velocities() returns the COMMANDED
   twist (open loop, low confidence) and read_odometry() returns None -
   an honest None beats a pose made of guesses.
+- telemetry: the last firmware JSON line is kept (`telemetry`, a copy, and
+  `telemetry_age_s`); the coordinator republishes it on `base_telemetry`
+  (blueprints.VectorControlCoordinator, payload = telemetry_payload below).
 
 dof: reported as 3 so the stock dimOS twist joints (vx, vy, wz) and the
 VECTOR gamepad blueprint work unchanged; vy is dropped at the tracks.
 
 Calibration (env, all optional):
-    MOSS_PORT           serial port (default /dev/ttyUSB0 - the DevKitC USB-UART)
+    MOSS_PORT           serial port (default: the QT Py by-id path,
+                        /dev/serial/by-id/*QT_Py*; when absent the sentinel
+                        /dev/serial/by-id/MISSING-QT-PY, which fails loudly -
+                        never /dev/ttyUSB0, the lidar on MOSS)
     MOSS_TRACK_M        distance between the two track centrelines, metres
+                        (default robot_profile.MOSS.track_m, 0.266 CAD, placeholder)
     MOSS_MPS_AT_LIMIT   floor speed in m/s at MOSS_MAX_PCT, measured
-    MOSS_MAX_PCT        percent ceiling, <= the firmware's 25
+    MOSS_MAX_PCT        percent ceiling, <= the firmware's 100
     MOSS_TICKS_PER_M    encoder ticks per metre of track travel, measured
+    MOSS_RAMP_MS        "UP DOWN" sent as 'ramp UP DOWN' after connect
     MOSS_MOCK_BUS       any truthy value: drive the fake firmware (no motors)
 """
 from __future__ import annotations
@@ -63,8 +75,19 @@ import threading
 import time
 from dataclasses import dataclass
 
+from vector_dimos import robot_profile
+
 BAUDRATE = 115200
-DEFAULT_PORT = os.environ.get("MOSS_PORT", "/dev/ttyUSB0")
+
+
+def default_port() -> str:
+    """MOSS_PORT, else the QT Py by-id path, else a sentinel that cannot open
+    (robot_profile.moss_qtpy_port). Resolved when an adapter is built, so a
+    board plugged after import is still found."""
+    return robot_profile.moss_qtpy_port()
+
+
+DEFAULT_PORT = default_port()   # import-time snapshot, kept for callers that read it
 FIRMWARE_MAX_PCT = 100         # Control.h MAX_PERCENT: the firmware refuses more (25 until 10/10, the bench limit)
 FIRMWARE_COMMAND_TIMEOUT_S = 0.300   # Control.h COMMAND_TIMEOUT_MS
 FIRMWARE_ARM_TIMEOUT_S = 10.0        # Control.h ARM_TIMEOUT_MS
@@ -124,7 +147,7 @@ class MossGeometry:
     measured on the rover (the moss build log still lists 'measure ticks per
     revolution' as open). Each field has an env override so a flight can be
     re-scaled without a code change."""
-    track_m: float = 0.30          # PLACEHOLDER: sprocket centre to sprocket centre
+    track_m: float = robot_profile.MOSS.track_m   # PLACEHOLDER 0.266 (CAD track centre distance), to measure
     mps_at_limit: float = 0.45     # PLACEHOLDER: floor speed at 100 % (JGB37-520 178 rpm on a ~60 mm sprocket ~ 0.5 m/s), to measure
     max_pct: int = FIRMWARE_MAX_PCT
     ticks_per_m: float | None = None   # None = no encoder calibration yet
@@ -181,9 +204,9 @@ def teleop_speeds(g: MossGeometry) -> tuple[float, float]:
     to the base: full stick forward = g.max_pct on both tracks. Full stick
     sideways = turn_gain() times the spin-in-place rate (v = wz * track/2):
     with the default gain 2, at full forward the inner track STOPS at half
-    turn stick and REVERSES beyond it, full turn = a full pivot (Laurent,
-    10/10 15h49: "l'autre s'arrete, elle peut pas aller en marche arriere
-    au-dela d'un certain seuil ?"); gain 1 = the inner track only ever stops.
+    turn stick and REVERSES beyond it, full turn = a full pivot (operator
+    request 10/10: the inner track should reverse past a turn threshold, not
+    only stop); gain 1 = the inner track only ever stops.
     VECTOR's defaults (0.6 m/s, 1.2 rad/s) would saturate at 25 % from the
     deadzone on, an on/off throttle; this keeps the stick proportional."""
     lin = float(g.mps_at_limit)
@@ -199,11 +222,11 @@ def tracks_to_twist(v_l: float, v_r: float, g: MossGeometry) -> tuple[float, flo
 
 
 class MossBaseAdapter:
-    """TwistBaseAdapter for MOSS (two tracks, ESP32-S3 bench firmware, USB-UART).
+    """TwistBaseAdapter for MOSS (two tracks, QT Py ESP32-S3 + MDD3A firmware, USB CDC).
 
     Args:
         dof: reported DOF (3, see module docstring).
-        address: serial port; None = MOSS_PORT env or DEFAULT_PORT.
+        address: serial port; None = default_port() (MOSS_PORT, the QT Py by-id, or the sentinel).
         port_factory: injectable callable returning a serial-like object
             (write / readline / in_waiting / close / is_open). Benches inject
             the fake firmware; MOSS_MOCK_BUS does the same in a real dimOS run.
@@ -214,7 +237,7 @@ class MossBaseAdapter:
                  hardware_id: str = "base", port_factory=None,
                  geometry: MossGeometry | None = None, **_ignored):
         self._dof = dof
-        self._port = address or DEFAULT_PORT
+        self._port = address or default_port()
         self._hardware_id = hardware_id
         self._port_factory = port_factory
         self._geometry = geometry or MossGeometry.from_env()
@@ -273,6 +296,15 @@ class MossBaseAdapter:
         with self._lock:
             return dict(self._telemetry) if self._telemetry else None
 
+    @property
+    def telemetry_age_s(self) -> float | None:
+        """Seconds since the last telemetry line arrived (same monotonic stamp
+        firmware_mode uses), None before the first one."""
+        with self._lock:
+            if self._telemetry_t is None:
+                return None
+            return max(0.0, time.monotonic() - self._telemetry_t)
+
     # ── connection ─────────────────────────────────────────────────────
     def _open_port(self):
         if self._port_factory is not None:
@@ -282,7 +314,7 @@ class MossBaseAdapter:
             from .moss_mock import FakeMossFirmware
             self._mock = True
             _log().info(f"MOSS base: MOCK BUS ({MOCK_BUS_ENV} set) - no motors will move")
-            return FakeMossFirmware()
+            return FakeMossFirmware(auto_time=True)   # wall clock: live telemetry, real deadmen
         import serial
         return serial.Serial(self._port, BAUDRATE, timeout=0.05)
 
@@ -303,7 +335,7 @@ class MossBaseAdapter:
             self._replies.clear()
             if not self._send("status", expect_status=True):
                 _log().error(f"MOSS base: no telemetry from the firmware on "
-                             f"{self._port} @{BAUDRATE} (is it the ESP32 USB-UART, "
+                             f"{self._port} @{BAUDRATE} (is it the QT Py by-id port, "
                              "and is the firmware flashed?)")
                 self._teardown()
                 return False
@@ -572,3 +604,31 @@ class MossBaseAdapter:
             if not self._geometry.ticks_per_m:
                 return None
             return list(self._pose)
+
+
+# ── telemetry payload for the bus (VectorControlCoordinator.base_telemetry) ──
+
+TELEMETRY_KEYS = ("fw", "driver", "mode", "reason", "bus_mV", "ina_ok", "ticks",
+                  "target_pct", "output_pct", "ramp_ms")
+
+
+def telemetry_payload(adapter, now: float) -> dict | None:
+    """One base_telemetry document from anything shaped like MossBaseAdapter
+    (`telemetry` dict or None, `telemetry_age_s`, `mock_bus`); None when the
+    adapter has no telemetry (VECTOR's adapter, or MOSS before its first
+    line), so the coordinator publishes nothing.
+
+    Firmware keys are copied as they are; a key the flashed build does not
+    send (driver before the MDD10A build) is None, never invented. `ts` is
+    the caller's wall clock, `firmware_age_s` the adapter's monotonic age.
+    """
+    tel = getattr(adapter, "telemetry", None)
+    if not isinstance(tel, dict) or not tel:
+        return None
+    age = getattr(adapter, "telemetry_age_s", None)
+    doc = {"ts": float(now)}
+    for key in TELEMETRY_KEYS:
+        doc[key] = tel.get(key)
+    doc["firmware_age_s"] = None if age is None else round(float(age), 3)
+    doc["mock"] = bool(getattr(adapter, "mock_bus", False))
+    return doc

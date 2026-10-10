@@ -25,6 +25,8 @@ from dimos.core.stream import Out
 from dimos.msgs.sensor_msgs.PointCloud2 import PointCloud2
 from dimos.utils.logging_config import setup_logger
 
+from vector_dimos.robot_profile import RobotProfile, current as _current_profile
+
 logger = setup_logger()
 
 # The C1 comes with a CP2102 USB-UART dongle -> /dev/ttyUSB0 on the Jetson.
@@ -46,13 +48,21 @@ _KNOWN_STICKS = (
     "/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0",
     "/dev/serial/by-id/usb-FIREPHX_USB_SER_FX2348N-if00",
 )
+# MOSS's C1 rides a CP2102N (any serial number). Tried only AFTER VECTOR's two
+# sticks, so VECTOR resolves exactly as before. The MOSS blueprints pass the
+# port explicitly anyway (robot_profile.moss_lidar_port).
+_CP2102N_GLOB = "/dev/serial/by-id/usb-Silicon_Labs_CP2102N_*-port0"
 
 
 def _resolve_port() -> str:
+    import glob
     import os
     for cand in _KNOWN_STICKS:
         if os.path.exists(cand):
             return cand
+    hits = sorted(glob.glob(_CP2102N_GLOB))
+    if hits:
+        return hits[0]
     return _KNOWN_STICKS[0]
 
 
@@ -65,6 +75,9 @@ DEFAULT_FRAME = "lidar_link"
 RETRY_PERIOD_S = 5.0
 
 
+# The geometry below is VECTOR's, and stays here as its reference values; the
+# functions read the active robot_profile at call time (ROBOT_PROFILE unset =
+# VECTOR = these exact numbers, proven by tests/test_robot_profile_cold.py).
 LIDAR_YAW_OFFSET_DEG = 2.75
 # 25/08 22h57: the 180 flip term is GONE. The 25/08 rebuild remounted the lidar
 # dead centre in its original orientation, so the +180 kept from the 24/08 body
@@ -78,7 +91,8 @@ LIDAR_YAW_OFFSET_DEG = 2.75
 # Recalibrate with tools/mars only after a physical remount.
 
 
-def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
+def polar_to_xy(angle_deg: float, distance_mm: float,
+                yaw_offset_deg: float | None = None) -> tuple[float, float]:
     """One lidar measure -> (x, y) in metres in the sensor frame.
 
     The lib (rplidar-roboticia 0.9.5, ``iter_measures``) yields the heading
@@ -91,12 +105,17 @@ def polar_to_xy(angle_deg: float, distance_mm: float) -> tuple[float, float]:
     counter-clockwise (x forward, y left). Nothing in the lib compensates. If
     the scan of a known scene comes out mirrored once the C1 is mounted, the
     fix belongs here - negate the angle - and nowhere else.
+
+    ``yaw_offset_deg`` None = the active profile's mounting offset (VECTOR
+    2.75); scan_to_points resolves it once per revolution and passes it in.
     """
     # SLAMTEC's heading grows CLOCKWISE seen from above (C1 datasheet, fig.
     # 2-4, "left hand"); the robot frame is right-handed (x forward, y left),
     # so the sign of y is flipped here. Settled 2026-08-23 on the datasheet;
     # the first map of a known room is the check.
-    theta = math.radians(angle_deg + LIDAR_YAW_OFFSET_DEG)
+    if yaw_offset_deg is None:
+        yaw_offset_deg = _current_profile().lidar_yaw_offset_deg
+    theta = math.radians(angle_deg + yaw_offset_deg)
     distance_m = distance_mm / 1000.0
     return distance_m * math.cos(theta), -distance_m * math.sin(theta)
 
@@ -133,23 +152,37 @@ def _in_mask(angle_deg: float, distance_m: float,
 
 def scan_to_points(scan: list[tuple[float, float, float]],
                    min_quality: int,
-                   mask: tuple[tuple[float, float], ...] = MAST_MASK_DEG,
-                   mask_range_m: float = MASK_RANGE_M) -> list[tuple[float, float, float]]:
+                   mask: tuple[tuple[float, float], ...] | None = None,
+                   mask_range_m: float | None = None,
+                   profile: RobotProfile | None = None) -> list[tuple[float, float, float]]:
     """A 360-degree scan -> flat (x, y, 0.0) points in metres.
 
     ``scan`` is what ``iter_scans`` yields: (quality, angle_deg, distance_mm)
     measures. Weak returns (quality below min_quality), invalid ones (distance
     0) and the mast's own reflection (inside ``mask`` and closer than
     ``mask_range_m``) are dropped.
+
+    Geometry (yaw offset, minimum range, mask, body box) comes from
+    ``profile``, default the active robot_profile, resolved ONCE per scan;
+    an explicit ``mask`` / ``mask_range_m`` still wins over the profile's.
     """
-    pts = [(*polar_to_xy(angle, distance), 0.0)
+    p = profile or _current_profile()
+    if mask is None:
+        mask = p.scan_mask_sectors_deg
+    if mask_range_m is None:
+        mask_range_m = p.scan_mask_range_m
+    yaw = p.lidar_yaw_offset_deg
+    min_mm = p.scan_min_range_m * 1000.0
+    pts = [(*polar_to_xy(angle, distance, yaw), 0.0)
            for (quality, angle, distance) in scan
-           if quality >= min_quality and distance > MIN_RANGE_M * 1000.0
+           if quality >= min_quality and distance > min_mm
            and not _in_mask(angle, distance / 1000.0, mask, mask_range_m)]
     # Anything landing INSIDE the body rectangle is the rover itself (the mast
     # foot survived the +-12 deg mask by 2 cells at boot, 26/08). Geometric,
-    # angle-free: body 0.625 x 0.46 m + 2 cm margin around the lidar centre.
-    return [p for p in pts if abs(p[0]) > 0.33 or abs(p[1]) > 0.25]
+    # angle-free: VECTOR body 0.625 x 0.46 m + 2 cm margin around the lidar
+    # centre (0.33 x 0.25 half extents); MOSS from its profile.
+    bx, by = p.body_box_m
+    return [q for q in pts if abs(q[0]) > bx or abs(q[1]) > by]
 
 
 class RPLidarC1(Module):

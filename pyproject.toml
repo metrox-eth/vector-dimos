@@ -32,6 +32,8 @@ explore = "vector_dimos.nav_blueprints:explore_blueprint"
 reloc-rig = "vector_dimos.rig_blueprints:reloc_rig_blueprint"
 moss-base = "vector_dimos.blueprints:moss_base_blueprint"
 moss-gamepad = "vector_dimos.blueprints:moss_gamepad_blueprint"
+moss-nav = "vector_dimos.moss_blueprints:moss_nav_blueprint"
+moss-explore = "vector_dimos.moss_blueprints:moss_explore_blueprint"
 
 [tool.setuptools]
 packages = ["vector_dimos"]

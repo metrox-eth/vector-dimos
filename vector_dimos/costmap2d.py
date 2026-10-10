@@ -65,6 +65,7 @@ from dimos.utils.logging_config import setup_logger
 from dimos_lcm.std_msgs import Bool
 
 from vector_dimos import persistent_map
+from vector_dimos.robot_profile import current as _current_profile
 
 logger = setup_logger()
 
@@ -80,7 +81,9 @@ _FAST_BLOCK = os.environ.get("VECTOR_FAST_BLOCK", "0").strip().lower() in ("1", 
 OCCUPIED_AT = 1 if _FAST_BLOCK else 2              # two hits from two places = an obstacle (1 in fast-block trial)
 NEW_VIEWPOINT_M = 0.05 if _FAST_BLOCK else 0.10    # a hit counts only if the rover moved this much since the cell's last hit
 LOW_HIT_PROTECT_S = 3.0      # after a camera obstacle hit, that cell's LOW layer ignores floor samples this long
-LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M)
+LIDAR_Z_M = 0.37             # points at exactly this height come from the lidar (lidar_odometry.LIDAR_HEIGHT_M).
+                             # VECTOR's value: lidar_returns reads the active robot_profile's lidar_height_m,
+                             # the SAME number lidar_odometry lifts the scan by (one source for both ends)
 LIDAR_Z_TOL_M = 1e-6         # and EXACTLY means exactly: the tag survives the float32 round trip to 5 nm, while the camera's own points span 0.37 m (audit 28/08 - see lidar_returns)
 LIDAR_WRITES_OBSTACLES = os.environ.get("VECTOR_LIDAR_TO_MAP", "1").strip().lower() not in ("0", "false", "off", "no")
                                 # doctrine switch (env VECTOR_LIDAR_TO_MAP, crosses fly.sh's ssh
@@ -386,8 +389,9 @@ class ScoredGrid:
         cells it then drove over."""
         x, y, yaw = pose
         c, s = np.cos(yaw), np.sin(yaw)
-        lx = np.arange(-0.31, 0.31 + 1e-9, self.res / 2)
-        ly = np.arange(-0.23, 0.23 + 1e-9, self.res / 2)
+        hx, hy = _current_profile().body_clear_m      # VECTOR 0.31 x 0.23 (the footprint above); MOSS from its profile
+        lx = np.arange(-hx, hx + 1e-9, self.res / 2)
+        ly = np.arange(-hy, hy + 1e-9, self.res / 2)
         bx, by = np.meshgrid(lx, ly)
         gx, gy = self.cell((x + c * bx - s * by).ravel(), (y + s * bx + c * by).ravel())
         if len(gx):
@@ -480,7 +484,7 @@ def lidar_returns(pts: np.ndarray) -> np.ndarray:
     two-frame moving-object gate, and out of reach of camera_rays, which only
     carves `low`. A person's side at 0.37 m became a permanent wall.
     """
-    return np.abs(pts[:, 2] - LIDAR_Z_M) < LIDAR_Z_TOL_M
+    return np.abs(pts[:, 2] - _current_profile().lidar_height_m) < LIDAR_Z_TOL_M
 
 
 def camera_xy(pose_xy: tuple[float, float], yaw: float) -> tuple[float, float]:
@@ -530,7 +534,8 @@ class VectorCostMap(Module):
     The lidar and the camera are the only writers: the sonar and the contact
     switches are reflexes, not mappers (sensor doctrine, 25/08) - and they only
     write between departure and the end of exploration (mission doctrine,
-    28/08). Under EXPLORER_V2=0 the 25-26/08 explorer publishes no
+    28/08) - on a profile with freeze_map_on_stop (VECTOR); MOSS keeps writing
+    after the end of exploration. Under EXPLORER_V2=0 the 25-26/08 explorer publishes no
     `explore_done`, so that arm refreezes on `stop_explore_cmd` only."""
 
     lidar: In[PointCloud2]
@@ -658,6 +663,14 @@ class VectorCostMap(Module):
         nothing else.
         """
         if self._mission_over:
+            return
+        profile = _current_profile()
+        if not profile.freeze_map_on_stop:
+            # MOSS: the lidar map is the only obstacle source and a cockpit
+            # goal or STOP sends stop_explore_cmd mid-run - the explorer
+            # stops, the map keeps writing. The pre-mission gate (explore_cmd
+            # or 5 cm) is untouched: a map not opened yet still opens later.
+            logger.info(f"costmap: {why} - map writing continues (profile {profile.name})")
             return
         self._mission_over = True
         self._mission_frozen = True

@@ -1,14 +1,18 @@
 """Cold bench: MossBaseAdapter on the fake MOSS firmware. Known in -> known out.
 
-No hardware, no dimOS import. The fake runs the firmware's own state machine
-(Control.h: arm / drive / stop, 300 ms drive deadman, 10 s arm expiry, +-100 % since 10/10),
-so what is proven here is the line protocol the Jetson will speak to the
-ESP32 over the USB-UART, and the adapter's deadman on top of it.
+No hardware. dimOS only for section 0's gamepad clamp (skipped without it).
+The fake runs the firmware's own state machine (Control.h, qtpy-mdd3a-v3:
+arm / drive / stop / ramp, 300 ms drive deadman, 10 s arm expiry, +-100 %),
+so what is proven here is the line protocol the Jetson speaks to the QT Py
+over USB CDC, and the adapter's deadman on top of it.
 
-Usage: python3 tests/test_moss_adapter_cold.py   (exit 0 = green)
+Rule #2: known input -> known output in percent, metres, radians, seconds.
+
+Run:  PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=. python3 tests/test_moss_adapter_cold.py
 """
 import math
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -21,13 +25,16 @@ from vector_dimos.moss_adapter import (FIRMWARE_MAX_PCT, KEEPALIVE_S, STALE_S,
                                        twist_to_tracks)
 from vector_dimos.moss_mock import DRIVE, OFF, READY, FakeMossFirmware
 
-ok = True
+OK = KO = 0
 
 
 def check(cond, label):
-    global ok
+    global OK, KO
+    if cond:
+        OK += 1
+    else:
+        KO += 1
     print(("  OK  " if cond else "  KO  ") + label)
-    ok = ok and cond
 
 
 def settle(s=0.06):
@@ -46,21 +53,28 @@ check(twist_to_tracks(0.0, _ang / 2, G100) == (-100, 100), "half turn stick alon
 check(teleop_speeds(MossGeometry(track_m=0.0, mps_at_limit=0.45, max_pct=100)) == (0.45, 0.0), "track 0 -> no spin, no crash")
 env = teleop_envelope(G100)
 check(all(abs(env[k] - v) < 1e-9 for k, v in {"linear": 0.45, "angular": 6.0, "lever": 0.15, "rim": 1.35}.items()), f"envelope: {env}")
-from vector_dimos.gamepad import TwistEnvelope, clamp_twist
-E = TwistEnvelope(**env)
-def tracks(vx, wz):
-    c = clamp_twist(vx, 0.0, wz, E); return twist_to_tracks(c[0], c[2], G100)
-check(tracks(0.45, 0.0) == (100, 100), "full forward through the gamepad clamp -> 100/100")
-check(tracks(0.0, 6.0) == (-100, 100), "full turn alone -> full spin -100/+100")
-check(tracks(0.45, 3.0) == (0, 100), "full forward + HALF turn -> inner track stops (0/100)")
-check(tracks(0.45, 6.0) == (-100, 100), "full forward + FULL turn -> inner track full reverse (-100/100): the tank pivot")
-check(tracks(0.45, 1.92) == (36, 100), f"full forward + turn just past the deadzone -> inner slows (36/100): {tracks(0.45, 1.92)}")
-os.environ["MOSS_TURN_GAIN"] = "1"
-_l1, _a1 = teleop_speeds(G100); E1 = TwistEnvelope(**teleop_envelope(G100))
-_c = clamp_twist(0.45, 0.0, _a1, E1)
-check(abs(_a1 - 3.0) < 1e-9 and twist_to_tracks(_c[0], _c[2], G100) == (0, 100), "MOSS_TURN_GAIN=1 -> full forward + full turn only stops the inner track (0/100)")
-os.environ.pop("MOSS_TURN_GAIN", None)
-check(clamp_twist(9.0, 0.0, 0.0) == (0.45, 0.0, 0.0), "no envelope given -> VECTOR's default ceiling (unchanged)")
+try:
+    from vector_dimos.gamepad import TwistEnvelope, clamp_twist   # gamepad.py imports dimOS
+    HAVE_DIMOS = True
+except ImportError:
+    HAVE_DIMOS = False
+if HAVE_DIMOS:
+    E = TwistEnvelope(**env)
+    def tracks(vx, wz):
+        c = clamp_twist(vx, 0.0, wz, E); return twist_to_tracks(c[0], c[2], G100)
+    check(tracks(0.45, 0.0) == (100, 100), "full forward through the gamepad clamp -> 100/100")
+    check(tracks(0.0, 6.0) == (-100, 100), "full turn alone -> full spin -100/+100")
+    check(tracks(0.45, 3.0) == (0, 100), "full forward + HALF turn -> inner track stops (0/100)")
+    check(tracks(0.45, 6.0) == (-100, 100), "full forward + FULL turn -> inner track full reverse (-100/100): the tank pivot")
+    check(tracks(0.45, 1.92) == (36, 100), f"full forward + turn just past the deadzone -> inner slows (36/100): {tracks(0.45, 1.92)}")
+    os.environ["MOSS_TURN_GAIN"] = "1"
+    _l1, _a1 = teleop_speeds(G100); E1 = TwistEnvelope(**teleop_envelope(G100))
+    _c = clamp_twist(0.45, 0.0, _a1, E1)
+    check(abs(_a1 - 3.0) < 1e-9 and twist_to_tracks(_c[0], _c[2], G100) == (0, 100), "MOSS_TURN_GAIN=1 -> full forward + full turn only stops the inner track (0/100)")
+    os.environ.pop("MOSS_TURN_GAIN", None)
+    check(clamp_twist(9.0, 0.0, 0.0) == (0.45, 0.0, 0.0), "no envelope given -> VECTOR's default ceiling (unchanged)")
+else:
+    print("  -- skipped, no dimOS here: run this on the Jetson")
 
 
 # ── 1. pure mapping: twist -> track percent ─────────────────────────────
@@ -187,13 +201,124 @@ fw3.write(b"drive 10 10\n")
 check(fw3.sent[-1] == "ERR not_armed" and fw3.mode == OFF, "drive before arm -> ERR not_armed")
 fw3.write(b"arm\n")
 fw3.write(b"drive 26 0\n")
-check(fw3.sent[-1] == "ERR invalid_command" and fw3.mode == OFF, "26 % -> ERR invalid_command, OFF")
+check(fw3.sent[-1] == "OK" and fw3.mode == DRIVE and (fw3.left, fw3.right) == (26, 0),
+      "26 % is valid since v3 (limit 100) -> OK, DRIVE 26/0")
+fw3.write(b"drive 101 0\n")
+check(fw3.sent[-1] == "ERR invalid_command" and fw3.mode == OFF and fw3.reason == "invalid",
+      "101 % -> ERR invalid_command, OFF 'invalid'")
+fw3.write(b"arm\ndrive -100 100\n")
+check(fw3.sent[-1] == "OK" and (fw3.left, fw3.right) == (-100, 100), "arm + drive -100 100 (the full pivot) -> OK")
+fw3.write(b"stop\n")      # 'arm' while DRIVE is arm_while_moving (a stop), so stop first
 fw3.write(b"arm\ndrive 5 -5\n")
 check(fw3.mode == DRIVE and (fw3.left, fw3.right) == (5, -5), "arm + drive 5 -5 -> DRIVE 5/-5")
 fw3.advance(301)
 check(fw3.mode == OFF and fw3.reason == "timeout", "301 ms without a drive -> OFF 'timeout'")
 a.disconnect()
 
+# ── 9. v3 firmware surface: ramp command and telemetry keys ────────────
+print("9. fake firmware v3: 'ramp UP DOWN' and the telemetry keys")
+import json
+fw4 = FakeMossFirmware()
+check("limit 100%" in fw4.sent[0] and "qtpy-mdd3a-v3" in fw4.sent[0], f"banner: {fw4.sent[0]!r}")
+fw4.write(b"status\n")
+tel = json.loads(fw4.sent[-1])
+check(tel.get("fw") == "qtpy-mdd3a-v3" and tel.get("ramp_ms") == [30, 15],
+      f"boot telemetry: fw qtpy-mdd3a-v3, ramp 30/15 ms per % ({tel.get('fw')}, {tel.get('ramp_ms')})")
+check(tel.get("ina_ok") is True and tel.get("bus_mV") == 11600 and tel.get("shunt_uV") == 0
+      and tel.get("current_mA") is None, "battery: ina_ok, 11600 mV (11.6 V), shunt 0, current null")
+check("driver" not in tel, "no 'driver' key (only the MDD10A build sends it)")
+fw4.write(b"ramp 5 5\n")
+check(fw4.sent[-1] == "OK" and fw4.ramp_ms == [5, 5], "ramp 5 5 -> OK, 5/5 ms per %")
+fw4.write(b"arm\ndrive 40 40\nramp 10 500\n")
+check(fw4.sent[-1] == "OK" and fw4.mode == DRIVE and fw4.ramp_ms == [10, 500],
+      "ramp 10 500 while driving -> OK, still DRIVE (a ramp change never stops)")
+fw4.emit_telemetry()
+tel = json.loads(fw4.sent[-1])
+check(tel["ramp_ms"] == [10, 500] and tel["target_pct"] == [40, 40] and tel["output_pct"] == [40, 40],
+      "telemetry reports ramp 10/500; output_pct == target_pct (ramp not simulated)")
+for bad in ("ramp 0 5", "ramp 5 501", "ramp x 5"):
+    fw4.write(b"arm\n")
+    fw4.write((bad + "\n").encode())
+    check(fw4.sent[-1] == "ERR invalid_command" and fw4.mode == OFF and fw4.ramp_ms == [10, 500],
+          f"'{bad}' -> ERR invalid_command, OFF, ramp unchanged")
+
+# ── 10. adapter: telemetry age, default port, geometry default ────────
+print("10. adapter telemetry_age_s, default_port (QT Py by-id, never ttyUSB0), track 0.266")
+import tempfile
+from vector_dimos import robot_profile as rp
+from vector_dimos.moss_adapter import default_port
+fw5 = FakeMossFirmware()
+f5 = lambda: fw5
+f5.is_mock = True
+c = MossBaseAdapter(dof=3, port_factory=f5, geometry=G)
+check(c.telemetry_age_s is None, "before connect: telemetry_age_s is None")
+check(c.connect(), "connect")
+age0 = c.telemetry_age_s
+settle(0.25)
+age1 = c.telemetry_age_s
+check(age0 is not None and 0.0 <= age0 < 0.2 and 0.2 <= age1 - age0 < 0.5,
+      f"age right after connect {age0:.3f} s, +0.25 s later {age1:.3f} s")
+fw5.emit_telemetry()
+settle()
+check(c.telemetry_age_s < 0.2, f"a new line resets the age ({c.telemetry_age_s:.3f} s)")
+check(c.telemetry.get("bus_mV") == 11600 and c.telemetry is not c.telemetry, "telemetry is a copy of the last line")
+c.disconnect()
+saved_root, saved_port = rp.BYID_ROOT, os.environ.pop("MOSS_PORT", None)
+with tempfile.TemporaryDirectory() as d:
+    rp.BYID_ROOT = d
+    check(default_port() == "/dev/serial/by-id/MISSING-QT-PY",
+          f"no QT Py, MOSS_PORT unset -> the sentinel: {default_port()}")
+    lidar = os.path.join(d, "usb-Silicon_Labs_CP2102N_USB_to_UART_Bridge_Controller_x-if00-port0")
+    open(lidar, "w").close()
+    check(default_port() == "/dev/serial/by-id/MISSING-QT-PY", "a CP2102N alone is never taken for the base")
+    qt = os.path.join(d, "usb-Adafruit_QT_Py_ESP32-S3_No_PSRAM_f4:12:fa:8d:a7:58-if00")
+    open(qt, "w").close()
+    check(default_port() == qt, f"QT Py present -> its by-id path: {os.path.basename(default_port())}")
+    check(MossBaseAdapter(port_factory=f5)._port == qt, "an adapter built without address takes it")
+    os.environ["MOSS_PORT"] = "/dev/ttyACM9"
+    check(default_port() == "/dev/ttyACM9", "MOSS_PORT wins")
+    os.environ.pop("MOSS_PORT", None)
+rp.BYID_ROOT = saved_root
+if saved_port is not None:
+    os.environ["MOSS_PORT"] = saved_port
+check("ttyUSB0" not in default_port(), "the default is never /dev/ttyUSB0 (the lidar on MOSS)")
+os.environ.pop("MOSS_TRACK_M", None)
+check(MossGeometry().track_m == 0.266 and MossGeometry.from_env().track_m == 0.266,
+      "MossGeometry track default 0.266 m (robot_profile.MOSS, CAD placeholder)")
+
+# ── 11. the mock bus on the wall clock (MOSS_MOCK_BUS runs) ──────────────
+print("11. MOSS_MOCK_BUS: live 200 ms telemetry and a firmware deadman that fires")
+fw6 = FakeMossFirmware(auto_time=True)
+fw6.write(b"arm\ndrive 10 10\n")
+check(fw6.mode == DRIVE, "auto-time fake: arm + drive 10 10 -> DRIVE")
+t_end = time.monotonic() + 0.45
+while time.monotonic() < t_end:
+    fw6.readline()
+check(fw6.mode == OFF and fw6.reason == "timeout", f"no refresh for 0.45 s -> OFF '{fw6.reason}' (300 ms deadman)")
+n_tel = sum(1 for line in fw6.sent if line.startswith("{"))
+check(n_tel >= 2, f"telemetry every 200 ms while polled: {n_tel} lines in 0.45 s")
+os.environ["MOSS_MOCK_BUS"] = "1"
+m = MossBaseAdapter(dof=3, geometry=G)
+check(m.connect() and m.mock_bus, "MOSS_MOCK_BUS=1 -> the adapter connects to the fake, mock_bus True")
+settle(0.6)
+check(m.telemetry_age_s is not None and m.telemetry_age_s < 0.35,
+      f"telemetry stays fresh on the mock bus: age {m.telemetry_age_s:.3f} s after 0.6 s")
+check(m.write_enable(True) and m.write_velocities([0.06, 0.0, 0.0]), "arm + drive through the mock bus")
+settle(0.35)
+check(m.telemetry.get("mode") == DRIVE and m.telemetry.get("target_pct") == [10, 10],
+      f"keepalive holds DRIVE 10/10 past the 300 ms firmware deadman: {m.telemetry.get('mode')} {m.telemetry.get('target_pct')}")
+m.disconnect()
+os.environ.pop("MOSS_MOCK_BUS", None)
+
+# ── 12. public-repo hygiene: the adapter source carries no operator quote ──
+print("12. moss_adapter.py: no French operator quote (public repo)")
+_src = (Path(__file__).resolve().parent.parent / "vector_dimos" / "moss_adapter.py").read_text()
+# the quote that was there: French words and a French clock stamp ("15h49")
+_banned = ["la sauce", "marche arriere", "s'arrete", "au-dela", "seuil", "elle peut"]
+_hits = [w for w in _banned if w in _src.lower()] + re.findall(r"\b\d{1,2}h\d{2}\b", _src)
+check(_hits == [], f"no French operator quote, no 'NNhNN' clock stamp in the source: hits {_hits}")
+
 print()
-print("GREEN: MOSS base adapter cold bench" if ok else "RED: see KO lines above")
-sys.exit(0 if ok else 1)
+print(f"{OK} OK, {KO} KO")
+print("TEST PASSED" if KO == 0 else "TEST FAILED")
+sys.exit(1 if KO else 0)

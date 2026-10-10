@@ -39,6 +39,8 @@ from dimos.navigation.replanning_a_star.module import ReplanningAStarPlanner
 from dimos_lcm.std_msgs import Bool
 from dimos.utils.logging_config import setup_logger
 
+from vector_dimos.robot_profile import RobotProfile, current as _current_profile, derived as _derived
+
 logger = setup_logger()
 
 ESCAPE_DISTANCE_M = 0.20   # just enough to turn
@@ -79,6 +81,9 @@ ESCAPE_PERIOD_S = 0.05  # base watchdog is 0.2 s; 10 Hz left gaps that stopped t
 # transform instead of a ceil'd dilation, and add one term dimOS has no way to
 # know about - the turning circle.
 
+# VECTOR's numbers. clearance_cost_map takes its radii from the active
+# robot_profile at call time (clearances(); ROBOT_PROFILE unset = VECTOR =
+# exactly these constants).
 ROBOT_WIDTH_M = 0.50        # nav_blueprints.py, RecoveringPlanner.blueprint
 PIVOT_DIAMETER_M = 0.78     # measured pivot envelope, same blueprint
 CONTROL_MARGIN_M = 0.05     # cross-track error we let the follower spend
@@ -117,10 +122,18 @@ PIVOT_RAMP_EXPONENT = 4
 GRADIENT_DISTANCE_M = 1.5
 
 
+def clearances(profile: RobotProfile | None = None) -> tuple[float, float]:
+    """(lethal, pivot) clearance radii in metres for the active robot -
+    width/2 + margin and pivot diameter/2 (VECTOR: LETHAL_CLEARANCE_M 0.30,
+    PIVOT_CLEARANCE_M 0.39, bit for bit)."""
+    d = _derived(profile or _current_profile())
+    return d.lethal_clearance_m, d.pivot_clearance_m
+
+
 def clearance_cost_map(
     binary: OccupancyGrid,
-    lethal_m: float = LETHAL_CLEARANCE_M,
-    pivot_m: float = PIVOT_CLEARANCE_M,
+    lethal_m: float | None = None,
+    pivot_m: float | None = None,
     penalty: int = PIVOT_PENALTY,
 ) -> OccupancyGrid:
     """Binary costmap -> the cost field A* searches.
@@ -130,7 +143,13 @@ def clearance_cost_map(
     not pivot in. The penalty ramps as the 4th power of how far into that band
     a cell is, so it stays near zero at the turning circle and only bites hard
     against the wall - see PIVOT_RAMP_EXPONENT for why the shape matters.
+
+    lethal_m / pivot_m None = clearances() of the active robot profile.
     """
+    if lethal_m is None or pivot_m is None:
+        prof_lethal, prof_pivot = clearances()
+        lethal_m = prof_lethal if lethal_m is None else lethal_m
+        pivot_m = prof_pivot if pivot_m is None else pivot_m
     grid = binary.grid
     resolution = binary.resolution
 
@@ -329,13 +348,35 @@ class RecoveringGlobalPlanner(GlobalPlanner):
             self._escaping = True
             self._escape_id += 1
             escape_id = self._escape_id
-        self._escape_abort.clear()
+            # cleared under the lock: a halt() landing right after this
+            # escape took the wheels must not be wiped by a late clear()
+            self._escape_abort.clear()
         threading.Thread(target=self._escape_run, args=(direction, trigger, escape_id),
                          daemon=True).start()
         return True
 
     _escape_abort: threading.Event
     _escape_id: int = 0
+
+    def halt(self, trigger: str) -> bool:
+        """Operator stop (stop_movement): abort a running escape, drop the
+        goal it held, cancel the current goal.
+
+        Without this a soft STOP only cancelled the goal: the escape thread
+        kept writing its reverse twist, and once MovementManager's teleop
+        cooldown (1 s) ran out the back-off resumed until its 0.20 m - then
+        planned the goal it had held. A stop is a stop: no scripted motion
+        and no held goal survive it. Contacts keep their own semantics
+        (escape()). Returns True when an escape was running."""
+        with self._lock:
+            self._held_goal = None
+            escaping = self._escaping
+            if escaping:
+                self._escape_abort.set()
+        if escaping:
+            logger.warning("Stop during an escape: stopping dead", trigger=trigger)
+        self.cancel_goal()
+        return escaping
 
     def _end_escape(self, escape_id: int) -> None:
         """Give the wheels back - unless a newer contact has already taken them."""
@@ -428,6 +469,12 @@ class RecoveringPlanner(ReplanningAStarPlanner):
     def __init__(self, **kwargs) -> None:  # type: ignore[no-untyped-def]
         super().__init__(**kwargs)
         self._planner = RecoveringGlobalPlanner(self._planner._global_config)
+
+    def _on_stop_movement(self, msg: Bool) -> None:  # type: ignore[override]
+        """stop_movement (the operator's soft STOP): upstream only cancels the
+        goal; here it also aborts a running contact escape and its held goal."""
+        if getattr(msg, "data", False):
+            self._planner.halt(trigger="stop_movement")
 
     async def handle_bump(self, msg: Bool) -> None:
         """Front contact: stop, escape 0.20 m in reverse, abandon the goal."""

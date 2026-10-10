@@ -1,14 +1,25 @@
-"""FakeMossFirmware: the MOSS ESP32-S3 bench firmware's serial behaviour in Python.
+"""FakeMossFirmware: the MOSS QT Py motor firmware's serial behaviour in Python.
 
 A serial-shaped object (write / readline / in_waiting / close / is_open) that
-runs the same state machine as `firmware/MOSS_ESP32S3/Control.h` in the moss
-repo: OFF / READY / DRIVE / TEST, the 300 ms drive deadman, the 10 s arm
-expiry, the +-25 % number check, the replies ("OK", "ERR not_armed",
-"ERR invalid_command", "ERR stopped_busy"), the telemetry JSON line.
+runs the same state machine as `firmware/MOSS_QTPY_MDD3A/Control.h` in the
+moss repo, build "qtpy-mdd3a-v3": OFF / READY / DRIVE / TEST, the 300 ms drive
+deadman, the 10 s arm expiry, the +-100 % number check, `ramp UP DOWN` (1..500
+ms per % each), the replies ("OK", "ERR not_armed", "ERR invalid_command",
+"ERR stopped_busy"), the telemetry JSON line with the v3 keys (fw, ramp_ms,
+ina_ok, bus_mV, shunt_uV, current_mA; no "driver": that key only exists in
+the MDD10A build).
+
+Not modelled, on purpose: the ramp itself and the 100 ms reverse dwell
+(output_pct always equals target_pct - the ramp setting is stored and
+reported, never simulated), the partial-line timeout, the battery (bus_mV is
+a constant 11600 mV, a rested 3S pack), the INA219 re-init.
 
 Time is the fake's own millisecond clock: benches call advance(ms) to make
 the firmware's watchdogs fire deterministically. Telemetry lines are queued
-on `status`, on every 200 ms of advanced time, and on emit_telemetry().
+on `status`, on every 200 ms of advanced time, and on emit_telemetry(). With
+auto_time=True (what MOSS_MOCK_BUS builds) the clock is the wall clock and
+every readline() runs the watchdogs and the 200 ms telemetry, like the
+firmware's loop.
 
 Also the bus behind MOSS_MOCK_BUS, so the real dimOS runtime can be driven
 end to end on a machine with no motors wired.
@@ -20,7 +31,11 @@ import threading
 import time
 from collections import deque
 
-MAX_PERCENT = 25
+FW_NAME = "qtpy-mdd3a-v3"
+MAX_PERCENT = 100
+RAMP_MS_MIN, RAMP_MS_MAX = 1, 500          # Control.h RAMP_MS_MIN / RAMP_MS_MAX
+RAMP_RISE_MS_DEFAULT, RAMP_FALL_MS_DEFAULT = 30, 15   # boot defaults, RAM only
+BUS_MV = 11600                             # constant: a rested 3S pack
 COMMAND_TIMEOUT_MS = 300
 ARM_TIMEOUT_MS = 10000
 TEST_MS = 1000
@@ -44,13 +59,15 @@ class FakeMossFirmware:
         self.since = 0
         self.reason = "boot"
         self.ticks = [0, 0]
+        self.ramp_ms = [RAMP_RISE_MS_DEFAULT, RAMP_FALL_MS_DEFAULT]
         self.commands: list[str] = []     # every line received, in order
         self.sent: list[str] = []         # every line emitted, in order
         self._out: deque[bytes] = deque()
         self._lock = threading.Lock()
         self._last_telemetry = 0
         self.is_open = True
-        self._queue_line("MOSS V0.3 bench firmware; USB-UART 115200; limit 25%; type status")
+        self._queue_line(f"MOSS V0.4 firmware {FW_NAME}; USB CDC 115200; limit {MAX_PERCENT}%; "
+                         f"ramp {self.ramp_ms[0]}/{self.ramp_ms[1]} ms per %; type status")
 
     # ── clock ──────────────────────────────────────────────────────────
     def now(self) -> int:
@@ -95,10 +112,23 @@ class FakeMossFirmware:
     def readline(self) -> bytes:
         for _ in range(4):   # ~20 ms of patience, like a serial timeout
             with self._lock:
+                self._auto_tick()
                 if self._out:
                     return self._out.popleft()
             time.sleep(0.005)
         return b""
+
+    def _auto_tick(self) -> None:
+        """Wall-clock mode (MOSS_MOCK_BUS): the reader's polling drives the
+        watchdogs and the 200 ms telemetry, as the firmware's loop does - so
+        a mock run shows a live battery and a firmware deadman that fires."""
+        if not self._auto:
+            return
+        now = self.now()
+        self._poll()
+        if now - self._last_telemetry >= TELEMETRY_MS:
+            self._last_telemetry = now
+            self._queue_line(self._telemetry_line())
 
     def write(self, data: bytes) -> int:
         text = data.decode(errors="replace")
@@ -132,6 +162,14 @@ class FakeMossFirmware:
         if n < -MAX_PERCENT or n > MAX_PERCENT:
             return None
         return n
+
+    @staticmethod
+    def _ramp_number(s: str):
+        try:
+            n = int(s, 10)
+        except ValueError:
+            return None
+        return n if RAMP_MS_MIN <= n <= RAMP_MS_MAX else None
 
     def _handle(self, line: str) -> None:
         self.commands.append(line)
@@ -187,6 +225,14 @@ class FakeMossFirmware:
                 self.reason = "drive"
                 self._queue_line("OK")
                 return
+        if len(argv) == 3 and argv[0] == "ramp":
+            # allowed in any mode, never stops anything; out of range falls
+            # through to the generic invalid-command path, as in Control.h
+            up, down = self._ramp_number(argv[1]), self._ramp_number(argv[2])
+            if up is not None and down is not None:
+                self.ramp_ms = [up, down]
+                self._queue_line("OK")
+                return
         if len(argv) == 3 and argv[0] == "test" and argv[1] in ("left", "right"):
             p = self._number(argv[2])
             if p is not None:
@@ -206,9 +252,10 @@ class FakeMossFirmware:
 
     def _telemetry_line(self) -> str:
         return json.dumps({
-            "ms": self.now(), "mode": self.mode, "reason": self.reason,
+            "ms": self.now(), "fw": FW_NAME, "mode": self.mode, "reason": self.reason,
             "target_pct": [self.left, self.right],
-            "output_pct": [self.left, self.right],   # ramp not modelled
+            "output_pct": [self.left, self.right],   # ramp not modelled: see the module docstring
+            "ramp_ms": list(self.ramp_ms),
             "ticks": list(self.ticks), "invalid_edges": [0, 0],
-            "ina_ok": False, "bus_mV": None, "shunt_uV": None, "current_mA": None,
+            "ina_ok": True, "bus_mV": BUS_MV, "shunt_uV": 0, "current_mA": None,
         }, separators=(",", ":"))
