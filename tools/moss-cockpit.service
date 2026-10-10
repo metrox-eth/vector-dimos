@@ -1,0 +1,26 @@
+# MOSS cockpit server: the bus tap and the page on :8904 (docs/moss_cockpit.md).
+#   sudo cp tools/moss-cockpit.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#   sudo systemctl enable --now moss-cockpit
+# No PrivateDevices here on purpose: the cockpit never opens a device itself, but the
+# launcher it runs on request (tools/moss-fly.sh) must reach the motor board and the lidar.
+[Unit]
+Description=MOSS cockpit (bus tap + web page)
+After=network.target
+
+[Service]
+Type=simple
+User=metrox
+WorkingDirectory=/home/metrox/vector-dimos
+Environment=GLIBC_TUNABLES=glibc.rtld.optional_static_tls=4194304
+Environment=MOSS_COCKPIT_PORT=8904
+ExecStart=/home/metrox/vector-dimos/.venv/bin/python tools/moss_cockpit.py
+Restart=always
+RestartSec=3
+# A stack launched from the page (tools/moss-fly.sh, then the dimOS daemon) lives
+# in this unit's cgroup: a cockpit restart, crash or stop must end the cockpit
+# only, never a flight it started. Stop a flight with tools/moss-fly.sh stop.
+KillMode=process
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -27,7 +27,7 @@ case "${1:-}" in
   stop)
     $DIMOS stop 2>&1 | tail -2
     sleep 1
-    pgrep -f "[b]in/dimos run" >/dev/null && { echo "dimos still up - killing"; pkill -f "[b]in/dimos run"; }
+    pgrep -f "[b]in/dimos( [^ ]+)* run( |$)" >/dev/null && { echo "dimos still up - killing"; pkill -f "[b]in/dimos( [^ ]+)* run( |$)"; }
     echo "stack down - the tracks stopped on the firmware deadman (300 ms) before this line"
     exit 0 ;;
   log)
@@ -38,7 +38,9 @@ case "${1:-}" in
 esac
 
 echo "== 0/5 no dimOS stack already up =="
-if pgrep -f "[b]in/dimos run" >/dev/null; then
+# the real launch line is 'bin/dimos --rerun-open none run ...': root options sit between
+# 'dimos' and 'run', so the pattern must allow them (a plain 'bin/dimos run' never matched, 11/10)
+if pgrep -f "[b]in/dimos( [^ ]+)* run( |$)" >/dev/null; then
   echo "A DIMOS STACK IS ALREADY RUNNING - tools/moss-teleop.sh stop first"; exit 1
 fi
 echo "  none"
@@ -97,7 +99,7 @@ echo "== 4/5 stack =="
 : > "$LAUNCH_LOG"
 if [ "${MOCK:-0}" = "1" ]; then export MOSS_MOCK_BUS=1; else export MOSS_PORT="$PORT"; fi
 export MOSS_MAX_PCT="${MOSS_MAX_PCT:-100}"   # firmware limit 100 since 10/10; lower it here for a cautious lap
-export MOSS_RAMP_MS="${MOSS_RAMP_MS:-5 5}"       # firmware ramp, ms per % up/down (Laurent 10/10 "la sauce"; the pad slew still takes 0.75 s to full)
+export MOSS_RAMP_MS="${MOSS_RAMP_MS:-5 5}"       # firmware ramp, ms per % up/down (operator request 10/10: full power; the pad slew still takes 0.75 s to full)
 nohup $DIMOS --rerun-open none run vector-dimos.moss-gamepad --daemon > "$LAUNCH_LOG" 2>&1 < /dev/null &
 OK_BASE=0; OK_PAD=0
 for i in $(seq 1 40); do
