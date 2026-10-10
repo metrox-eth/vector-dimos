@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vector_dimos.moss_adapter import (FIRMWARE_MAX_PCT, KEEPALIVE_S, STALE_S,
                                        MossBaseAdapter, MossGeometry,
-                                       tracks_to_twist, twist_to_tracks)
+                                       teleop_speeds, tracks_to_twist,
+                                       twist_to_tracks)
 from vector_dimos.moss_mock import DRIVE, OFF, READY, FakeMossFirmware
 
 ok = True
@@ -30,6 +31,16 @@ def check(cond, label):
 
 def settle(s=0.06):
     time.sleep(s)
+
+
+# ── 0. gamepad scale: full stick = the base's limit, not VECTOR's 0.6 m/s ──
+print("0. teleop_speeds (track 0.30 m, 0.15 m/s at 25 %)")
+_lin, _ang = teleop_speeds(MossGeometry(track_m=0.30, mps_at_limit=0.15, max_pct=25))
+check(abs(_lin - 0.15) < 1e-9, "full stick forward -> 0.15 m/s (= 25/25)")
+check(abs(_ang - 1.0) < 1e-9, "full stick sideways -> 1.0 rad/s (= -25/+25 spin)")
+check(twist_to_tracks(_lin, 0.0, MossGeometry(0.30, 0.15, 25)) == (25, 25), "and that twist IS 25/25")
+check(twist_to_tracks(0.0, _ang, MossGeometry(0.30, 0.15, 25)) == (-25, 25), "and that spin IS -25/+25")
+check(teleop_speeds(MossGeometry(track_m=0.0, mps_at_limit=0.15, max_pct=25)) == (0.15, 0.0), "track 0 -> no spin, no crash")
 
 
 # ── 1. pure mapping: twist -> track percent ─────────────────────────────

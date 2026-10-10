@@ -8,6 +8,24 @@ board's USB-UART at 115200 baud.
 
 ## Run it (Jetson, MOSS wired)
 
+The gated way, on the Jetson (pad receiver and QT Py on its USB):
+
+```
+$ tools/moss-teleop.sh            # gates: no stack up, js0, QT Py port free, firmware disarmed, battery >= 10.8 V -> stack
+$ tools/moss-teleop.sh log        # what the base and the pad said
+$ tools/moss-teleop.sh stop       # stack down (the firmware deadman stopped the tracks 300 ms after the last drive)
+$ MOCK=1 tools/moss-teleop.sh     # same stack on the fake firmware, no motor
+```
+
+Pad (shanwan receiver, Android mode, the one VECTOR flies with): **R1 held = deadman**
+(SDL button 7), left stick up/down = forward/back, right stick left/right = turn,
+R2 = boost (capped at `MOSS_MAX_PCT`). The stick scale is the base's envelope
+(`teleop_speeds`: full stick = `MOSS_MPS_AT_LIMIT`, full turn = a spin at the
+limit), not VECTOR's 0.6 m/s - with those the stick was an on/off switch at 25 %.
+Below ~8 % duty the motors do not start (bench 05/10: nothing at 5 %, fine at 15 %).
+
+By hand:
+
 ```
 $ ls /dev/serial/by-id/            # find the ESP32 USB-UART (CP210x / CH340)
 $ export MOSS_PORT=/dev/serial/by-id/usb-Silicon_Labs_CP2102N_...-if00-port0

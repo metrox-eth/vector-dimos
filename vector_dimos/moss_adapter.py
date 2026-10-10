@@ -77,8 +77,30 @@ MOCK_BUS_ENV = "MOSS_MOCK_BUS"
 MODE_OFF, MODE_READY, MODE_DRIVE, MODE_TEST = 0, 1, 2, 3
 
 
+_LOGGER = None
+
+
 def _log():
-    return logging.getLogger("vector_dimos.moss")
+    """dimOS's structlog logger when dimOS is there (that is what `dimos log`
+    shows - a plain logging.getLogger() has no handler under the daemon and
+    every line of this adapter was lost: first MOCK run 10/10), the stdlib
+    with a handler otherwise. Resolved on first use so that importing this
+    module never imports dimos (the cold bench)."""
+    global _LOGGER
+    if _LOGGER is None:
+        try:
+            from dimos.utils.logging_config import setup_logger
+            _LOGGER = setup_logger()
+        except Exception:
+            lg = logging.getLogger("vector_dimos.moss")
+            if not lg.handlers and not logging.getLogger().handlers:
+                handler = logging.StreamHandler()
+                handler.setFormatter(
+                    logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+                lg.addHandler(handler)
+            lg.setLevel(logging.INFO)
+            _LOGGER = lg
+    return _LOGGER
 
 
 def _env_truthy(name: str) -> bool:
@@ -134,6 +156,17 @@ def twist_to_tracks(vx: float, wz: float, g: MossGeometry) -> tuple[int, int]:
         return max(-lim, min(lim, p))
 
     return pct(v_l), pct(v_r)
+
+
+def teleop_speeds(g: MossGeometry) -> tuple[float, float]:
+    """(linear m/s, angular rad/s) at FULL stick for the gamepad module, sized
+    to the base: full stick forward = g.max_pct on both tracks, full stick
+    sideways = a spin in place at g.max_pct (v = wz * track/2). VECTOR's
+    defaults (0.6 m/s, 1.2 rad/s) would saturate at 25 % from the deadzone
+    on, an on/off throttle; this keeps the stick proportional."""
+    lin = float(g.mps_at_limit)
+    ang = 2.0 * lin / g.track_m if g.track_m > 0 else 0.0
+    return lin, ang
 
 
 def tracks_to_twist(v_l: float, v_r: float, g: MossGeometry) -> tuple[float, float, float]:
