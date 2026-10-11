@@ -168,9 +168,16 @@
   .brule-cap { display: flex; justify-content: space-between; gap: 12px; padding-top: 8px; font-size: 12.5px;
                color: var(--ui-dim); font-variant-numeric: tabular-nums; flex: none; }
 
-  /* ---- camera ---- */
-  .cam { position: relative; aspect-ratio: 4 / 3; background: rgba(8, 15, 26, .35); overflow: hidden; }
-  .cam img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+  /* ---- cameras, under the map: nose (RealSense) and wrist (arm), side by side ---- */
+  .cams { display: grid; grid-template-columns: 1fr 1fr; column-gap: 16px; flex: none; margin-top: 14px;
+          height: clamp(150px, 26vh, 300px); }
+  .cam { position: relative; height: 100%; background: rgba(8, 15, 26, .35); overflow: hidden; }
+  .cam img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block;
+             color: transparent; }   /* no alt text through the placeholder while the stream is down */
+  .cam .tag { position: absolute; left: 10px; top: 8px; margin: 0; font-size: 11.5px; letter-spacing: .14em;
+              color: var(--moss-white); opacity: .85; z-index: 2; }
+  .cam-cap { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 8px;
+             font-size: 12.5px; color: var(--ui-dim); flex: none; }
   .cam .ph { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 14px 16px;
              background: var(--moss-fade); }
   .cam .ph[hidden] { display: none; }
@@ -233,8 +240,8 @@
     #run-name { white-space: normal; overflow-wrap: anywhere; }
     main { display: flex; flex-direction: column; padding-bottom: 96px; }
     .col { overflow: visible; padding-right: 0; display: contents; }
-    #col-map { display: flex; order: 1; height: 72vh; min-height: 420px; margin-bottom: 28px; }
-    #mod-camera { order: 2; }
+    #col-map { display: flex; order: 1; height: 86vh; min-height: 520px; margin-bottom: 28px; }
+    .cams { height: 24vh; column-gap: 10px; }
     #mod-controls { order: 3; }
     #mod-flight { order: 4; }
     #mod-base { order: 5; }
@@ -367,22 +374,23 @@
       </div>
       <div class="brule" aria-hidden="true"><i id="cap-progress"></i></div>
       <div class="brule-cap"><span id="cap-left">no episode</span><span id="cap-right"></span></div>
+      <div class="cams" id="cams" data-live>
+        <div class="cam" id="cam-nose">
+          <img id="cam-img" alt="Nose camera, live">
+          <div class="ph" id="cam-ph"><p class="kicker">NO FRAMES</p><p class="small dim" id="cam-why">The camera topic is silent.</p></div>
+          <p class="tag kicker">NOSE</p>
+        </div>
+        <div class="cam" id="cam-wrist">
+          <img id="wrist-img" alt="Wrist camera, live">
+          <div class="ph" id="wrist-ph"><p class="kicker">NO FRAMES</p><p class="small dim" id="wrist-why">The camera topic is silent.</p></div>
+          <p class="tag kicker">WRIST</p>
+        </div>
+      </div>
+      <div class="cam-cap"><span>Nose camera (RealSense) and wrist camera (arm), 5 fps.</span><button class="btn link" id="b-cam" type="button">Pause video</button></div>
     </div>
 
-    <!-- column 3: camera, controls, log -->
+    <!-- column 3: controls, log -->
     <div class="col" id="col-right">
-      <section class="mod" id="mod-camera" aria-labelledby="cam-title">
-        <div class="mod-head">
-          <p class="kicker">CAMERA</p>
-          <h2 class="title" id="cam-title">Nose camera.</h2>
-          <div class="aside"><button class="btn link" id="b-cam" type="button">Pause video</button></div>
-        </div>
-        <div class="cam" data-live>
-          <img id="cam-img" alt="Live camera">
-          <div class="ph" id="cam-ph"><p class="kicker">NO FRAMES</p><p class="small dim" id="cam-why">The camera topic is silent.</p></div>
-        </div>
-      </section>
-
       <section class="mod" id="mod-controls" aria-labelledby="ctl-title">
         <div class="mod-head">
           <p class="kicker">CONTROLS</p>

@@ -209,6 +209,19 @@ check("1.1 deg nose down -> qy 0.00959916, qw 0.99995393 (VECTOR's camera_mount 
 check("unit quaternion", close(math.hypot(m[4], m[6]), 1.0, 1e-12))
 
 # ── F. entry points ──────────────────────────────────────────────────────
+# ── H. wrist camera index ────────────────────────────────────────────────
+print("H. wrist_camera_index(env, by_id_dir)")
+v4l = tempfile.mkdtemp(prefix="v4l_")
+check("empty by-id dir, no MOSS_WRIST_DEV -> None (no wrist camera)", mb.wrist_camera_index({}, v4l) is None)
+os.symlink("/dev/video6", os.path.join(v4l, "usb-Sonix_Technology_Co.__Ltd._KD-USB_Cameras_KD-USB_Cameras-video-index0"))
+os.symlink("/dev/video7", os.path.join(v4l, "usb-Sonix_Technology_Co.__Ltd._KD-USB_Cameras_KD-USB_Cameras-video-index1"))
+check("KD-USB by-id video-index0 -> /dev/video6 -> 6 (index1 ignored)", mb.wrist_camera_index({}, v4l) == 6)
+check("MOSS_WRIST_DEV=3 -> 3", mb.wrist_camera_index({"MOSS_WRIST_DEV": "3"}, v4l) == 3)
+check("MOSS_WRIST_DEV=/dev/video9 -> 9", mb.wrist_camera_index({"MOSS_WRIST_DEV": "/dev/video9"}, v4l) == 9)
+check("MOSS_WRIST_DEV=/dev/ttyUSB0 (not a video device) -> None", mb.wrist_camera_index({"MOSS_WRIST_DEV": "/dev/ttyUSB0"}, v4l) is None)
+mb.V4L_BY_ID = v4l          # section G builds the blueprints against this fake by-id
+print()
+
 print("F. pyproject entry points")
 text = (ROOT / "pyproject.toml").read_text()
 section = text.split('[project.entry-points."dimos.blueprints"]', 1)[1].split("\n[", 1)[0]
@@ -277,6 +290,25 @@ else:
     check("camera mount from the profile: (0.156, 0, 0.075) m",
           close(t.translation.x, 0.156) and close(t.translation.z, 0.075))
     check("recorder at the MOSS state dir", atom(nav, "MossRecorder").kwargs.get("db_path") == str(home_db))
+    check("wrist camera module WristCamera in moss-nav (fake by-id -> /dev/video6)", "WristCamera" in n, f"{sorted(n)}")
+    wc = atom(nav, "WristCamera").kwargs
+    check("wrist: Webcam hardware factory on index 6, 640x480 @ 5 fps, frame prefix 'wrist', no TF, 5 Hz barrier",
+          getattr(wc.get("hardware"), "keywords", {}).get("camera_index") == 6
+          and getattr(wc.get("hardware"), "keywords", {}).get("width") == 640
+          and getattr(wc.get("hardware"), "keywords", {}).get("fps") == 5.0
+          and getattr(wc.get("hardware"), "keywords", {}).get("frame_id_prefix") == "wrist"
+          and wc.get("transform") is None and wc.get("frequency") == 5.0, f"{wc}")
+    wk = mb.wrist_instance(nav)
+    check("wrist instance name found (dimOS lowercases it)", wk == "wristcamera", f"{wk}")
+    check("wrist outputs remapped: color_image -> wrist_image, camera_info -> wrist_camera_info, tf -> wrist_tf",
+          nav.remapping_map.get((wk, "color_image")) == "wrist_image"
+          and nav.remapping_map.get((wk, "camera_info")) == "wrist_camera_info"
+          and nav.remapping_map.get((wk, "tf")) == "wrist_tf", f"{dict(nav.remapping_map)}")
+    wspec = nav.transport_map.get(("wrist_image", Image))
+    check("wrist_image crosses the bus as JPEG on /wrist_image",
+          isinstance(wspec, TransportSpec) and wspec.cls is JpegLcmTransport and wspec.args[0] == "/wrist_image")
+    check("the RealSense keeps its own names (no remap on RealSenseCamera)",
+          not any(k[0] == "RealSenseCamera" for k in nav.remapping_map))
 
     exp = mb.build_moss_explore()
     e = names(exp)
@@ -298,6 +330,17 @@ else:
     bare = mb.build_moss_nav()
     check("MOSS_CAMERA=0 MOSS_RECORD=0 -> no RealSense, no recorder, no JPEG transport",
           not ({"RealSenseCamera", "MossRecorder"} & names(bare)) and ("color_image", Image) not in bare.transport_map)
+    os.environ["MOSS_WRIST"] = "0"
+    bare2 = mb.build_moss_nav()
+    check("MOSS_WRIST=0 -> no WristCamera, no wrist remap, no wrist transport",
+          "WristCamera" not in names(bare2) and mb.wrist_instance(bare2) is None
+          and ("wrist_image", Image) not in bare2.transport_map)
+    os.environ.pop("MOSS_WRIST")
+    mb.V4L_BY_ID = tempfile.mkdtemp(prefix="v4l_empty_")
+    nowrist = mb.build_moss_nav()
+    check("wrist camera absent from by-id -> module skipped, blueprint still builds",
+          "WristCamera" not in names(nowrist) and ("wrist_image", Image) not in nowrist.transport_map)
+    mb.V4L_BY_ID = v4l
     os.environ["MOSS_RERUN"] = "1"
     check("MOSS_RERUN=1 -> the stock viewers ride along", "WebsocketVisModule" in names(mb.build_moss_nav()))
     for k in ("MOSS_CAMERA", "MOSS_RECORD", "MOSS_RERUN"):

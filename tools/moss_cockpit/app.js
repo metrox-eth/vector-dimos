@@ -229,7 +229,7 @@ function renderBase() {
   sec.classList.toggle("stale", stale);
 }
 
-var TOPIC_ORDER = ["odom", "lidar", "global_costmap", "path", "cmd_vel", "base_telemetry", "color_image"];
+var TOPIC_ORDER = ["odom", "lidar", "global_costmap", "path", "cmd_vel", "base_telemetry", "color_image", "wrist_image"];
 
 function renderSystem() {
   var s = S.state && S.state.system;
@@ -352,67 +352,87 @@ function renderCaption() {
   setText("cap-right", right);
 }
 
-// ---------------------------------------------------------------- camera
+// ---------------------------------------------------------------- cameras
 
-function camSilent() {
-  var t = S.state && S.state.topics && S.state.topics.color_image;
+// Two MJPEG streams under the map: the nose (RealSense colour) and the wrist
+// (the arm's camera). Each has its own state; one "Pause video" covers both.
+var CAMS = {
+  nose:  { img: "cam-img",   ph: "cam-ph",   why: "cam-why",   topic: "color_image", src: "/camera.mjpg?cam=nose" },
+  wrist: { img: "wrist-img", ph: "wrist-ph", why: "wrist-why", topic: "wrist_image", src: "/camera.mjpg?cam=wrist" }
+};
+var camState = {};
+Object.keys(CAMS).forEach(function (n) { camState[n] = { ok: false, at: 0, lost: null, timer: null, wasSilent: true }; });
+
+function camSilent(n) {
+  var t = S.state && S.state.topics && S.state.topics[CAMS[n].topic];
   return !(t && typeof t.age_s === "number" && t.age_s <= STALE_S);
 }
 
-var camTimer = null;
-function camConnect() {
-  var img = $("cam-img");
-  if (S.camPaused || document.hidden) { img.removeAttribute("src"); S.camOk = false; return; }
-  if (!img.getAttribute("src")) { S.camAt = Date.now(); img.src = "/camera.mjpg?t=" + Date.now(); }
+function camConnect(n) {
+  var c = CAMS[n], st = camState[n], img = $(c.img);
+  if (S.camPaused || document.hidden) { img.removeAttribute("src"); st.ok = false; return; }
+  if (!img.getAttribute("src")) { st.at = Date.now(); img.src = c.src + "&t=" + Date.now(); }
 }
+function camConnectAll() { Object.keys(CAMS).forEach(camConnect); }
 
 // Drop the stream and ask again, with a fresh URL, CAM_RETRY_MS later. An MJPEG
 // stream the server closes cleanly fires no error (the browser holds the last
 // frame as a finished image), so this also runs when the state says it is gone.
-function camRestart(why) {
-  $("cam-img").removeAttribute("src");
-  S.camOk = false; S.camLost = why;
-  if (!camTimer) camTimer = setTimeout(function () { camTimer = null; camConnect(); renderCamera(); }, CAM_RETRY_MS);
+function camRestart(n, why) {
+  var st = camState[n];
+  $(CAMS[n].img).removeAttribute("src");
+  st.ok = false; st.lost = why;
+  if (!st.timer) st.timer = setTimeout(function () { st.timer = null; camConnect(n); renderCamera(); }, CAM_RETRY_MS);
 }
 
-function camWatch() {
-  if (S.camPaused || document.hidden || !S.online || camTimer) return;
-  if (!$("cam-img").getAttribute("src")) { camConnect(); return; }
-  if (Date.now() - S.camAt < CAM_GRACE_MS) return;
-  var cam = S.state && S.state.camera;
-  if (cam && cam.clients === 0) camRestart("The stream ended. Reconnecting.");          // the server holds no stream: ours is gone
-  else if (S.camOk && camSilent() && !isDemo()) camRestart("The camera topic went silent. Reconnecting.");
+function camWatch(n) {
+  var st = camState[n];
+  if (S.camPaused || document.hidden || !S.online || st.timer) return;
+  if (!$(CAMS[n].img).getAttribute("src")) { camConnect(n); return; }
+  var silent = camSilent(n) && !isDemo();
+  if (Date.now() - st.at < CAM_GRACE_MS) { st.wasSilent = silent; return; }
+  // the topic is back after a silence (a stack restart): the stream we hold belongs to
+  // the old run and may never show a new frame, ask for a fresh one
+  if (st.wasSilent && !silent) { st.wasSilent = false; camRestart(n, "The camera is back. Reconnecting."); return; }
+  st.wasSilent = silent;
+  var cam = S.state && S.state.camera && S.state.camera[n];
+  if (cam && cam.clients === 0) camRestart(n, "The stream ended. Reconnecting.");          // the server holds no stream: ours is gone
+  else if (st.ok && silent) camRestart(n, "The camera topic went silent. Reconnecting.");
 }
 
 function renderCamera() {
-  camWatch();
-  var ph = $("cam-ph"), why;
-  if (S.camPaused) why = "Video paused in this browser.";
-  else if (!S.online) why = "Cockpit offline.";
-  else if (!S.camOk && camTimer) why = S.camLost || "Reconnecting.";
-  else if (!S.camOk && camSilent() && !isDemo() && Date.now() - S.camAt >= CAM_GRACE_MS) why = "The camera topic is silent. Waiting for frames.";
-  else if (!S.camOk) why = "Connecting to the stream.";
-  else if (camSilent() && !isDemo()) why = "The camera topic is silent.";
-  ph.hidden = !why;
-  if (why) setText("cam-why", why);
+  Object.keys(CAMS).forEach(function (n) {
+    camWatch(n);
+    var st = camState[n], ph = $(CAMS[n].ph), why;
+    if (S.camPaused) why = "Video paused in this browser.";
+    else if (!S.online) why = "Cockpit offline.";
+    else if (!st.ok && st.timer) why = st.lost || "Reconnecting.";
+    else if (!st.ok && camSilent(n) && !isDemo() && Date.now() - st.at >= CAM_GRACE_MS) why = "The camera topic is silent. Waiting for frames.";
+    else if (!st.ok) why = "Connecting to the stream.";
+    else if (camSilent(n) && !isDemo()) why = "The camera topic is silent.";
+    ph.hidden = !why;
+    if (why) setText(CAMS[n].why, why);
+  });
   setText("b-cam", S.camPaused ? "Resume video" : "Pause video");
 }
 
 (function () {
-  var img = $("cam-img");
-  img.addEventListener("load", function () { S.camOk = true; S.camLost = null; renderCamera(); });
-  img.addEventListener("error", function () {
-    if (!img.getAttribute("src")) return;              // our own removeAttribute, not a failure
-    camRestart("No stream from the cockpit. Retrying every " + CAM_RETRY_MS / 1000 + " s."); renderCamera();
+  Object.keys(CAMS).forEach(function (n) {
+    var img = $(CAMS[n].img), st = camState[n];
+    img.addEventListener("load", function () { st.ok = true; st.lost = null; renderCamera(); });
+    img.addEventListener("error", function () {
+      if (!img.getAttribute("src")) return;              // our own removeAttribute, not a failure
+      camRestart(n, "No stream from the cockpit. Retrying every " + CAM_RETRY_MS / 1000 + " s."); renderCamera();
+    });
   });
   try { S.camPaused = localStorage.getItem("moss.cockpit.camPaused") === "1"; } catch (e) {}
   $("b-cam").addEventListener("click", function () {
     S.camPaused = !S.camPaused;
     try { localStorage.setItem("moss.cockpit.camPaused", S.camPaused ? "1" : "0"); } catch (e) {}
-    camConnect(); renderCamera();
+    camConnectAll(); renderCamera();
   });
   // MJPEG is the heaviest thing the Jetson serves: drop it while nobody looks.
-  document.addEventListener("visibilitychange", camConnect);
+  document.addEventListener("visibilitychange", camConnectAll);
 })();
 
 // ---------------------------------------------------------------- map

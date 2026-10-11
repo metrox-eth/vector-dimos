@@ -960,7 +960,7 @@ real_wto = mc.MJPEG_WRITE_TIMEOUT_S
 mc.MJPEG_WRITE_TIMEOUT_S = 0.5
 srv, c5 = serve(demo=True, page_dir=page_dir)
 big = b"\xff\xd8" + bytes(2_000_000) + b"\xff\xd9"
-srv.cockpit.camera_frame = lambda: (time.monotonic(), big)
+srv.cockpit.camera_frame = lambda cam="nose": (time.monotonic(), big)
 sock = socket.socket()
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
 sock.connect(("127.0.0.1", srv.server_address[1]))

@@ -72,6 +72,10 @@ drive.
 - the 2D scored costmap (`vector_dimos/costmap2d.py`), lidar writes obstacles;
 - the RealSense colour stream at 640x480, 5 fps, carried as JPEG on the bus
   (`MOSS_CAMERA=0` to drop it);
+- the wrist camera (the UVC camera on the arm, found by its `/dev/v4l/by-id`
+  name, `MOSS_WRIST_DEV` to point at another `/dev/videoN`), 640x480, 5 fps, JPEG on
+  the bus as `wrist_image` (`MOSS_WRIST=0` to drop it; an absent camera is a warning
+  and the module is skipped);
 - the recorder (below), `MOSS_RECORD=0` to drop it.
 
 `vector-dimos.moss-explore` adds the recovering A* planner with the MOSS
@@ -102,10 +106,19 @@ until measured on the robot:
 | pivot diameter | 0.50 m | `MOSS_PIVOT_DIAMETER_M` |
 | track centre distance | 0.266 m (CAD) | `MOSS_TRACK_M` |
 | speed ceiling (recorded only, no watchdog reads it yet) | 0.30 m/s | `MOSS_MAX_SPEED_MPS` |
+| static-friction floor of the base adapter (percent) | 0 (off) | `MOSS_MIN_PCT` |
 
 The real speed knobs today are `MOSS_MAX_PCT` (the PWM cap of the base adapter, 100 by
 default) and `MOSS_NERF_SPEED` (the launcher's `--nerf-speed` for the planner, 0.5 by
 default); the profile's ceiling waits for a MOSS speed watchdog.
+
+`MOSS_MIN_PCT` is the static-friction floor: a non-zero track command below it is
+raised to it, sign kept (a command that rounds to zero stays a stop). The first armed
+exploration showed why: the planner's slowest pivot (0.2 rad/s) maps to 8 % PWM on
+MOSS, and the tracks do not turn below roughly 25-40 %, so the rover sat still and
+the planner logged `Robot is stuck. Replanning.` until the goal timed out. The floor
+is 0 (off) until measured: find the lowest percent that turns both tracks on the
+floor, and launch with `MOSS_MIN_PCT=<that> EXPLORE=1 tools/moss-fly.sh explore`.
 
 The lidar's floor projection is `base_link`: if the C1 is not mounted at the
 rover's rotation centre, the footprint and the pivot clearance are off by that
@@ -119,7 +132,7 @@ writes the whole run into one SQLite database,
 `~/.local/state/moss/recordings/moss.db` (`MOSS_STATE_DIR` moves the state
 directory; on the Jetson it is a symlink to the NVMe). Streams: `odom`,
 `global_costmap`, `lidar` (world-frame cloud), `cmd_vel`, `base_telemetry`,
-`color_image` (JPEG) and `episode_marker`. The previous run is rotated aside
+`color_image` (JPEG), `wrist_image` (JPEG) and `episode_marker`. The previous run is rotated aside
 (`moss.<stamp>.db`, last ten kept).
 
 The cockpit's "Record episode" button does not start or stop the recorder: it
@@ -147,8 +160,9 @@ locally, no CDN, the field has no internet).
 Panels: flight check (last `moss_preflight.py --json`), base (battery on a 3S
 scale, mode, applied PWM per track, ticks, firmware), system (CPU, RAM, temps,
 disk), the live map (occupancy grid + lidar scan + pose + path + goal; drag to
-pan, wheel or pinch to zoom, tap to send a goal), the camera (MJPEG, 5 fps),
-controls (launch map / explore, stop stack, start / stop exploration, record
+pan, wheel or pinch to zoom, tap to send a goal), the two cameras under the map
+(nose = RealSense colour, wrist = the arm's camera; MJPEG, 5 fps each, one
+"Pause video" for both), controls (launch map / explore, stop stack, start / stop exploration, record
 episode, STOP) and the log tail.
 
 STOP on the page is a soft stop: it publishes `stop_explore_cmd`,
@@ -165,7 +179,8 @@ commands; STOP is always allowed. Every `POST /cmd/*` must carry the header
 
 Endpoints, for anything else that wants the data: `/state.json`, `/map.png`,
 `/map_meta`, `/scan.json`, `/path.json`, `/log.json`, `/preflight.json`,
-`/launch.json`, `/camera.mjpg`, and `POST /cmd/{explore,goal,stop,episode,stack}`.
+`/launch.json`, `/camera.mjpg` (`?cam=nose`, the default, or `?cam=wrist`), and
+`POST /cmd/{explore,goal,stop,episode,stack}`.
 `tools/moss_cockpit.py --demo` serves synthetic data for working on the page
 without a robot.
 
@@ -176,7 +191,7 @@ it started) on the Jetson, or by hand with `tools/moss-fly.sh cockpit`.
 ## Not done, on purpose
 
 - No calibration happened: ground speed, ticks per metre, track width, lidar
-  pose and the footprint are placeholders. The first measurements are listed in
+  pose, the footprint and the static-friction floor are placeholders. The first measurements are listed in
   `docs/moss_base.md`.
 - No gyro prior for the lidar odometry (`use_gyro_prior=False`): the D455F IMU
   can feed it once the camera mount is measured. No switch is wired for it yet.

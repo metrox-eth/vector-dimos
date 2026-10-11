@@ -86,6 +86,9 @@ check(twist_to_tracks(-0.06, 0.0, G) == (-10, -10), "vx=-0.06 -> -10/-10 (revers
 check(twist_to_tracks(0.0, 1.0, G) == (-25, 25), "wz=+1 rad/s -> L=-25 R=+25 (spin left)")
 check(twist_to_tracks(0.30, 0.0, G) == (25, 25), "vx=0.30 (2x the limit) -> clamped 25/25")
 check(twist_to_tracks(0.001, 0.0, G) == (0, 0), "vx=0.001 rounds to 0 -> a stop")
+from vector_dimos.moss_adapter import CONNECT_PROBE_S, REPLY_TIMEOUT_S as _RT  # noqa: E402
+check(CONNECT_PROBE_S >= 1.0 and _RT < CONNECT_PROBE_S,
+      f"connect probe waits >= 1 s for the first status (reply tick {_RT} s): a cold reader thread on a Jetson missed a 150 ms window")
 GF = MossGeometry(track_m=0.30, mps_at_limit=0.15, max_pct=25, ticks_per_m=None, min_pct=12)
 check(twist_to_tracks(0.06, 0.0, GF) == (12, 12), "floor 12: vx=0.06 (10 %) -> raised to 12/12")
 check(twist_to_tracks(-0.06, 0.0, GF) == (-12, -12), "floor 12: vx=-0.06 -> -12/-12 (sign kept)")

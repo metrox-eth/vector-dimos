@@ -32,6 +32,9 @@ module that fails to open it - never to another device.
 
 Switches (env, read when the blueprint is built):
     MOSS_CAMERA=0     no RealSense (default on: colour 640x480 @ 5 fps, JPEG on the bus)
+    MOSS_WRIST=0      no wrist camera (default on: the UVC camera on the arm, 640x480 @ 5 fps,
+                      JPEG on the bus as wrist_image; absent device = warning, module skipped)
+    MOSS_WRIST_DEV    wrist camera: a /dev/videoN path or an index, instead of the by-id lookup
     MOSS_RS_SERIAL    pick the RealSense by serial number
     MOSS_RECORD=0     no recording (default on: MossRecorder, <MOSS_STATE_DIR>/recordings/moss.db)
     MOSS_RERUN=1      add the stock Rerun/websocket viewers (default off: no 7779/9877/3030 on MOSS)
@@ -82,6 +85,72 @@ def _env_on(name: str, default: bool, env: dict | None = None) -> bool:
     if not raw:
         return default
     return raw not in ("0", "false", "no", "off")
+
+
+WRIST_WIDTH, WRIST_HEIGHT, WRIST_FPS = 640, 480, 5
+WRIST_BY_ID_GLOBS = ("*KD-USB*-video-index0", "*Sonix*-video-index0")   # the arm's UVC camera, as moss_preflight
+V4L_BY_ID = "/dev/v4l/by-id"
+
+
+def wrist_camera_index(env: dict | None = None, by_id_dir: str | None = None) -> int | None:
+    """/dev/videoN index of the wrist camera, or None when it is not there.
+    MOSS_WRIST_DEV wins (an index or a /dev/videoN path); otherwise the first
+    by-id match of the known names. The kernel numbers video devices in plug
+    order, so the by-id name is the stable handle and the index is resolved
+    when the blueprint is built."""
+    import glob
+    import re
+    env = os.environ if env is None else env
+    by_id_dir = V4L_BY_ID if by_id_dir is None else by_id_dir
+    dev = str(env.get("MOSS_WRIST_DEV", "")).strip()
+    if dev:
+        if dev.isdigit():
+            return int(dev)
+        target = os.path.realpath(dev)
+    else:
+        target = None
+        for pat in WRIST_BY_ID_GLOBS:
+            hits = sorted(glob.glob(os.path.join(by_id_dir, pat)))
+            if hits:
+                target = os.path.realpath(hits[0])
+                break
+        if target is None:
+            return None
+    m = re.fullmatch(r"/dev/video(\d+)", target)
+    return int(m.group(1)) if m else None
+
+
+_WRIST_CLASS = None
+
+
+def _wrist_module_class():
+    """A CameraModule of its own class, so the blueprint remaps its outputs
+    (color_image -> wrist_image, ...) without touching the RealSense. Built
+    on first use (dimOS is imported lazily here) and exposed as
+    `vector_dimos.moss_blueprints.WristCamera` through the module __getattr__,
+    so dimOS can pickle it by reference into its worker processes."""
+    global _WRIST_CLASS
+    if _WRIST_CLASS is None:
+        from dimos.hardware.sensors.camera.module import CameraModule
+
+        cls = type("WristCamera", (CameraModule,),
+                   {"__doc__": "The arm's UVC camera (dimOS Webcam hardware, cv2 capture).",
+                    "__module__": __name__, "__qualname__": "WristCamera"})
+        _WRIST_CLASS = cls
+    return _WRIST_CLASS
+
+
+def _wrist_part(index: int):
+    from functools import partial
+    from dimos.hardware.sensors.camera.webcam import Webcam
+
+    WristCamera = _wrist_module_class()
+    # transform=None: no base_link -> camera_link TF from this module (that frame
+    # is the RealSense's); the frames are "wrist/..." through the hardware prefix
+    return WristCamera.blueprint(
+        hardware=partial(Webcam, camera_index=index, width=WRIST_WIDTH, height=WRIST_HEIGHT,
+                         fps=float(WRIST_FPS), frame_id_prefix="wrist"),
+        frame_id="wrist_camera_link", transform=None, frequency=float(WRIST_FPS))
 
 
 def camera_mount_xyzq(profile: RobotProfile) -> tuple[float, ...]:
@@ -157,6 +226,15 @@ def _common_parts(ports: dict, profile: RobotProfile) -> list:
         if serial:
             cam_kwargs["serial_number"] = serial
         parts.append(RealSenseCamera.blueprint(**cam_kwargs))
+    if _env_on("MOSS_WRIST", True):
+        log = _logger()
+        idx = wrist_camera_index()
+        if idx is None:
+            log.warning("MOSS blueprint: no wrist camera (%s under %s, or MOSS_WRIST_DEV): "
+                        "wrist_image will not be published", " / ".join(WRIST_BY_ID_GLOBS), V4L_BY_ID)
+        else:
+            log.info(f"MOSS blueprint: wrist camera /dev/video{idx}, {WRIST_WIDTH}x{WRIST_HEIGHT} @ {WRIST_FPS} fps")
+            parts.append(_wrist_part(idx))
     if _env_on("MOSS_RECORD", True):
         from vector_dimos.moss_memory import MossRecorder
         parts.append(MossRecorder.blueprint(db_path=str(robot_profile.moss_recording_path())))
@@ -167,14 +245,32 @@ def _common_parts(ports: dict, profile: RobotProfile) -> list:
     return parts
 
 
+def wrist_instance(bp) -> str | None:
+    """The wrist camera's instance name in a blueprint (dimOS lowercases module
+    names unless one is given), or None when the module is not in it."""
+    for atom in bp.blueprints:
+        if getattr(atom.module, "__name__", "") == "WristCamera":
+            return atom.name
+    return None
+
+
 def _jpeg_camera(bp):
     """Colour frames cross the bus as JPEG (encoded once in the camera's
-    process): the cockpit passes them through, the recorder stores JPEG."""
-    if not _env_on("MOSS_CAMERA", True):
-        return bp
+    process): the cockpit passes them through, the recorder stores JPEG.
+    The wrist camera's outputs are remapped away from the RealSense's names
+    (wrist_image, wrist_camera_info, wrist_tf) and wrist_image is JPEG too."""
     from dimos.core.transport import JpegLcmTransport
     from dimos.msgs.sensor_msgs.Image import Image
-    return bp.transports({("color_image", Image): JpegLcmTransport.spec("/color_image", Image)})
+    transports = {}
+    if _env_on("MOSS_CAMERA", True):
+        transports[("color_image", Image)] = JpegLcmTransport.spec("/color_image", Image)
+    wrist = wrist_instance(bp)
+    if _env_on("MOSS_WRIST", True) and wrist is not None:
+        bp = bp.remappings([(wrist, "color_image", "wrist_image"),
+                            (wrist, "camera_info", "wrist_camera_info"),
+                            (wrist, "tf", "wrist_tf")])
+        transports[("wrist_image", Image)] = JpegLcmTransport.spec("/wrist_image", Image)
+    return bp.transports(transports) if transports else bp
 
 
 def build_moss_nav():
@@ -231,6 +327,8 @@ _BUILDERS = {"moss_nav_blueprint": build_moss_nav,
 def __getattr__(name: str):
     """Entry points load `moss_nav_blueprint` / `moss_explore_blueprint` as
     attributes: build on first access (dimOS present), then cache."""
+    if name == "WristCamera":
+        return _wrist_module_class()
     builder = _BUILDERS.get(name)
     if builder is None:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

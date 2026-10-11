@@ -95,6 +95,7 @@ FIRMWARE_ARM_TIMEOUT_S = 10.0        # Control.h ARM_TIMEOUT_MS
 KEEPALIVE_S = 0.100            # re-send period, 3x inside the firmware deadman
 STALE_S = 0.500                # no fresh write for this long -> "stop", once
 REPLY_TIMEOUT_S = 0.150        # the firmware answers within a loop tick (ms)
+CONNECT_PROBE_S = 1.000        # the first "status" of a process: reader thread start + first parse on a Jetson take longer than a reply tick
 TELEMETRY_FRESH_S = 1.0        # mode read from telemetry older than this = unknown
 MOCK_BUS_ENV = "MOSS_MOCK_BUS"
 
@@ -344,7 +345,7 @@ class MossBaseAdapter:
             self._reader.start()
             # probe: the firmware answers "status" with one telemetry line
             self._replies.clear()
-            if not self._send("status", expect_status=True):
+            if not self._send("status", expect_status=True, timeout=CONNECT_PROBE_S):
                 _log().error(f"MOSS base: no telemetry from the firmware on "
                              f"{self._port} @{BAUDRATE} (is it the QT Py by-id port, "
                              "and is the firmware flashed?)")
@@ -427,7 +428,7 @@ class MossBaseAdapter:
                     continue
                 self._reply_cv.notify_all()
 
-    def _send(self, line: str, expect_status: bool = False) -> bool:
+    def _send(self, line: str, expect_status: bool = False, timeout: float | None = None) -> bool:
         """Write one command line and wait for its reply. Called with the lock
         held (RLock). True on "OK" (or a telemetry line when expect_status)."""
         ser = self._ser
@@ -439,7 +440,7 @@ class MossBaseAdapter:
         except Exception as exc:
             _log().error(f"MOSS base: serial write failed ({line!r}): {exc!r}")
             return False
-        deadline = time.monotonic() + REPLY_TIMEOUT_S
+        deadline = time.monotonic() + (REPLY_TIMEOUT_S if timeout is None else timeout)
         while True:
             for reply in self._replies[before:]:
                 if expect_status and reply == "STATUS":

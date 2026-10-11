@@ -30,7 +30,8 @@ Endpoints (all Cache-Control: no-store; a failing request never kills the server
     GET  /log.json?n=40         tail of the running stack's main.jsonl
     GET  /preflight.json        the last saved flight check
     GET  /launch.json           tail of the last launcher output
-    GET  /camera.mjpg           colour camera, multipart JPEG, at most 5 fps
+    GET  /camera.mjpg           nose camera (RealSense colour), multipart JPEG, at most 5 fps
+    GET  /camera.mjpg?cam=wrist the arm's camera, same framing (cam=nose is the default)
     POST /cmd/explore|goal|stop|episode|stack   publish on the bus / run tools/moss-fly.sh
                                 (header 'X-Requested-With: moss-cockpit' required, else 403;
                                 explore and goal only on a moss-* stack, else 409)
@@ -117,10 +118,13 @@ CHANNELS = {
     "base_telemetry": "/base_telemetry#std_msgs.String",
     "episode_marker": "/episode_marker#std_msgs.String",
 }
-IMAGE_NAME = "color_image"
-IMAGE_CHANNEL = "/color_image#sensor_msgs.Image"
+CAMERAS = {                     # cockpit name -> (bus topic, LCM channel); subscribed only while watched
+    "nose": ("color_image", "/color_image#sensor_msgs.Image"),
+    "wrist": ("wrist_image", "/wrist_image#sensor_msgs.Image"),
+}
+IMAGE_NAME, IMAGE_CHANNEL = CAMERAS["nose"]
 STATE_TOPICS = ("odom", "global_costmap", "lidar", "pointcloud", "path", "cmd_vel",
-                "base_telemetry", IMAGE_NAME)
+                "base_telemetry") + tuple(name for name, _ in CAMERAS.values())
 
 MAP_MIN_INTERVAL_S = 0.5      # decode + PNG the costmap at most 2 Hz, whoever asks
 SCAN_MIN_INTERVAL_S = 0.25    # scan at most 4 Hz
@@ -779,9 +783,10 @@ class BusCache:
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._topics = {name: _Latest() for name in list(CHANNELS) + [IMAGE_NAME]}
+        self._topics = {name: _Latest() for name in list(CHANNELS) + [n for n, _ in CAMERAS.values()]}
         self._by_channel = {ch: name for name, ch in CHANNELS.items()}
-        self._by_channel[IMAGE_CHANNEL] = IMAGE_NAME
+        for name, ch in CAMERAS.values():
+            self._by_channel[ch] = name
         self._decoded: dict = {}
 
     def ingest(self, channel: str, data: bytes, mono: float | None = None) -> None:
@@ -845,8 +850,23 @@ class Cockpit:
         self.episode_closed: dict | None = None   # closed by the cockpit when the stack stopped under it
         self._ep_lock = threading.Lock()
         self._cam_lock = threading.Lock()
-        self.camera_clients = 0
+        self._cam_clients = {cam: 0 for cam in CAMERAS}
         self.started = time.time()
+
+    @property
+    def camera_clients(self) -> int:
+        """Viewers on all cameras together."""
+        return sum(self._cam_clients.values())
+
+    def camera_viewers(self, cam: str) -> int:
+        return self._cam_clients.get(cam, 0)
+
+    def camera_state(self) -> dict:
+        doc = {"clients": self.camera_clients, "subscribed": self.camera_clients > 0}
+        for cam in CAMERAS:
+            n = self._cam_clients[cam]
+            doc[cam] = {"clients": n, "subscribed": n > 0}
+        return doc
 
     # episode bookkeeping, shared by both modes
     def _episode(self, body: dict) -> dict:
@@ -863,15 +883,18 @@ class Cockpit:
                 self.episode = None
         return {"action": action, "name": name, "ts": time.time()}
 
-    def camera_open(self) -> None:
+    def camera_open(self, cam: str = "nose") -> None:
+        if cam not in CAMERAS:
+            raise CameraUnavailable(f"no camera called {cam!r} (nose or wrist)")
         with self._cam_lock:
-            if self.camera_clients >= MAX_CAMERA_CLIENTS:
-                raise CameraUnavailable(f"{MAX_CAMERA_CLIENTS} camera viewers already")
-            self.camera_clients += 1
+            if self._cam_clients[cam] >= MAX_CAMERA_CLIENTS:
+                raise CameraUnavailable(f"{MAX_CAMERA_CLIENTS} viewers already on the {cam} camera")
+            self._cam_clients[cam] += 1
 
-    def camera_close(self) -> None:
+    def camera_close(self, cam: str = "nose") -> None:
         with self._cam_lock:
-            self.camera_clients = max(0, self.camera_clients - 1)
+            if cam in self._cam_clients:
+                self._cam_clients[cam] = max(0, self._cam_clients[cam] - 1)
 
     def launch(self) -> dict:
         return self.launcher.status()
@@ -892,7 +915,7 @@ class LiveCockpit(Cockpit):
         self._pub_lcm = None
         self._map_cache = (None, None, 0.0)     # (mono, (png, meta), decoded_at)
         self._scan_cache = (None, None, 0.0)
-        self._cam_cache = (None, None)          # (mono, jpeg)
+        self._cam_cache = {cam: (None, None) for cam in CAMERAS}   # cam -> (mono, jpeg)
         self._encoder = None
         self._ep_seen = None
         self._run_id = None                     # the run the bus cache belongs to
@@ -913,15 +936,16 @@ class LiveCockpit(Cockpit):
                 lc = lcm.LCM()
                 for ch in CHANNELS.values():
                     lc.subscribe(ch, self._on_message)
-                image_sub = None
+                image_subs = {cam: None for cam in CAMERAS}
                 self.bus_error = None
                 while True:
-                    want = self.camera_clients > 0
-                    if want and image_sub is None:
-                        image_sub = lc.subscribe(IMAGE_CHANNEL, self._on_message)
-                    elif not want and image_sub is not None:
-                        lc.unsubscribe(image_sub)
-                        image_sub = None
+                    for cam, (_, channel) in CAMERAS.items():
+                        want = self._cam_clients[cam] > 0
+                        if want and image_subs[cam] is None:
+                            image_subs[cam] = lc.subscribe(channel, self._on_message)
+                        elif not want and image_subs[cam] is not None:
+                            lc.unsubscribe(image_subs[cam])
+                            image_subs[cam] = None
                     lc.handle_timeout(LCM_HANDLE_MS)
             except Exception as exc:  # noqa: BLE001 - multicast not up yet, etc.: retry
                 self.bus_error = f"{type(exc).__name__}: {exc}"
@@ -1044,7 +1068,7 @@ class LiveCockpit(Cockpit):
             "system": system_metrics(),
             "bus": {"transport": transport, "listening": lcm is not None and HAVE_MSGS,
                     "error": self.bus_error},
-            "camera": {"clients": self.camera_clients, "subscribed": self.camera_clients > 0},
+            "camera": self.camera_state(),
             "launch": self.launcher.status(lines=False),
         }
 
@@ -1122,13 +1146,15 @@ class LiveCockpit(Cockpit):
                                     "put the stack's color_image on JpegLcmTransport")
         return enc(arr, encoding)
 
-    def camera_frame(self):
-        """(key, jpeg) of the latest frame, or None before the first one."""
-        raw, mono = self.bus.latest(IMAGE_NAME)
+    def camera_frame(self, cam: str = "nose"):
+        """(key, jpeg) of the latest frame of that camera, or None before the first one."""
+        topic = CAMERAS[cam][0]
+        raw, mono = self.bus.latest(topic)
         if raw is None:
             return None
-        if self._cam_cache[0] == mono:
-            return mono, self._cam_cache[1]
+        cached = self._cam_cache[cam]
+        if cached[0] == mono:
+            return mono, cached[1]
         m = LcmImage.lcm_decode(raw)
         enc = str(m.encoding).lower()
         data = m.data if isinstance(m.data, (bytes, bytearray)) else bytes(m.data)
@@ -1143,7 +1169,7 @@ class LiveCockpit(Cockpit):
             if chans == 4:
                 arr, enc = arr[..., :3], ("rgb8" if enc == "rgba8" else "bgr8")
             jpeg = self._encode(arr, enc)
-        self._cam_cache = (mono, jpeg)
+        self._cam_cache[cam] = (mono, jpeg)
         return mono, jpeg
 
     # commands ----------------------------------------------------------------
@@ -1466,7 +1492,9 @@ class DemoCockpit(Cockpit):
                   "uptime_s": round(up, 1), "log_dir": None} if running else {"running": False})
         silent = 0.0 if running else now - (self.stack_stopped_at or now)
         nominal = {"odom": 10.0, "global_costmap": 1.0, "lidar": 10.0, "pointcloud": 10.0, "path": 1.0,
-                   "cmd_vel": 10.0, "base_telemetry": 2.0, IMAGE_NAME: 5.0}
+                   "cmd_vel": 10.0, "base_telemetry": 2.0}
+        for topic, _ in CAMERAS.values():
+            nominal[topic] = 5.0
         topics = {k: {"age_s": round(silent + 1.0 / hz / 2, 2), "hz": hz if running else 0.0}
                   for k, hz in nominal.items()}
         volts = max(11.0, 11.6 - 0.0005 * (now - self.started))
@@ -1491,7 +1519,7 @@ class DemoCockpit(Cockpit):
                           "exists": True, "size_mb": round(0.5 + 0.01 * up, 1), "episode": self.episode},
             "system": system_metrics(),
             "bus": {"transport": "demo", "listening": False, "error": None},
-            "camera": {"clients": self.camera_clients, "subscribed": self.camera_clients > 0},
+            "camera": self.camera_state(),
             "launch": {"running": False, "action": self._launch_action},
         }
 
@@ -1540,8 +1568,9 @@ class DemoCockpit(Cockpit):
         return {"running": False, "action": self._launch_action, "started_at": None, "returncode": 0,
                 "lines": list(self._launch_lines)}
 
-    def camera_frame(self):
-        # a new key every period, so the stream really runs at 5 fps
+    def camera_frame(self, cam: str = "nose"):
+        # a new key every period, so the stream really runs at 5 fps; both demo cameras
+        # show the demo frame
         return int(time.time() / MJPEG_PERIOD_S), DEMO_JPEG
 
     def command(self, name: str, body: dict) -> dict:
@@ -1696,7 +1725,11 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/launch.json":
                 self._json(200, self.cockpit.launch())
             elif path == "/camera.mjpg":
-                self._mjpeg()
+                cam = parse_qs(url.query).get("cam", ["nose"])[0]
+                if cam not in CAMERAS:
+                    self._json(404, {"error": f"no camera called {cam!r}: " + " or ".join(CAMERAS)})
+                else:
+                    self._mjpeg(cam)
             else:
                 self._json(404, {"error": f"nothing at this address: {path}"})
         except (BrokenPipeError, ConnectionResetError):
@@ -1720,10 +1753,10 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, ValueError):
             return True
 
-    def _mjpeg(self) -> None:
+    def _mjpeg(self, cam: str = "nose") -> None:
         c = self.cockpit
         try:
-            c.camera_open()
+            c.camera_open(cam)
         except CameraUnavailable as exc:
             self._json(503, {"error": str(exc)})
             return
@@ -1735,7 +1768,7 @@ class Handler(BaseHTTPRequestHandler):
             deadline = time.monotonic() + FIRST_FRAME_WAIT_S
             try:
                 while frame is None and time.monotonic() < deadline and not self.server.stopping:
-                    frame = c.camera_frame()
+                    frame = c.camera_frame(cam)
                     if frame is None:
                         time.sleep(0.05)
             except CameraUnavailable as exc:
@@ -1756,7 +1789,7 @@ class Handler(BaseHTTPRequestHandler):
                         return
                     time.sleep(0.03)
                     try:
-                        frame = c.camera_frame()
+                        frame = c.camera_frame(cam)
                     except CameraUnavailable:
                         return
                     continue
@@ -1768,7 +1801,7 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, OSError):
             pass                                  # the viewer left
         finally:
-            c.camera_close()
+            c.camera_close(cam)
 
     def do_POST(self) -> None:  # noqa: N802
         path = urlsplit(self.path).path

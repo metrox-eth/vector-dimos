@@ -7,6 +7,7 @@ WAL-trio rotation), MOSS's own streams and its own state dir:
     global_costmap   OccupancyGrid  world frame, poseless
     lidar            PointCloud2    world-frame cloud from lidar_odometry, at the last odom pose
     color_image      Image          D455F colour (JPEG on the bus and in the db), at the last odom pose
+    wrist_image      Image          the arm's UVC camera (JPEG), at the last odom pose
     cmd_vel          Twist          what the base was told, poseless
     base_telemetry   String         firmware JSON (battery, mode, track outputs), poseless
     episode_marker   String         {action, name, ts} from the cockpit, poseless
@@ -50,14 +51,15 @@ class MossRecorder(VectorMemoryLight):
 
     lidar: In[PointCloud2]
     color_image: In[Image]
+    wrist_image: In[Image]
     cmd_vel: In[Twist]
     base_telemetry: In[String]
     episode_marker: In[String]
     config: MossMemoryConfig
 
-    @pose_setter_for("lidar", "color_image")
+    @pose_setter_for("lidar", "color_image", "wrist_image")
     async def _anchor_on_odom(self, msg) -> Pose | None:
-        # the cloud is already in the world frame and the image has no tf
+        # the cloud is already in the world frame and the images have no tf
         # chain on MOSS: anchor both at the rover's last pose, so memory
         # queries ("what did it see from here") still work
         return self._last_odom_pose
