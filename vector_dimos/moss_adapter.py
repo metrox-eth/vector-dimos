@@ -61,6 +61,7 @@ Calibration (env, all optional):
                         (default robot_profile.MOSS.track_m, 0.266 CAD, placeholder)
     MOSS_MPS_AT_LIMIT   floor speed in m/s at MOSS_MAX_PCT, measured
     MOSS_MAX_PCT        percent ceiling, <= the firmware's 100
+    MOSS_MIN_PCT        static-friction floor in percent (0 = off): a non-zero track command below it is raised to it, sign kept
     MOSS_TICKS_PER_M    encoder ticks per metre of track travel, measured
     MOSS_RAMP_MS        "UP DOWN" sent as 'ramp UP DOWN' after connect
     MOSS_MOCK_BUS       any truthy value: drive the fake firmware (no motors)
@@ -151,15 +152,19 @@ class MossGeometry:
     mps_at_limit: float = 0.45     # PLACEHOLDER: floor speed at 100 % (JGB37-520 178 rpm on a ~60 mm sprocket ~ 0.5 m/s), to measure
     max_pct: int = FIRMWARE_MAX_PCT
     ticks_per_m: float | None = None   # None = no encoder calibration yet
+    min_pct: int = 0   # static-friction floor: a non-zero track command below this percent is raised to it (sign kept). 0 = off. MOSS_MIN_PCT, to measure on the floor (the planner's 0.2 rad/s pivots map to ~8 %, which does not move the tracks)
 
     @classmethod
     def from_env(cls) -> "MossGeometry":
         pct = int(_env_float("MOSS_MAX_PCT", FIRMWARE_MAX_PCT))
         tpm = _env_float("MOSS_TICKS_PER_M", None)
+        max_pct = max(1, min(FIRMWARE_MAX_PCT, pct))
+        floor = int(_env_float("MOSS_MIN_PCT", cls.min_pct))
         return cls(track_m=_env_float("MOSS_TRACK_M", cls.track_m),
                    mps_at_limit=_env_float("MOSS_MPS_AT_LIMIT", cls.mps_at_limit),
-                   max_pct=max(1, min(FIRMWARE_MAX_PCT, pct)),
-                   ticks_per_m=(tpm if tpm and tpm > 0 else None))
+                   max_pct=max_pct,
+                   ticks_per_m=(tpm if tpm and tpm > 0 else None),
+                   min_pct=max(0, min(max_pct, floor)))
 
 
 def twist_to_tracks(vx: float, wz: float, g: MossGeometry) -> tuple[int, int]:
@@ -167,16 +172,22 @@ def twist_to_tracks(vx: float, wz: float, g: MossGeometry) -> tuple[int, int]:
 
     Differential drive: v_left = vx - wz*track/2, v_right = vx + wz*track/2.
     Percent is proportional to speed with g.mps_at_limit <-> g.max_pct.
-    A twist too small to round to 1 % IS a stop (0, 0)."""
+    A twist too small to round to 1 % IS a stop (0, 0). A non-zero percent
+    below g.min_pct is raised to g.min_pct with its sign (static-friction
+    floor: the tracks do not turn below it, so the alternative is a stall)."""
     half = g.track_m / 2.0
     v_l = vx - wz * half
     v_r = vx + wz * half
     scale = g.max_pct / g.mps_at_limit if g.mps_at_limit > 0 else 0.0
     lim = int(g.max_pct)
+    floor = max(0, min(lim, int(g.min_pct)))
 
     def pct(v: float) -> int:
         p = int(round(v * scale))
-        return max(-lim, min(lim, p))
+        p = max(-lim, min(lim, p))
+        if p and abs(p) < floor:
+            p = floor if p > 0 else -floor
+        return p
 
     return pct(v_l), pct(v_r)
 

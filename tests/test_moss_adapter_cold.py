@@ -86,6 +86,16 @@ check(twist_to_tracks(-0.06, 0.0, G) == (-10, -10), "vx=-0.06 -> -10/-10 (revers
 check(twist_to_tracks(0.0, 1.0, G) == (-25, 25), "wz=+1 rad/s -> L=-25 R=+25 (spin left)")
 check(twist_to_tracks(0.30, 0.0, G) == (25, 25), "vx=0.30 (2x the limit) -> clamped 25/25")
 check(twist_to_tracks(0.001, 0.0, G) == (0, 0), "vx=0.001 rounds to 0 -> a stop")
+GF = MossGeometry(track_m=0.30, mps_at_limit=0.15, max_pct=25, ticks_per_m=None, min_pct=12)
+check(twist_to_tracks(0.06, 0.0, GF) == (12, 12), "floor 12: vx=0.06 (10 %) -> raised to 12/12")
+check(twist_to_tracks(-0.06, 0.0, GF) == (-12, -12), "floor 12: vx=-0.06 -> -12/-12 (sign kept)")
+check(twist_to_tracks(0.0, 0.3, GF) == (-12, 12), "floor 12: tiny spin (-5/+5) -> -12/+12")
+check(twist_to_tracks(0.001, 0.0, GF) == (0, 0), "floor 12: a twist that rounds to 0 is STILL a stop")
+check(twist_to_tracks(0.15, 0.0, GF) == (25, 25), "floor 12: the limit is untouched")
+check(twist_to_tracks(0.09, 0.0, GF) == (15, 15), "floor 12: 15 % above the floor passes as is")
+check(twist_to_tracks(0.06, 0.0, G) == (10, 10), "floor 0 (default): 10/10 unchanged")
+check(twist_to_tracks(0.06, 0.0, MossGeometry(track_m=0.30, mps_at_limit=0.15, max_pct=25, min_pct=99)) == (25, 25),
+      "a floor above the limit is clamped to the limit")
 check(twist_to_tracks(0.15, 0.0, MossGeometry(mps_at_limit=0.15, max_pct=10)) == (10, 10),
       "max_pct=10 -> the same full-scale twist lands on 10/10")
 vx, vy, wz = tracks_to_twist(-0.15, 0.15, G)
@@ -193,6 +203,14 @@ check(g.ticks_per_m is None, "MOSS_TICKS_PER_M=pouet -> None (no odometry, not a
 check(g.track_m == 0.28, "MOSS_TRACK_M=0.28 taken")
 for k in ("MOSS_MAX_PCT", "MOSS_TICKS_PER_M", "MOSS_TRACK_M"):
     os.environ.pop(k, None)
+os.environ["MOSS_MIN_PCT"] = "40"
+check(MossGeometry.from_env().min_pct == 40, "MOSS_MIN_PCT=40 -> min_pct 40")
+os.environ["MOSS_MIN_PCT"] = "150"
+check(MossGeometry.from_env().min_pct == MossGeometry.from_env().max_pct, "MOSS_MIN_PCT above the ceiling -> clamped to max_pct")
+os.environ["MOSS_MIN_PCT"] = "-5"
+check(MossGeometry.from_env().min_pct == 0, "MOSS_MIN_PCT negative -> 0")
+os.environ.pop("MOSS_MIN_PCT", None)
+check(MossGeometry.from_env().min_pct == 0, "MOSS_MIN_PCT unset -> 0 (floor off, unchanged behaviour)")
 
 # ── 8. the fake is the firmware: its own refusals ──────────────────────
 print("8. fake firmware fidelity (Control.h)")
