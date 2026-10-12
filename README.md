@@ -32,8 +32,9 @@ What runs today, all of it on a Jetson Orin Nano 8GB unless said otherwise:
   never saturate a wheel — plus cold benches for every layer (kinematics,
   adapter, gamepad, lidar reader, blueprints).
 - **Lidar odometry** (kiss-icp scan-to-map with a gyro prior) feeding a 2D
-  costmap that learns and unlearns, with persistent maps and keep-out zones
-  (documented below).
+  costmap that learns and unlearns. Persistent maps and keep-out zones were
+  built, then switched off after a floor audit: every flight starts on a fresh
+  map (documented below).
 - **Voxel mapping on the GPU.** Stock aarch64 open3d has no CUDA, so this repo
   carries reproducible build recipes (`tools/four_open3d_cuda*.sh` — native on
   the Orin, cross via qemu, or on a rented cloud box) with every trap encoded:
@@ -43,11 +44,12 @@ What runs today, all of it on a Jetson Orin Nano 8GB unless said otherwise:
   path on the GPU.
 - **zenoh transport.** The same stack on dimOS's zenoh bus instead of LCM took
   the system load from ~24 to ~6.4 on the Nano.
-- **Distributed relocalization.** dimOS's reference-map anchoring runs on a
-  second machine over the same zenoh mesh (`vector-dimos.reloc-rig`, with a
-  namespaced coordinator so both machines keep their own `dimos stop`). A match
-  that costs 45–113 s on the Nano lands in 12–15 s there, and the merged
-  reference map flows back to the stock costmapper on the robot.
+- **Relocalization: tried, not in use.** A planar scan matcher of our own and
+  dimOS's reference-map anchoring (run on a second machine over the zenoh mesh,
+  `vector-dimos.reloc-rig`) were both wired in and then switched off after a
+  floor audit: the stack does not relocalize today, and the odometry stays open
+  loop. The native dimOS premap and relocalization path is being benched on
+  recordings before it comes back.
 - **Flight tooling**: a gated launch sequence (`tools/fly.sh` — piloted flight
   is the default, `EXPLORE=1` arms autonomy), a bi-bus organ panel
   (`tools/stats_server.py`, LCM and zenoh at once), and a state-transition
